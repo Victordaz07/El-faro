@@ -53,6 +53,8 @@ export interface Bolt {
   kind: 'light' | 'harpoon' | 'cball' | 'quarrel'; speed: number; gone?: boolean;
   /** Modo Costa: arma y rama que lo disparó (debilidades y especializaciones). */
   w?: WeaponId; br?: number;
+  /** Modo Costa: dirección fija (las balas y virotes vuelan en línea recta) y distancia que les queda. */
+  vx?: number; vy?: number; left?: number;
 }
 /** Hueco de la muralla (Modo Costa): arma, nivel y estado para dibujarla. */
 export interface Slot { x: number; open: boolean; w: WeaponId | null; lv: number; cd: number; aim: number; fire: number; on: boolean; tx: number; ty: number; /** Rama elegida en el nivel 4 (0 = ninguna). */ br: number; pulse: number; /** Para no llenar de textos: último aviso de eficaz/resiste. */ say: number; }
@@ -1118,6 +1120,50 @@ export class Game {
     return best;
   }
 
+  /** Bala o virote de la Costa: sale apuntando adelantado al objetivo y sigue recto; golpea a la primera criatura que cruza. */
+  private costaBolt(b: Bolt, dt: number) {
+    if (b.vx === undefined) {
+      const e = b.t;
+      let tx = e ? e.x : b.x, ty = e ? e.y : b.y - 100;
+      if (e && !e.dead) {
+        // Apunta adelantado: dónde estará la criatura cuando llegue la bala
+        const tt = Math.hypot(tx - b.x, ty - b.y) / b.speed, v = e.stun > 0 ? 0 : e.spd * (e.slowT > 0 ? 0.6 : 1);
+        tx += Math.cos(e.hd) * v * tt; ty += Math.sin(e.hd) * v * tt;
+      }
+      const d = Math.hypot(tx - b.x, ty - b.y) || 1;
+      b.vx = (tx - b.x) / d; b.vy = (ty - b.y) / d; b.left = 480;
+    }
+    b.px = b.x; b.py = b.y;
+    const step = b.speed * dt;
+    b.x += b.vx! * step; b.y += b.vy! * step; b.left! -= step;
+    // ¿Cruzó a alguna criatura en este tramo?
+    let hit: Enemy | null = null, best = Infinity;
+    for (const e of this.enemies) {
+      if (e.dead || this.hidden(e)) continue;
+      const ex = e.x - b.px, ey = e.y - b.py, k = Math.max(0, Math.min(step, ex * b.vx! + ey * b.vy!));
+      const cx = b.px + b.vx! * k - e.x, cy = b.py + b.vy! * k - e.y, rr = e.r + 5;
+      if (cx * cx + cy * cy <= rr * rr && k < best) { best = k; hit = e; }
+    }
+    if (hit) {
+      const e = hit, br = b.br || 0;
+      b.gone = true;
+      this.hitW(e, b.d, b.w!, br, b.crit, b.w === 'canon' || b.crit || Math.random() < 0.35);
+      if (b.crit) { this.crits++; this.emit('crit'); }
+      if (b.kind === 'cball') {
+        this.burst(e.x, e.y, '#9aa3b2', 7, 90);
+        this.fx.push({ kind: 'boom', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.3, max: 0.3, c: '#ffcf8a', r: br === 1 ? 26 : 14 });
+        this.fx.push({ kind: 'splash', x: e.x, y: e.y + 4, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '#bfe8ff', r: 10 });
+        if (br === 1) for (const o of this.enemies) if (o !== e && !o.dead && (o.x - e.x) ** 2 + (o.y - e.y) ** 2 < (26 + o.r) ** 2) this.hitW(o, b.d * 0.5, 'canon', 1, false, false);
+      } else this.burst(e.x, e.y, '#e6c58f', 3, 60);
+      return;
+    }
+    // Si no golpea nada, cae al mar al final de su recorrido
+    if (b.left! <= 0) {
+      b.gone = true;
+      this.fx.push({ kind: 'splash', x: b.x, y: b.y, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '#bfe8ff', r: b.kind === 'cball' ? 9 : 5 });
+    }
+  }
+
   private costaUpdate(dt: number) {
     const st = this.st, gy = COSTA.gunY;
     this.lamp = 0;
@@ -1320,24 +1366,12 @@ export class Game {
 
     // Proyectiles del faro y arpones
     for (const b of this.bolts) {
+      if (b.w) { this.costaBolt(b, dt); continue; }
       if (!b.t || b.t.dead) { b.t = this.nearestTo(b.x, b.y, 400); if (!b.t) { b.gone = true; continue; } }
       const e = b.t, dx = e.x - b.x, dy = e.y - b.y, d = Math.hypot(dx, dy) || 1, s = b.speed * dt;
       b.px = b.x; b.py = b.y;
       if (d <= s + e.r * 0.6) {
         b.gone = true;
-        if (b.w) {
-          // Modo Costa: bala o virote, con debilidades y especialización
-          const br = b.br || 0;
-          this.hitW(e, b.d, b.w, br, b.crit, b.w === 'canon' || b.crit || Math.random() < 0.35);
-          if (b.crit) { this.crits++; this.emit('crit'); }
-          if (b.kind === 'cball') {
-            this.burst(e.x, e.y, '#9aa3b2', 7, 90);
-            this.fx.push({ kind: 'boom', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.3, max: 0.3, c: '#ffcf8a', r: br === 1 ? 26 : 14 });
-            this.fx.push({ kind: 'splash', x: e.x, y: e.y + 4, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '#bfe8ff', r: 10 });
-            if (br === 1) for (const o of this.enemies) if (o !== e && !o.dead && (o.x - e.x) ** 2 + (o.y - e.y) ** 2 < (26 + o.r) ** 2) this.hitW(o, b.d * 0.5, 'canon', 1, false, false);
-          } else this.burst(e.x, e.y, '#e6c58f', 3, 60);
-          continue;
-        }
         const dealt = this.damage(e, b.d, false, b.kind === 'light' ? 'beam' : 'turret');
         if (b.kind === 'harpoon') { this.burst(e.x, e.y, '#c9a46a', 5, 70); continue; }
         this.burst(e.x, e.y, b.crit ? '#ffe27a' : '#fff6c8', b.crit ? 6 : 2, 60);

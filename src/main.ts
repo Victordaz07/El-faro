@@ -628,6 +628,26 @@ function holdToBuy(el: HTMLElement, onPress: () => void, buyOnce: () => boolean)
   for (const t of ['pointercancel', 'lostpointercapture', 'pointerleave']) el.addEventListener(t, stopHold);
 }
 for (const t of ['pointerup', 'pointercancel', 'blur']) window.addEventListener(t, stopHold);
+// En PC: la fila de mejoras se mueve con la rueda del mouse o arrastrando con el mouse
+{
+  const sh = $('sheet');
+  sh.addEventListener('wheel', ev => {
+    if (sh.scrollWidth <= sh.clientWidth) return;
+    const d = Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY;
+    if (!d) return;
+    ev.preventDefault();
+    sh.scrollLeft += d;
+  }, { passive: false });
+  let dragX = -1, start = 0;
+  sh.addEventListener('pointerdown', ev => { if (ev.pointerType === 'mouse' && ev.button === 0) { dragX = ev.clientX; start = sh.scrollLeft; } });
+  window.addEventListener('pointermove', ev => {
+    if (dragX < 0 || ev.pointerType !== 'mouse') return;
+    if (!(ev.buttons & 1)) { dragX = -1; return; }
+    const dx = ev.clientX - dragX;
+    if (Math.abs(dx) > 8) { stopHold(); sh.style.scrollSnapType = 'none'; sh.scrollLeft = start - dx; }
+  });
+  window.addEventListener('pointerup', () => { if (dragX >= 0) { dragX = -1; sh.style.scrollSnapType = ''; } });
+}
 document.addEventListener('visibilitychange', stopHold);
 
 let hintTo = 0;

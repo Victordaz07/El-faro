@@ -123,6 +123,7 @@ html[lang=en] .up.new::after{content:'NEW'}
 #sheet{flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 #sheet::-webkit-scrollbar{display:none}
 #dock.closed #sheet{display:none}
+@media (pointer:fine){#sheet{scrollbar-width:thin;scrollbar-color:rgba(63,215,196,.45) transparent;cursor:grab}#sheet::-webkit-scrollbar{height:6px}#sheet::-webkit-scrollbar-thumb{background:rgba(63,215,196,.45);border-radius:3px}}
 #dock.closed #bar{display:inline-flex}
 #grid{display:flex;gap:5px;height:72px}
 #hint{position:absolute;left:8px;right:8px;bottom:calc(100% + 76px);text-align:center;font-size:11.5px;font-weight:800;color:var(--txt);opacity:0;transition:opacity .25s;pointer-events:none;text-shadow:0 1px 4px #000}

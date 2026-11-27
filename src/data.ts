@@ -168,7 +168,7 @@ export const COSTA = {
   slotCost: [0, 25, 48, 78, 110, 160, 220],
   maxLv: 6,
   /** La vida de las criaturas sube hasta ×(1+hp) en la última oleada, con curva cuadrática (balance: npm run sim:costa). */
-  hp: 21,
+  hp: 19,
   /** Altura (y) de la boca de las armas. */
   gunY: -8,
   /** Segundos de calma entre oleadas (para comprar y ver lo que viene) y perlas por segundo al adelantar la oleada. */
