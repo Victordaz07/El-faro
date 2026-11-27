@@ -12,7 +12,7 @@ import '@fontsource/nunito/latin-800.css';
 import '@fontsource/nunito/latin-900.css';
 import { draw, camFocus, view, lastCam, setBeam, setSkin, skinnedFaro } from './render';
 import { ICONS, TAB_ICONS } from './icons';
-import { menuArt, bossArt } from './art';
+import { menuArt, bossArt, BUTTON_ART } from './art';
 import { initAudio, setMuted, sfx } from './audio';
 import { startMusic, setMusicEnabled, setMusicLevel } from './music';
 import { getBoard, Row } from './leaderboard';
@@ -1206,6 +1206,14 @@ $('spd').addEventListener('click', () => { speed = speed === 1 ? 2 : 1; $('spd')
 $('pause').addEventListener('click', () => setPaused(!paused));
 $('resume').addEventListener('click', () => setPaused(false));
 $('quit').addEventListener('click', () => { if (!g) return; $('pauseov').classList.remove('on'); paused = false; g.abandon(); });
+// Botones de habilidad en 3D: imagen a color y en gris; si no carga, queda la silueta SVG
+for (const [id, url] of Object.entries(BUTTON_ART)) {
+  const b = $(id), imgs = b.querySelectorAll('img'), sh = b.querySelector('.shine') as HTMLElement;
+  imgs.forEach(im => { im.src = url; });
+  (imgs[1] as HTMLImageElement).onload = () => b.classList.add('img');
+  sh.style.setProperty('-webkit-mask-image', `url(${url})`); sh.style.setProperty('mask-image', `url(${url})`);
+  b.addEventListener('pointerdown', () => { b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); });
+}
 $('flash').addEventListener('click', () => { audio(); if (g && !paused) g.useFlash(); });
 $('fleetbtn').addEventListener('click', () => { audio(); if (g && !paused && !g.callFleet()) sfx.click(); });
 $('aim').addEventListener('click', () => {

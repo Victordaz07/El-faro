@@ -202,3 +202,10 @@ export function weaponArt(id: string): TurretArt | null {
   const t = WEAPON_ART[id];
   return t && ready(t.base) && ready(t.head) ? t : null;
 }
+
+/* ---------- Botones de habilidad en 3D (ChatGPT, ver docs/botones-3d.md) ---------- */
+import bDestello from '../assets/art/botones/boton-destello.webp';
+import bBuque from '../assets/art/botones/boton-buque.webp';
+import bAndanada from '../assets/art/botones/boton-andanada.webp';
+/** Imágenes de los botones del Destello, el Buque y la Andanada. */
+export const BUTTON_ART: Record<string, string> = { flash: bDestello, fleetbtn: bBuque, volley: bAndanada };
