@@ -100,6 +100,21 @@ const EN: Record<string, string> = {
   'Desbloquea el Mar Helado': 'Unlock the Frozen Sea', 'Hasta el fondo': 'All the way down', 'Desbloquea El Abismo': 'Unlock The Abyss',
   'Llega a la oleada 5': 'Reach wave 5', 'Llega a la oleada 20': 'Reach wave 20', 'Llega a la oleada 30': 'Reach wave 30', 'Llega a la oleada 40': 'Reach wave 40',
   'Hunde 500 criaturas': 'Sink 500 creatures', 'Hunde 5000 criaturas': 'Sink 5000 creatures',
+  /* ----- Toque y criaturas nuevas ----- */
+  'Toque': 'Tap', 'Daño y recarga de tus toques sobre las criaturas': 'Damage and recharge of your taps on creatures',
+  'Caballito sanador': 'Healer seahorse', 'Se queda lejos y cura a las criaturas cercanas. Elimínalo primero: tócalo o pon el objetivo en PELIGRO.': 'Stays back and heals nearby creatures. Take it out first: tap it or set the target to DANGER.',
+  'Estrella de mar': 'Starfish', 'Al hundirse se parte en dos estrellas pequeñas.': 'When it sinks, it splits into two small stars.',
+  'Langosta acorazada': 'Armored lobster', 'Su caparazón resiste la luz del faro. Tócala, o usa el Arponero y el Ancla, para romperlo.': 'Its shell resists the light. Tap it, or use the Harpooner and the Anchor, to crack it.',
+  'Pez león': 'Lionfish', 'Sus púas envenenan el faro: pierde vida durante unos segundos después de cada picadura.': 'Its spines poison the lighthouse: it loses health for a few seconds after every sting.',
+  'Narval': 'Narwhal', 'Se detiene, apunta y embiste con fuerza. Tócalo mientras apunta para aturdirlo.': 'It stops, aims and rams hard. Tap it while it aims to stun it.',
+  'Foca': 'Seal', 'Se sumerge y la luz no la alcanza. Tócala bajo el agua para sacarla a la superficie.': "It dives where the light can't reach. Tap it underwater to bring it up.",
+  'Pez ígneo': 'Firefish', 'Lanza bolas de fuego desde lejos. Toca las bolas en el aire para apagarlas.': 'Lobs fireballs from afar. Tap the fireballs in the air to put them out.',
+  'Tortuga volcánica': 'Volcanic turtle', 'Muy resistente. Al hundirse suelta cuatro cangrejitos de lava.': 'Very tough. When it sinks, it releases four little lava crabs.',
+  'Rape abisal': 'Abyssal anglerfish', 'Su farolillo debilita tu luz: el faro dispara más lento mientras esté cerca.': 'Its lure weakens your light: the lighthouse fires slower while it is close.',
+  'Medusa fantasma': 'Ghost jelly', 'A ratos se vuelve intangible y la luz la atraviesa. Tus toques sí la alcanzan.': 'Every so often it turns intangible and the light passes through. Your taps still reach it.',
+  'NUEVA CRIATURA': 'NEW CREATURE', '¡CAPARAZÓN ROTO!': 'SHELL CRACKED!', 'VENENO': 'POISON', '¡ATURDIDO!': 'STUNNED!', '¡APAGADA!': 'PUT OUT!',
+  '¡Toca a las criaturas!': 'Tap the creatures!',
+  'Tú también puedes golpear: toca una criatura. Los puntos sobre OBJETIVO son tus toques; se recargan solos.': 'You can strike too: tap a creature. The dots above TARGET are your taps; they recharge on their own.',
   /* ----- Objetivo ----- */
   CERCANO: 'NEAREST', PELIGRO: 'DANGER', FUERTE: 'STRONG', 'DÉBIL': 'WEAK',
   /* ----- Textos flotantes ----- */

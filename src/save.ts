@@ -25,6 +25,8 @@ export interface Save {
   challenge: { date: string; score: number; wave: number; zone: string } | null;
   /** Idioma elegido ('es' | 'en'); vacío = el del dispositivo. */
   lang?: string;
+  /** Criaturas especiales cuya ficha ya se mostró. */
+  seen?: string[];
 }
 
 const KEY = 'faro_tormenta_v2';

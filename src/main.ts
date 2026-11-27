@@ -1,15 +1,15 @@
 // Controlador de interfaz: pantallas, panel de mejoras, HUD, tutorial y bucle principal.
-import { DEFS, tabName, branchName, BLESSINGS, PERM, BRANCHES, TABS, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone } from './data';
+import { CREATURES, DEFS, tabName, branchName, BLESSINGS, PERM, BRANCHES, TABS, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone } from './data';
 import {
   load, persist, ensureDaily, track, zoneUnlocked, readyMissions, checkAchievements,
   researchTotal, zonesOpen, challengeZone, challengeSeed, today,
 } from './save';
-import { Game, GEvent, AIMS } from './game';
+import { Game, GEvent, AIMS, TAP_MAX } from './game';
 import '@fontsource/lilita-one/latin-400.css';
 import '@fontsource/nunito/latin-700.css';
 import '@fontsource/nunito/latin-800.css';
 import '@fontsource/nunito/latin-900.css';
-import { draw, camFocus, view } from './render';
+import { draw, camFocus, view, lastCam } from './render';
 import { ICONS, TAB_ICONS } from './icons';
 import { menuArt, bossArt } from './art';
 import { initAudio, setMuted, sfx } from './audio';
@@ -106,6 +106,13 @@ function onEvent(e: GEvent, d?: number) {
     case 'zap': sfx.zap(); vibrate(25); break;
     case 'charge': sfx.charge(); break;
     case 'bite': sfx.bite(); break;
+    case 'tap': sfx.tap(); vibrate(8); break;
+    case 'tapmiss': sfx.tapmiss(); break;
+    case 'heal': sfx.heal(); break;
+    case 'crack': sfx.crack(); vibrate(30); break;
+    case 'fire': sfx.fire(); break;
+    case 'poison': sfx.poison(); break;
+    case 'newtype': newCreature(d || 0); break;
     case 'frostwarn': sfx.warn(); $('frostw').style.display = 'block'; break;
     case 'frost': sfx.frost(); $('frostw').style.display = 'none'; vibrate(60); break;
     case 'erupt': sfx.erupt(); vibrate(30); break;
@@ -132,7 +139,7 @@ function start(daily = false) {
     runZone = zone();
     g = new Game(save, runZone, onEvent, spawnR);
   }
-  for (const id of ['flash', 'aim']) $(id).style.display = '';
+  for (const id of ['flash', 'aim', 'taps']) $(id).style.display = '';
   $('frostw').style.display = 'none';
   $('aim').querySelector('span')!.textContent = AIMS[0].name;
   tab = 0;
@@ -170,6 +177,7 @@ function endRun() {
   setMusicLevel(0);
   $('flash').style.display = 'none';
   $('aim').style.display = 'none';
+  $('taps').style.display = 'none';
   $('frostw').style.display = 'none';
   let html: string;
   if (g.daily) {
@@ -196,17 +204,54 @@ function endRun() {
   setTimeout(() => $('over').classList.add('on'), 700);
 }
 
+/* ---------- Criaturas nuevas: ficha la primera vez que aparecen ---------- */
+let tipKind: 'tut' | 'creature' = 'tut';
+function newCreature(i: number) {
+  const c = CREATURES[i];
+  if (!c || !g) return;
+  save.seen = save.seen || [];
+  if (save.seen.includes(c.id)) return;
+  save.seen.push(c.id); persist(save);
+  sfx.newtype();
+  if ($('tip').classList.contains('on')) { toast('🆕 ' + c.name, c.desc); return; }
+  tipKind = 'creature';
+  showTip(t('NUEVA CRIATURA') + ': ' + c.name, c.desc, '');
+}
+
+/* ---------- Tocar criaturas ---------- */
+cv.addEventListener('pointerdown', ev => {
+  if (!g || paused || g.over || introT > 0) return;
+  const r = cv.getBoundingClientRect();
+  const x = (ev.clientX - r.left - lastCam.x) / lastCam.s, y = (ev.clientY - r.top - lastCam.y) / lastCam.s;
+  audio();
+  g.tapAt(x, y);
+});
+const tapDots: HTMLElement[] = [];
+for (let i = 0; i < TAP_MAX; i++) { const d = document.createElement('i'); $('taps').appendChild(d); tapDots.push(d); }
+
 /* ---------- Tutorial ---------- */
 const TUT: { title: string; text: string; target: string; at: number }[] = [
   { at: 0, title: 'Las perlas ● compran mejoras', text: 'Tu faro dispara solo. Toca una mejora para comprarla; mantén presionado para comprar varias.', target: '#sheet' },
+  { at: 1, title: '¡Toca a las criaturas!', text: 'Tú también puedes golpear: toca una criatura. Los puntos sobre OBJETIVO son tus toques; se recargan solos.', target: '#aim' },
   { at: 2, title: 'El Destello ⚡', text: 'Aturde y daña a todo lo que esté cerca. Guárdalo para cuando te rodeen o para el jefe.', target: '#flash' },
   { at: 3, title: 'Elige a quién disparar', text: 'Toca OBJETIVO para cambiar. PELIGRO prioriza peces globo, anguilas, élites y jefes.', target: '#aim' },
   { at: 4, title: 'Torretas en la isla', text: 'En la pestaña ISLA construyes un Arponero, un Lanzarredes y un Ancla que disparan solos.', target: '#tabs' },
   { at: 5, title: 'Bendiciones', text: 'Cada 5 oleadas eliges una carta que dura toda la partida. Combínalas con tus mejoras.', target: '' },
 ];
 function tutorialFor(wave: number) {
-  if (save.tut >= TUT.length || !g || g.daily) return;
+  if (!g || g.daily) return;
+  if (save.tut >= TUT.length) {
+    // Jugadores que ya hicieron el tutorial: aviso único del toque
+    save.seen = save.seen || [];
+    if (wave >= 1 && !save.seen.includes('_tap')) {
+      save.seen.push('_tap'); persist(save);
+      tipKind = 'creature';
+      showTip(TUT[1].title, TUT[1].text, TUT[1].target);
+    }
+    return;
+  }
   const step = TUT[save.tut];
+  tipKind = 'tut';
   if (step.at > wave || step.at === 5) return;
   showTip(step.title, step.text, step.target);
 }
@@ -230,7 +275,9 @@ function showTip(title: string, text: string, target: string) {
 }
 $('tipok').addEventListener('click', () => {
   $('tip').classList.remove('on');
-  save.tut++; persist(save);
+  if (tipKind === 'tut') save.tut++;
+  tipKind = 'tut';
+  persist(save);
   paused = false;
   sfx.click();
 });
@@ -381,6 +428,7 @@ function updateHud() {
   $('wave').firstChild!.nodeValue = t('OLEADA') + ' ' + Math.max(1, g.wave);
   $('best').textContent = (g.daily ? L('⭐ Desafío · ', '⭐ Challenge · ') : '') + runZone.name + (g.daily ? ' · ' + num(g.score) + ' pts' : L(' · Récord ', ' · Best ') + best());
   $('pearls').textContent = String(g.pearls);
+  tapDots.forEach((d, i) => d.classList.toggle('off', i >= Math.floor(g!.taps)));
   $('coral').textContent = String(Math.floor(g.coral));
   const st = g.st, p = Math.max(0, g.hp) / st.hp;
   $('hpfill').style.width = p * 100 + '%';
@@ -412,7 +460,7 @@ function showMenu() {
   g = null;
   introT = 0; camFocus.x = camFocus.y = 0; camFocus.z = 1; stage.classList.remove('cine');
   setMusicLevel(0);
-  for (const id of ['flash', 'aim', 'frostw', 'mod', 'boss']) $(id).style.display = 'none';
+  for (const id of ['flash', 'aim', 'taps', 'frostw', 'mod', 'boss']) $(id).style.display = 'none';
   const z = zone();
   $('menuinfo').innerHTML = `${L('Zona', 'Zone')}: <b>${z.name}</b> · ${L('Récord', 'Best')}: <b>${save.zoneBest[z.id] || 0}</b> · Coral: <b style="color:#ffb35c">${Math.floor(save.coral)} ◆</b>`;
   $('mute').textContent = save.muted ? '🔇' : '🔊';

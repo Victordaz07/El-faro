@@ -1,5 +1,5 @@
 // Lógica pura de una partida (sin DOM): se puede simular en Node.
-import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing } from './data';
+import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing, ZONES, CREATURES } from './data';
 import { localize, t, L } from './i18n';
 import type { Save } from './save';
 
@@ -8,8 +8,11 @@ export interface Stats {
   hp: number; rep: number; arm: number; bar: number; thorn: number; vamp: number;
   pk: number; pw: number; int: number; ck: number; cw: number; fcd: number;
   tA: number; tR: number; tN: number;
+  /** Daño del toque y segundos para recargar una carga. */
+  tap: number; tapCd: number;
 }
-export type EType = 'crab' | 'jelly' | 'mini' | 'sardine' | 'eel' | 'puffer' | 'turtle' | 'hermit' | 'boss';
+export type EType = 'crab' | 'jelly' | 'mini' | 'sardine' | 'eel' | 'puffer' | 'turtle' | 'hermit' | 'boss'
+  | 'seahorse' | 'star' | 'starlet' | 'lobster' | 'lionfish' | 'narwhal' | 'seal' | 'firefish' | 'volturtle' | 'lavacrab' | 'angler' | 'ghost';
 export type Aim = 'cerca' | 'peligro' | 'fuerte' | 'debil';
 export const AIMS: { id: Aim; name: string }[] = [
   { id: 'cerca', name: 'CERCANO' }, { id: 'peligro', name: 'PELIGRO' },
@@ -25,7 +28,17 @@ export interface Enemy {
   slowT: number; burn: number; burnT: number;
   /** Carga de la descarga (anguila) y embestida al atacar (resto). */
   chargeT: number; lungeT: number;
+  /** Caparazón de la langosta (se rompe antes de dañar la vida). */
+  shell: number; shellMax: number;
+  /** Reloj de ciclos: buceo de la foca, fase de la medusa fantasma. */
+  phase: number;
+  /** Foca bajo el agua: la luz no la apunta. */
+  under: boolean;
+  /** Narval: 0 se acerca, 1 apunta, 2 embiste, 3 ya embistió. */
+  mode: number;
 }
+/** Bola de fuego del pez ígneo: vuela en arco hacia el faro y se puede apagar tocándola. */
+export interface Fireball { sx: number; sy: number; t: number; max: number; d: number; gone?: boolean; }
 export interface Bolt {
   x: number; y: number; px: number; py: number; t: Enemy | null; d: number; crit: boolean; bounce: boolean;
   kind: 'light' | 'harpoon'; speed: number; gone?: boolean;
@@ -33,7 +46,7 @@ export interface Bolt {
 export interface EShot { x: number; y: number; d: number; c: string; gone?: boolean; }
 export interface Fx {
   kind: 'p' | 'ring' | 'nova' | 'wake' | 'splash' | 'boom' | 'net' | 'slam' | 'warn' | 'strike' | 'sink'
-    | 'zap' | 'bite' | 'sting' | 'bash' | 'netfly' | 'spray';
+    | 'zap' | 'bite' | 'sting' | 'bash' | 'netfly' | 'spray' | 'tap' | 'heal' | 'crack';
   /** Para 'zap' y 'netfly': punto de destino. */
   tx?: number; ty?: number;
   x: number; y: number; vx: number; vy: number; t: number; max: number; c: string; r?: number;
@@ -44,7 +57,7 @@ export interface Txt { x: number; y: number; s: string; c: string; t: number; ma
 export interface Hazard { x: number; y: number; t: number; r: number; }
 export type GEvent = 'shot' | 'crit' | 'kill' | 'hurt' | 'wave' | 'boss' | 'bossdown' | 'over' | 'flash' | 'buy'
   | 'thunder' | 'boom' | 'enrage' | 'elite' | 'cards' | 'revive' | 'frostwarn' | 'frost' | 'erupt' | 'harpoon' | 'net' | 'slam'
-  | 'zap' | 'charge' | 'bite';
+  | 'zap' | 'charge' | 'bite' | 'tap' | 'tapmiss' | 'heal' | 'crack' | 'fire' | 'poison' | 'newtype';
 
 interface Proto { hp: number; spd: number; r: number; dmg: number; rew: number; stop: number; atk: number; armor: number; }
 const P: Record<EType, Proto> = {
@@ -57,15 +70,39 @@ const P: Record<EType, Proto> = {
   turtle: { hp: 60, spd: 16, r: 13, dmg: 9, rew: 6, stop: 40, atk: 1.4, armor: 0 },
   hermit: { hp: 30, spd: 22, r: 11, dmg: 7, rew: 5, stop: 36, atk: 1.0, armor: 4 },
   boss: { hp: 160, spd: 15, r: 32, dmg: 15, rew: 40, stop: 72, atk: 2.2, armor: 0 },
+  // Criaturas de cada mundo
+  seahorse: { hp: 20, spd: 30, r: 9, dmg: 0, rew: 5, stop: 118, atk: 2.6, armor: 0 },
+  star: { hp: 26, spd: 28, r: 10, dmg: 5, rew: 3, stop: 36, atk: 1.0, armor: 0 },
+  starlet: { hp: 7, spd: 42, r: 6, dmg: 2, rew: 1, stop: 33, atk: 0.8, armor: 0 },
+  lobster: { hp: 36, spd: 20, r: 12, dmg: 8, rew: 6, stop: 38, atk: 1.2, armor: 0 },
+  lionfish: { hp: 21, spd: 34, r: 9, dmg: 3, rew: 4, stop: 34, atk: 1.0, armor: 0 },
+  narwhal: { hp: 46, spd: 22, r: 12, dmg: 20, rew: 7, stop: 38, atk: 1.3, armor: 0 },
+  seal: { hp: 29, spd: 36, r: 10, dmg: 6, rew: 5, stop: 35, atk: 1.0, armor: 0 },
+  firefish: { hp: 19, spd: 32, r: 9, dmg: 7, rew: 5, stop: 155, atk: 2.6, armor: 0 },
+  volturtle: { hp: 84, spd: 14, r: 14, dmg: 10, rew: 8, stop: 40, atk: 1.5, armor: 0 },
+  lavacrab: { hp: 6, spd: 55, r: 6, dmg: 2, rew: 1, stop: 32, atk: 0.8, armor: 0 },
+  angler: { hp: 34, spd: 26, r: 11, dmg: 6, rew: 7, stop: 36, atk: 1.2, armor: 0 },
+  ghost: { hp: 23, spd: 38, r: 9, dmg: 5, rew: 5, stop: 34, atk: 0.9, armor: 0 },
 };
-// [tipo, oleada mínima, peso]
-const TABLE: [EType, number, number][] = [
-  ['crab', 1, 10], ['jelly', 1, 7], ['sardine', 6, 3], ['eel', 4, 4],
-  ['puffer', 5, 3], ['turtle', 7, 3], ['hermit', 9, 3],
+// [tipo, oleada mínima, peso, mundo donde aparece]. En su mundo salen a partir de esa oleada;
+// en los mundos siguientes salen antes (3 oleadas antes, mínimo la 2) y con algo menos de peso.
+const TABLE: [EType, number, number, number][] = [
+  ['crab', 1, 10, 0], ['jelly', 1, 7, 0], ['sardine', 6, 3, 0], ['eel', 4, 4, 0],
+  ['puffer', 5, 3, 0], ['turtle', 7, 3, 0], ['hermit', 9, 3, 0],
+  ['seahorse', 5, 2, 0], ['star', 8, 3, 0],
+  ['lobster', 4, 3, 1], ['lionfish', 6, 3, 1],
+  ['narwhal', 5, 2.5, 2], ['seal', 4, 3, 2],
+  ['firefish', 5, 3, 3], ['volturtle', 7, 2.5, 3],
+  ['angler', 5, 2.5, 4], ['ghost', 4, 3, 4],
 ];
+/** Máximo de cargas de toque. */
+export const TAP_MAX = 5;
 export const COLORS: Record<EType, string> = {
   crab: '#ff7a5c', jelly: '#d28bff', mini: '#e3b3ff', sardine: '#cfe3f2', eel: '#4ade80',
   puffer: '#ffd166', turtle: '#9be15d', hermit: '#e8c39e', boss: '#ffd27a',
+  seahorse: '#7ef0c0', star: '#ff9f6b', starlet: '#ffbe8f', lobster: '#e0442e', lionfish: '#ff8c6b',
+  narwhal: '#cfe6f5', seal: '#9fb3c4', firefish: '#ff8a3d', volturtle: '#6b5a4e', lavacrab: '#ff7a2e',
+  angler: '#5ee7ff', ghost: '#e8e6ff',
 };
 export const LAMP_Y = -48;
 /** Posición de cada torreta sobre la isla. */
@@ -101,6 +138,11 @@ export class Game {
   enemies: Enemy[] = [];
   bolts: Bolt[] = [];
   eshots: EShot[] = [];
+  fireballs: Fireball[] = [];
+  /** Cargas de toque, recarga, veneno sobre el faro y rapes cerca (luz debilitada). */
+  taps = TAP_MAX; tapT = 0; poisonT = 0; poisonDps = 0; dim = 0;
+  /** Criaturas especiales vistas en esta partida (para mostrar su ficha una vez). */
+  seenRun = new Set<string>();
   /** Redes en el aire: se aplican al caer. */
   nets: { x: number; y: number; R: number; t: number }[] = [];
   fx: Fx[] = [];
@@ -131,6 +173,7 @@ export class Game {
   /** Solo para dibujar: tiempo desde el último disparo de cada torreta. */
   tFire = { tA: 0, tR: 0 };
   // estadísticas de la partida
+  tapsUsed = 0;
   kills = 0; crits = 0; buys = 0; bosses = 0; flashes = 0; earned = 0; elites = 0; puffers = 0; cards = 0;
   hpLost10 = 0;
   pearlsEarned = 0;
@@ -188,6 +231,8 @@ export class Game {
       cw: 0.3 * lv.cw * (1 + 0.1 * Q('coral')),
       fcd: 25 * Math.pow(0.92, Q('flash')) * Math.max(0.5, 1 - 0.06 * lv.fcd),
       tA: turret(lv.tA, 1.1), tR: turret(lv.tR, 0.35), tN: turret(lv.tN, 0.7),
+      tap: dmg * (0.8 + 0.25 * (lv.tap || 0)),
+      tapCd: Math.max(0.35, 0.75 - 0.04 * (lv.tap || 0)),
     };
   }
 
@@ -277,7 +322,8 @@ export class Game {
       if (e.dead) continue;
       const d = Math.hypot(e.x, e.y);
       if (d > 240) continue;
-      this.damage(e, this.st.dmg * 4 * (e.type === 'boss' ? 0.4 : 1), true);
+      this.damage(e, this.st.dmg * 4 * (e.type === 'boss' ? 0.4 : 1), true, 'area');
+      if (e.type === 'seal') e.under = false;
       e.stun = e.type === 'boss' ? 0.6 : 1.6;
       if (d > 1 && e.type !== 'boss') { e.x += (e.x / d) * 28; e.y += (e.y / d) * 28; }
     }
@@ -285,6 +331,57 @@ export class Game {
     this.shake = Math.max(this.shake, 0.18);
     this.emit('flash');
     return true;
+  }
+
+  /** Posición de una bola de fuego (en el aire describe un arco). */
+  fireballPos(f: Fireball) {
+    const k = f.t / f.max;
+    return { x: f.sx * (1 - k), y: f.sy * (1 - k) - 10 * k, h: Math.sin(k * Math.PI) * 55 };
+  }
+
+  /** El jugador toca el mar en (x, y): apaga bolas de fuego o golpea a la criatura más cercana. */
+  tapAt(x: number, y: number): 'hit' | 'ball' | 'miss' | 'empty' {
+    if (this.over || this.state === 'cards') return 'miss';
+    for (const f of this.fireballs) {
+      const p = this.fireballPos(f);
+      if ((p.x - x) ** 2 + (p.y - p.h - y) ** 2 < 22 * 22) {
+        f.gone = true;
+        this.burst(p.x, p.y - p.h, '#ffb35c', 10, 90);
+        this.text(p.x, p.y - p.h - 8, t('¡APAGADA!'), '#ffd2a0', false, 0.7);
+        this.emit('tap');
+        return 'ball';
+      }
+    }
+    let best: Enemy | null = null, bd = Infinity;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const d = Math.hypot(e.x - x, e.y - y);
+      if (d < e.r + (e.type === 'boss' ? 8 : 16) && d < bd) { bd = d; best = e; }
+    }
+    if (!best) {
+      this.fx.push({ kind: 'tap', x, y, vx: 0, vy: 0, t: 0.3, max: 0.3, c: 'rgba(220,240,255,.5)', r: 6 });
+      this.emit('tapmiss');
+      return 'miss';
+    }
+    if (this.taps < 1) {
+      this.fx.push({ kind: 'tap', x, y, vx: 0, vy: 0, t: 0.3, max: 0.3, c: 'rgba(255,120,120,.6)', r: 6 });
+      this.emit('tapmiss');
+      return 'empty';
+    }
+    this.taps -= 1;
+    this.tapsUsed++;
+    const e = best;
+    if (e.type === 'narwhal' && e.mode === 1) {
+      e.mode = 0; e.chargeT = 0; e.stun = 1.6;
+      this.text(e.x, e.y - 16, t('¡ATURDIDO!'), '#fff3b0', true, 0.8);
+    }
+    if (e.type === 'seal' && e.under) { e.under = false; e.phase = 2.2; e.stun = Math.max(e.stun, 0.8); }
+    const dealt = this.damage(e, this.st.tap, true, 'tap');
+    this.fx.push({ kind: 'tap', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.35, max: 0.35, c: '#ffffff', r: e.r });
+    this.burst(e.x, e.y, '#e6fbff', 5, 70);
+    if (dealt > 0 && !e.dead) this.text(e.x + 8, e.y - 12, String(Math.round(dealt)), '#e6fbff', false, 0.5);
+    this.emit('tap');
+    return 'hit';
   }
 
   private gain(n: number) {
@@ -305,7 +402,8 @@ export class Game {
       const pool = MODS.filter(m => (!m.good || R() < 0.35) && (w >= 11 || m.id !== 'marea'));
       this.mod = pool[Math.floor(R() * pool.length)];
     }
-    let n = Math.floor(5 + w * 1.5);
+    // Cada mundo trae oleadas un poco más grandes
+    let n = Math.floor((5 + w * 1.5) * (1 + 0.1 * this.zoneIndex));
     if (this.mod?.id === 'marea') n = Math.floor(n * 1.4);
     const q: EType[] = [];
     if (boss) { q.push('boss'); for (let i = 0; i < Math.floor(n / 3); i++) q.push(this.pick()); }
@@ -320,10 +418,18 @@ export class Game {
     this.emit(boss ? 'boss' : 'wave', w);
   }
 
+  get zoneIndex() { return Math.max(0, ZONES.findIndex(z => z.id === this.zone.id)); }
+
   private pick(): EType {
-    const opts = TABLE.filter(r => this.wave >= r[1]);
-    let r = this.wr() * opts.reduce((s, o) => s + o[2], 0);
-    for (const o of opts) { r -= o[2]; if (r <= 0) return o[0]; }
+    const zi = this.zoneIndex;
+    const opts: [EType, number][] = [];
+    for (const [type, minW, wt, home] of TABLE) {
+      if (home > zi) continue;
+      const from = home === zi || home === 0 ? minW : Math.max(2, minW - 3);
+      if (this.wave >= from) opts.push([type, home === zi && home > 0 ? wt * 1.3 : wt]);
+    }
+    let r = this.wr() * opts.reduce((s, o) => s + o[1], 0);
+    for (const o of opts) { r -= o[1]; if (r <= 0) return o[0]; }
     return 'crab';
   }
 
@@ -345,7 +451,9 @@ export class Game {
       stop: p.stop, atkRate: p.atk, atk: Math.random() * 0.5, armor: p.armor * (1 + w * 0.12),
       dead: false, wob: Math.random() * 6, stun: 0, hitT: 0, elite, age: 0, summonT: 5, enraged: false, wakeT: 0,
       slowT: 0, burn: 0, burnT: 0, chargeT: 0, lungeT: 0,
+      shell: 0, shellMax: 0, phase: Math.random() * 3, under: false, mode: 0,
     };
+    if (type === 'lobster') e.shell = e.shellMax = e.max * 0.7;
     this.enemies.push(e);
     this.fx.push({ kind: 'splash', x, y, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '#bfe8ff', r: e.r * 0.8 });
     return e;
@@ -358,6 +466,10 @@ export class Game {
     if (type === 'sardine') {
       for (let i = 0; i < 4; i++) this.make('sardine', x + (Math.random() - 0.5) * 30, y + (Math.random() - 0.5) * 30);
       return;
+    }
+    if (!this.seenRun.has(type) && CREATURES.some(c => c.id === type)) {
+      this.seenRun.add(type);
+      this.emit('newtype', CREATURES.findIndex(c => c.id === type));
     }
     const elite = type !== 'boss' && this.wave >= 12 && this.wr() < 0.06 + (this.wave - 12) * 0.004;
     if (elite) this.emit('elite');
@@ -375,9 +487,29 @@ export class Game {
     this.texts.push({ x, y, s, c, t, max: t, big });
   }
 
-  /** Aplica daño teniendo en cuenta la coraza del ermitaño. */
-  private damage(e: Enemy, d: number, pierce = false) {
+  /** La foca bajo el agua y la medusa fantasma intangible no se pueden apuntar. */
+  hidden(e: Enemy) { return (e.type === 'seal' && e.under) || this.phased(e); }
+  phased(e: Enemy) { return e.type === 'ghost' && e.phase % 3 > 1.8; }
+
+  /** Aplica daño teniendo en cuenta la coraza del ermitaño, el caparazón de la langosta y la fase
+   *  de la medusa fantasma. src: luz, torreta, toque o efecto de área. */
+  private damage(e: Enemy, d: number, pierce = false, src: 'beam' | 'turret' | 'tap' | 'area' = 'beam') {
     if (e.dead) return 0;
+    if (this.phased(e) && src !== 'tap' && src !== 'area') return 0;
+    if (e.shell > 0) {
+      const k = src === 'beam' ? 0.25 : src === 'tap' ? 2 : 1;
+      const used = Math.min(e.shell, d * k);
+      e.shell -= used; e.hitT = 0.12;
+      d -= used / k;
+      if (e.shell <= 0.01) {
+        e.shell = 0;
+        this.text(e.x, e.y - 16, t('¡CAPARAZÓN ROTO!'), '#ffb08a', true, 0.9);
+        this.burst(e.x, e.y, '#e0442e', 14, 120);
+        this.fx.push({ kind: 'crack', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '#ffd2c2', r: e.r });
+        this.emit('crack');
+      }
+      if (d <= 0.001) return used;
+    }
     const dealt = pierce || !e.armor ? d : Math.max(d * 0.15, d - e.armor);
     e.hp -= dealt;
     e.hitT = 0.12;
@@ -407,6 +539,13 @@ export class Game {
     this.burst(e.x, e.y, COLORS[e.type], e.type === 'boss' ? 46 : e.elite ? 20 : 9, e.type === 'boss' ? 170 : 90);
     this.fx.push({ kind: 'splash', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#bfe8ff', r: e.r });
     if (e.type !== 'boss') this.fx.push({ kind: 'sink', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.55, max: 0.55, c: '', r: e.r, et: e.type, h: Math.atan2(-e.y, -e.x) });
+    if (e.type === 'star') {
+      for (let i = 0; i < 2; i++) { this.make('starlet', e.x + (i ? 9 : -9), e.y + (i ? 4 : -4)); this.waveTotal++; }
+    }
+    if (e.type === 'volturtle') {
+      for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2; this.make('lavacrab', e.x + Math.cos(a) * 12, e.y + Math.sin(a) * 12); this.waveTotal++; }
+      this.fx.push({ kind: 'boom', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#ff8a3d', r: 34 });
+    }
     if (e.type === 'jelly' && this.wave >= 6) {
       for (let i = 0; i < 2; i++) { this.make('mini', e.x + (i ? 8 : -8), e.y); this.waveTotal++; }
     }
@@ -418,10 +557,11 @@ export class Game {
     } else this.emit('kill');
   }
 
-  private hurt(d: number, attacker?: Enemy) {
+  private hurt(d: number, attacker?: Enemy, quiet = false) {
     d *= 1 - this.st.arm;
-    if (this.shield > 0) { const a = Math.min(this.shield, d); this.shield -= a; d -= a; }
-    if (d > 0) {
+    if (!quiet && this.shield > 0) { const a = Math.min(this.shield, d); this.shield -= a; d -= a; }
+    if (quiet) { this.hp -= d; if (this.wave <= 10) this.hpLost10 += d; }
+    else if (d > 0) {
       this.hp -= d;
       if (this.wave <= 10) this.hpLost10 += d;
       this.hurtT = Math.min(0.5, 0.25 + d * 0.01);
@@ -429,7 +569,7 @@ export class Game {
       this.emit('hurt');
     }
     if (attacker && this.st.thorn > 0 && !attacker.dead) {
-      this.damage(attacker, this.st.dmg * this.st.thorn, true);
+      this.damage(attacker, this.st.dmg * this.st.thorn, true, 'area');
       this.burst(attacker.x, attacker.y, '#7dd3fc', 3, 50);
     }
     if (this.hp <= 0 && !this.over) {
@@ -463,7 +603,7 @@ export class Game {
       for (const e of this.enemies) {
         if (e.dead || (e.x - n.x) ** 2 + (e.y - n.y) ** 2 > n.R * n.R) continue;
         e.slowT = 2.5 + 0.3 * (this.lv.tR - 1);
-        this.damage(e, this.st.tR, true);
+        this.damage(e, this.st.tR, true, 'turret');
       }
     }
     this.nets = this.nets.filter(n => n.t > 0);
@@ -479,14 +619,15 @@ export class Game {
   get score() { return this.wave * 1000 + this.kills; }
 
   private threat(e: Enemy) {
-    return (e.type === 'puffer' ? 60 : e.type === 'boss' ? 45 : e.type === 'eel' ? 35 : 0) + (e.elite ? 25 : 0);
+    const T: Partial<Record<EType, number>> = { puffer: 60, seahorse: 55, boss: 45, angler: 42, eel: 35, firefish: 35, narwhal: 30 };
+    return (T[e.type] || 0) + (e.elite ? 25 : 0);
   }
 
   private target(): Enemy | null {
     const R = this.range;
     let best: Enemy | null = null, bs = -Infinity;
     for (const e of this.enemies) {
-      if (e.dead) continue;
+      if (e.dead || this.hidden(e)) continue;
       const d = Math.hypot(e.x, e.y);
       if (d > R + e.r) continue;
       const s = this.aim === 'cerca' ? -d
@@ -501,7 +642,7 @@ export class Game {
   private nearestTo(x: number, y: number, maxD: number, not?: Enemy) {
     let b: Enemy | null = null, bd = maxD * maxD;
     for (const e of this.enemies) {
-      if (e.dead || e === not) continue;
+      if (e.dead || e === not || this.hidden(e)) continue;
       const d = (e.x - x) ** 2 + (e.y - y) ** 2;
       if (d < bd) { bd = d; b = e; }
     }
@@ -527,7 +668,7 @@ export class Game {
       this.tFire.tA = Math.max(0, this.tFire.tA - dt);
       const p = TURRET_POS.tA;
       let best: Enemy | null = null;
-      for (const e of this.enemies) if (!e.dead && Math.hypot(e.x - p.x, e.y - p.y) < 250 && (!best || e.hp > best.hp)) best = e;
+      for (const e of this.enemies) if (!e.dead && !this.hidden(e) && Math.hypot(e.x - p.x, e.y - p.y) < 250 && (!best || e.hp + e.shell > best.hp + best.shell)) best = e;
       if (best) {
         this.tAim.tA = Math.atan2(best.y - p.y, best.x - p.x);
         if (this.tcd.tA <= 0) {
@@ -576,7 +717,7 @@ export class Game {
           const a = Math.random() * Math.PI * 2, v = 25 + Math.random() * 90, rr = R * (0.6 + Math.random() * 0.4), life = 0.4 + Math.random() * 0.35;
           this.fx.push({ kind: 'spray', x: Math.cos(a) * rr, y: 10 + Math.sin(a) * rr * 0.8, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.6 - 40 - Math.random() * 70, t: life, max: life, c: '#d8f0ff' });
         }
-        for (const e of this.enemies) if (!e.dead && Math.hypot(e.x, e.y) < R + e.r) this.damage(e, st.tN, true);
+        for (const e of this.enemies) if (!e.dead && Math.hypot(e.x, e.y) < R + e.r) this.damage(e, st.tN, true, 'turret');
         this.shake = Math.max(this.shake, 0.1);
         this.emit('slam');
       }
@@ -615,7 +756,7 @@ export class Game {
           this.burst(h.x, h.y, '#ff8a3d', 16, 150);
           for (const e of this.enemies) {
             if (e.dead || (e.x - h.x) ** 2 + (e.y - h.y) ** 2 > (h.r + e.r) ** 2) continue;
-            this.damage(e, this.st.dmg * 3 + (e.type === 'boss' ? 0 : e.max * 0.25), true);
+            this.damage(e, this.st.dmg * 3 + (e.type === 'boss' ? 0 : e.max * 0.25), true, 'area');
           }
           this.hurt(this.st.hp * 0.02); // ceniza
           this.emit('erupt');
@@ -644,12 +785,20 @@ export class Game {
         this.makeLightning(hits[0].x, hits[0].y);
         for (const e of hits) {
           this.fx.push({ kind: 'strike', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.4, max: 0.4, c: '#dfe8ff', r: 30 });
-          this.damage(e, st.dmg * 6, true);
+          this.damage(e, st.dmg * 6, true, 'area');
         }
       } else this.makeLightning((Math.random() - 0.5) * 260, (Math.random() - 0.5) * 200);
       this.emit('thunder');
     }
     this.hp = Math.min(st.hp, this.hp + st.rep * dt);
+    if (this.taps < TAP_MAX) { this.tapT += dt; if (this.tapT >= st.tapCd) { this.tapT = 0; this.taps++; } } else this.tapT = 0;
+    if (this.poisonT > 0) {
+      this.poisonT -= dt;
+      this.hurt(this.poisonDps * dt, undefined, true);
+      if (this.poisonT <= 0) this.poisonDps = 0;
+      if (this.hp <= 0 && !this.over) { this.hurt(0); if (this.over) return; }
+    }
+    this.dim = this.enemies.filter(e => !e.dead && e.type === 'angler' && Math.hypot(e.x, e.y) < 160).length;
     if (this.bl.escudo && this.state !== 'pause') this.shield = Math.min(st.bar, this.shield + 3 * this.bl.escudo * dt);
 
     // Oleadas
@@ -693,7 +842,7 @@ export class Game {
       const diff = Math.atan2(Math.sin(want - this.lamp), Math.cos(want - this.lamp));
       this.lamp += diff * Math.min(1, dt * 18);
     } else this.lamp += dt * 0.7;
-    this.cd -= dt * (this.frozen > 0 ? 0.45 : 1);
+    this.cd -= dt * (this.frozen > 0 ? 0.45 : 1) * Math.max(0.5, Math.pow(0.72, this.dim));
     if (tg && this.cd <= 0) {
       this.cd = Math.max(0, this.cd + 1 / st.spd);
       const fire = (t: Enemy) => {
@@ -712,7 +861,7 @@ export class Game {
       b.px = b.x; b.py = b.y;
       if (d <= s + e.r * 0.6) {
         b.gone = true;
-        const dealt = this.damage(e, b.d);
+        const dealt = this.damage(e, b.d, false, b.kind === 'harpoon' ? 'turret' : 'beam');
         if (b.kind === 'harpoon') { this.burst(e.x, e.y, '#c9a46a', 5, 70); continue; }
         this.burst(e.x, e.y, b.crit ? '#ffe27a' : '#fff6c8', b.crit ? 6 : 2, 60);
         if (e.armor && dealt < b.d * 0.5) this.text(e.x, e.y - 12, t('coraza'), '#e8c39e', false, 0.5);
@@ -739,6 +888,20 @@ export class Game {
     }
     this.eshots = this.eshots.filter(s => !s.gone);
 
+    // Bolas de fuego del pez ígneo
+    for (const f of this.fireballs) {
+      if (f.gone) continue;
+      f.t += dt;
+      if (f.t >= f.max) {
+        f.gone = true;
+        this.fx.push({ kind: 'boom', x: 0, y: -10, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '#ff8a3d', r: 30 });
+        this.burst(0, -10, '#ff8a3d', 10, 110);
+        this.hurt(f.d);
+        if (this.over) return;
+      }
+    }
+    this.fireballs = this.fireballs.filter(f => !f.gone);
+
     // Criaturas
     for (const e of this.enemies) {
       if (e.dead) continue;
@@ -747,11 +910,25 @@ export class Game {
       e.slowT = Math.max(0, e.slowT - dt);
       if (e.burnT > 0) {
         e.burnT -= dt;
-        this.damage(e, e.burn * dt, true);
+        this.damage(e, e.burn * dt, true, 'area');
         if (Math.random() < dt * 8) this.fx.push({ kind: 'p', x: e.x + (Math.random() - 0.5) * e.r, y: e.y, vx: 0, vy: -30, t: 0.4, max: 0.4, c: '#ff9a3d' });
         if (e.dead) continue;
       }
+      e.phase += dt;
       if (e.stun > 0) { e.stun -= dt; continue; }
+      // Caballito: cura a las criaturas cercanas cada cierto tiempo, esté donde esté
+      if (e.type === 'seahorse') {
+        e.atk -= dt;
+        if (e.atk <= 0) {
+          e.atk = e.atkRate;
+          let n = 0;
+          for (const o of this.enemies) {
+            if (o.dead || o === e || o.hp >= o.max || (o.x - e.x) ** 2 + (o.y - e.y) ** 2 > 85 * 85) continue;
+            o.hp = Math.min(o.max, o.hp + o.max * (o.type === 'boss' ? 0.03 : 0.14)); n++;
+          }
+          if (n) { this.fx.push({ kind: 'heal', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.7, max: 0.7, c: '#7ef0c0', r: 85 }); this.emit('heal'); }
+        }
+      }
       if (e.type === 'boss') {
         e.summonT -= dt;
         if (e.summonT <= 0) {
@@ -771,8 +948,27 @@ export class Game {
       }
       const d = Math.hypot(e.x, e.y);
       e.wakeT -= dt;
+      // Foca: bucea 2.2 s y sale 1.6 s mientras se acerca; ya en la orilla, se queda arriba
+      if (e.type === 'seal') e.under = d > e.stop + 4 && e.phase % 3.8 < 2.2;
+      // Narval: a 140 se detiene a apuntar 1 s y luego embiste a toda velocidad
+      if (e.type === 'narwhal') {
+        if (e.mode === 0 && d < 140 && d > e.stop + 10) { e.mode = 1; e.chargeT = 1.0; this.emit('charge'); }
+        if (e.mode === 1) { e.chargeT -= dt; if (e.chargeT <= 0) e.mode = 2; continue; }
+        if (e.mode === 2 && d <= e.stop) {
+          e.mode = 3;
+          const hx = (e.x / d) * 30, hy = (e.y / d) * 30 - 6;
+          this.fx.push({ kind: 'bash', x: hx, y: hy, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '', r: e.r * 2 });
+          this.fx.push({ kind: 'splash', x: hx, y: hy, vx: 0, vy: 0, t: 0.6, max: 0.6, c: '#bfe8ff', r: 24 });
+          this.shake = Math.max(this.shake, 0.25);
+          this.emit('bite');
+          this.hurt(e.dmg, e);
+          e.dmg *= 0.3; e.atk = e.atkRate;
+          if (this.over) return;
+        }
+      }
       if (d > e.stop) {
-        const s = e.spd * dt * (e.slowT > 0 ? 0.5 : 1) * (e.type === 'sardine' ? 1 + 0.25 * Math.sin(e.age * 6 + e.wob) : 1);
+        const s = e.spd * dt * (e.slowT > 0 ? 0.5 : 1) * (e.type === 'sardine' ? 1 + 0.25 * Math.sin(e.age * 6 + e.wob) : 1)
+          * (e.type === 'narwhal' && e.mode === 2 ? 8 : 1);
         e.x -= (e.x / d) * s;
         e.y -= (e.y / d) * s;
         if (e.wakeT <= 0) {
@@ -792,10 +988,18 @@ export class Game {
         this.emit('boom');
         this.hurt(e.dmg);
         if (this.over) return;
+      } else if (e.type === 'seahorse') {
+        // se queda a distancia curando
       } else {
         e.atk -= dt * (e.slowT > 0 ? 0.6 : 1);
         e.lungeT = Math.max(0, e.lungeT - dt);
-        if (e.type === 'eel') {
+        if (e.type === 'firefish') {
+          if (e.atk <= 0) {
+            e.atk = e.atkRate; e.lungeT = 0.24;
+            this.fireballs.push({ sx: e.x, sy: e.y, t: 0, max: 1.4, d: e.dmg });
+            this.emit('fire');
+          }
+        } else if (e.type === 'eel') {
           // Se carga brillando y luego lanza una descarga instantánea
           if (e.chargeT > 0) {
             e.chargeT -= dt;
@@ -818,6 +1022,12 @@ export class Game {
             this.emit('bite');
           }
           this.hurt(e.dmg, e);
+          if (e.type === 'lionfish') {
+            this.poisonT = 4;
+            this.poisonDps = Math.min(this.st.hp * 0.03, this.poisonDps + e.dmg * 0.45);
+            this.text((e.x / d) * 30, (e.y / d) * 30 - 18, t('VENENO'), '#b6f27a', false, 0.6);
+            this.emit('poison');
+          }
           if (this.over) return;
         }
       }

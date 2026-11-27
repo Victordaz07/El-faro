@@ -76,6 +76,9 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #aim{position:absolute;left:2px;bottom:8px;padding:5px 10px 6px;border-radius:12px;border:1px solid var(--line);background:var(--glass);font-family:var(--fd);font-size:12px;letter-spacing:.02em}
 #aim b{display:block;font-family:var(--ff);font-weight:900;font-size:8.5px;letter-spacing:.12em;color:var(--txt2)}
 #aim:active{transform:scale(.95)}
+#taps{position:absolute;left:6px;bottom:52px;display:flex;gap:4px;pointer-events:none}
+#taps i{width:9px;height:9px;border-radius:50%;background:rgba(230,251,255,.92);box-shadow:0 0 6px rgba(63,215,196,.7);transition:opacity .15s,transform .15s}
+#taps i.off{opacity:.22;transform:scale(.7);box-shadow:none}
 #flash{position:absolute;right:2px;bottom:6px;width:60px;height:60px;border-radius:50%;border:0;padding:0;display:grid;place-items:center;
   background:conic-gradient(var(--acc) calc(var(--p,1)*360deg),rgba(255,255,255,.12) 0);box-shadow:0 6px 18px rgba(0,0,0,.45)}
 #flash::before{content:'';position:absolute;inset:4px;border-radius:50%;background:radial-gradient(circle at 50% 35%,#163049,#0a1626)}
@@ -218,6 +221,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   </div>
   <div id="dock">
     <div id="floaters">
+      <div id="taps"></div>
       <button id="aim"><b>OBJETIVO</b><span>CERCANO</span></button>
       <button id="flash"><span>⚡</span><small>DESTELLO</small></button>
     </div>

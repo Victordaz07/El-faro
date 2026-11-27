@@ -19,6 +19,7 @@ export const DEFS: UpDef[] = [
   { id: 'cf', tab: 0, name: 'Mult. crítico', base: 10, fmt: v => '×' + v.toFixed(2) },
   { id: 'rng', tab: 0, name: 'Alcance', base: 14, fmt: v => Math.round(v) + '' },
   { id: 'chain', tab: 0, name: 'Rebote', base: 16, fmt: v => (v * 100).toFixed(0) + '%' },
+  { id: 'tap', tab: 0, name: 'Toque', base: 9, fmt: v => v.toFixed(1) },
   { id: 'hp', tab: 1, name: 'Integridad', base: 8, fmt: v => Math.round(v) + '' },
   { id: 'rep', tab: 1, name: 'Reparación', base: 9, fmt: v => v.toFixed(1) + '/s' },
   { id: 'arm', tab: 1, name: 'Armadura', base: 10, fmt: v => (v * 100).toFixed(0) + '%' },
@@ -39,6 +40,7 @@ export const DEFS: UpDef[] = [
 /** Descripción corta que se muestra al mantener presionada la mejora. */
 export const HINTS: Record<string, string> = {
   rng: 'Dispara más lejos',
+  tap: 'Daño y recarga de tus toques sobre las criaturas',
   chain: 'Probabilidad de que el rayo rebote a otra criatura',
   thorn: 'Devuelve daño a quien golpea el faro',
   vamp: 'Repara el faro con cada baja',
@@ -113,6 +115,22 @@ export const BLESSINGS: Blessing[] = [
   { id: 'cofre', name: 'Cofre hundido', desc: 'Recibes un montón de perlas ahora', icon: '🧰', max: 9 },
   { id: 'vampiro', name: 'Sangre de kraken', desc: '+1.5 de vida por cada baja', icon: '🩸', max: 3 },
   { id: 'furia', name: 'Furia del farero', desc: '+20% de cadencia', icon: '🔥', max: 3 },
+];
+
+/* ---------- Criaturas nuevas por mundo ---------- */
+/** Ficha que se muestra la primera vez que aparece cada criatura especial. */
+export interface CreatureInfo { id: string; name: string; desc: string; zone: number; }
+export const CREATURES: CreatureInfo[] = [
+  { id: 'seahorse', zone: 0, name: 'Caballito sanador', desc: 'Se queda lejos y cura a las criaturas cercanas. Elimínalo primero: tócalo o pon el objetivo en PELIGRO.' },
+  { id: 'star', zone: 0, name: 'Estrella de mar', desc: 'Al hundirse se parte en dos estrellas pequeñas.' },
+  { id: 'lobster', zone: 1, name: 'Langosta acorazada', desc: 'Su caparazón resiste la luz del faro. Tócala, o usa el Arponero y el Ancla, para romperlo.' },
+  { id: 'lionfish', zone: 1, name: 'Pez león', desc: 'Sus púas envenenan el faro: pierde vida durante unos segundos después de cada picadura.' },
+  { id: 'narwhal', zone: 2, name: 'Narval', desc: 'Se detiene, apunta y embiste con fuerza. Tócalo mientras apunta para aturdirlo.' },
+  { id: 'seal', zone: 2, name: 'Foca', desc: 'Se sumerge y la luz no la alcanza. Tócala bajo el agua para sacarla a la superficie.' },
+  { id: 'firefish', zone: 3, name: 'Pez ígneo', desc: 'Lanza bolas de fuego desde lejos. Toca las bolas en el aire para apagarlas.' },
+  { id: 'volturtle', zone: 3, name: 'Tortuga volcánica', desc: 'Muy resistente. Al hundirse suelta cuatro cangrejitos de lava.' },
+  { id: 'angler', zone: 4, name: 'Rape abisal', desc: 'Su farolillo debilita tu luz: el faro dispara más lento mientras esté cerca.' },
+  { id: 'ghost', zone: 4, name: 'Medusa fantasma', desc: 'A ratos se vuelve intangible y la luz la atraviesa. Tus toques sí la alcanzan.' },
 ];
 
 /* ---------- Zonas ---------- */
@@ -225,6 +243,7 @@ localize(PERM, ['name', 'desc']);
 localize(BLESSINGS, ['name', 'desc']);
 localize(ZONES, ['name', 'desc', 'boss', 'bossTitle']);
 localize(ACHIEVEMENTS, ['name', 'desc']);
+localize(CREATURES, ['name', 'desc']);
 for (const k of Object.keys(HINTS)) { const es = HINTS[k]; Object.defineProperty(HINTS, k, { get: () => t(es), enumerable: true }); }
 /** Nombre de pestaña / rama en el idioma activo. */
 export const tabName = (i: number) => t(TABS[i]);

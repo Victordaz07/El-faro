@@ -1,5 +1,5 @@
 // Dibujo en canvas: agua animada, faro 2.5D, criaturas sombreadas, efectos y clima.
-import { Game, Enemy, LAMP_Y, TURRET_POS } from './game';
+import { Game, Enemy, EType, LAMP_Y, TURRET_POS } from './game';
 import type { Zone } from './data';
 import { Water } from './water';
 import { ready, sheetFor, Sheet, islaArt, faroArt, redArt, arponArt, turretArt, bossSheet, Still } from './art';
@@ -22,6 +22,8 @@ function adaptQuality(now: number) {
   slow = ema > 0.04 ? slow + dt : Math.max(0, slow - dt * 0.5);
   if (slow > 3 && quality > 0) { quality--; slow = 0; ema = 1 / 60; if (quality === 0) water = null; }
 }
+/** Cámara del último cuadro (para convertir un toque en pantalla a coordenadas del juego). */
+export const lastCam = { x: 0, y: 0, s: 1 };
 export function setQuality(q: number) { quality = q; if (q === 0) water = null; }
 
 const TAU = Math.PI * 2;
@@ -90,6 +92,7 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
   const cam = g
     ? { x: vw / 2 + sx - fx * sc * z, y: vh / 2 + view.offY + sy - fy * sc * z, s: sc * z }
     : { x: vw / 2, y: vh * 0.3, s: sc * 1.45 };
+  lastCam.x = cam.x; lastCam.y = cam.y; lastCam.s = cam.s;
   const lampA = g ? g.lamp : now * 0.6;
 
   // Fondo y agua: shader en la GPU, o patrón 2D si no hay WebGL
@@ -303,6 +306,20 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
         ctx.strokeStyle = `rgba(220,240,255,${k * 0.9})`; ctx.lineWidth = 3 * k + 0.5;
         const r = 6 + (1 - k) * 20;
         ctx.beginPath(); ctx.ellipse(f.x, f.y, r, r * 0.7, 0, 0, TAU); ctx.stroke();
+      } else if (f.kind === 'tap') {
+        const rr = (f.r || 6) * (0.8 + (1 - k) * 1.4);
+        ctx.strokeStyle = f.c; ctx.globalAlpha = k; ctx.lineWidth = 2.2 * k + 0.5;
+        ctx.beginPath(); ctx.arc(f.x, f.y, rr, 0, TAU); ctx.stroke();
+        ctx.globalAlpha = 1;
+      } else if (f.kind === 'heal') {
+        const rr = (f.r || 80) * (0.3 + (1 - k) * 0.7);
+        ctx.strokeStyle = `rgba(126,240,192,${k * 0.7})`; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(f.x, f.y, rr, rr * 0.8, 0, 0, TAU); ctx.stroke();
+        ctx.fillStyle = `rgba(180,255,220,${k})`;
+        for (let i = 0; i < 6; i++) { const aa = i * 1.05 + f.x, px = f.x + Math.cos(aa) * rr * 0.6, py = f.y + Math.sin(aa) * rr * 0.5 - (1 - k) * 12; ctx.fillRect(px - 2.5, py - 0.6, 5, 1.2); ctx.fillRect(px - 0.6, py - 2.5, 1.2, 5); }
+      } else if (f.kind === 'crack') {
+        ctx.strokeStyle = `rgba(255,210,190,${k})`; ctx.lineWidth = 1.6;
+        for (let i = 0; i < 7; i++) { const aa = (i / 7) * TAU + f.x, r0 = (f.r || 10) * 0.6, r1 = r0 + (1 - k) * 22; ctx.beginPath(); ctx.moveTo(f.x + Math.cos(aa) * r0, f.y + Math.sin(aa) * r0); ctx.lineTo(f.x + Math.cos(aa) * r1, f.y + Math.sin(aa) * r1); ctx.stroke(); }
       } else if (f.kind === 'spray') {
         ctx.fillStyle = f.c; ctx.globalAlpha = Math.min(1, k * 1.6);
         ctx.beginPath(); ctx.arc(f.x, f.y, 1.3 + k, 0, TAU); ctx.fill();
@@ -341,6 +358,14 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
     for (const s of g.eshots) {
       ctx.fillStyle = radial(ctx, s.x, s.y, 9, [[0, 'rgba(220,255,230,1)'], [0.35, 'rgba(74,222,128,.8)'], [1, 'rgba(74,222,128,0)']]);
       ctx.beginPath(); ctx.arc(s.x, s.y, 9, 0, TAU); ctx.fill();
+    }
+    // Bolas de fuego del pez ígneo: sombra en el agua y bola en el aire
+    for (const f of g.fireballs) {
+      const p = g.fireballPos(f), y = p.y - p.h;
+      ctx.fillStyle = radial(ctx, p.x, y, 14, [[0, 'rgba(255,250,220,1)'], [0.3, 'rgba(255,160,60,.95)'], [1, 'rgba(255,70,20,0)']]);
+      ctx.beginPath(); ctx.arc(p.x, y, 14, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(255,120,40,.35)';
+      for (let i = 1; i <= 3; i++) { const q = g.fireballPos({ ...f, t: Math.max(0, f.t - i * 0.05) }); ctx.beginPath(); ctx.arc(q.x, q.y - q.h, 5 - i, 0, TAU); ctx.fill(); }
     }
     // Relámpago
     if (g.lightning > 0.15 && g.bolt.length) {
@@ -578,8 +603,19 @@ function bossBody(zone: Zone) {
   });
 }
 
+/** Radio base de cada criatura (el dibujo por código está hecho a ese tamaño). */
+const BASE_R: Record<EType, number> = {
+  crab: 10, jelly: 9, mini: 9, sardine: 5, eel: 9, puffer: 11, turtle: 13, hermit: 11, boss: 32,
+  seahorse: 9, star: 10, starlet: 10, lobster: 12, lionfish: 9, narwhal: 12, seal: 10, firefish: 9,
+  volturtle: 14, lavacrab: 10, angler: 11, ghost: 9,
+};
+/** Criaturas nuevas que, mientras llegan sus modelos, usan la hoja de otra con un tinte propio. */
+const BORROW: Partial<Record<EType, [string, string, number, number]>> = {
+  lavacrab: ['crab', '255,110,40', 0.5, 2.8], ghost: ['jelly', '235,232,255', 0.6, 2.7], volturtle: ['turtle', '48,32,26', 0.72, 2.8],
+};
+
 function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, zone: Zone, g: Game) {
-  const a = Math.atan2(-e.y, -e.x), t = time + e.wob, k = e.r / { crab: 10, jelly: 9, mini: 9, sardine: 5, eel: 9, puffer: 11, turtle: 13, hermit: 11, boss: 32 }[e.type];
+  const a = Math.atan2(-e.y, -e.x), t = time + e.wob, k = e.r / BASE_R[e.type];
   const dist = Math.hypot(e.x, e.y);
   ctx.save();
   const lunge = e.lungeT > 0 ? Math.sin((1 - e.lungeT / 0.24) * Math.PI) * e.r * 0.75 : 0;
@@ -602,8 +638,19 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, zone: 
     ctx.fillStyle = `rgba(255,60,90,${0.25 + 0.2 * Math.sin(t * 10)})`;
     ctx.beginPath(); ctx.arc(0, 0, e.r + 22, 0, TAU); ctx.fill();
   }
-  const sheet = e.type === 'boss' ? bossSheet(zone.id) : sheetFor(e.type);
-  if (sheet) drawFromSheet(ctx, e, sheet, t, dist, a, zone);
+  if (e.type === 'seal' && e.under) {
+    // Bajo el agua: solo una silueta oscura y burbujas
+    ctx.fillStyle = 'rgba(0,15,30,.45)';
+    ctx.beginPath(); ctx.ellipse(0, 2, e.r * 1.2, e.r * 0.6, a, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(210,240,255,.7)';
+    for (let i = 0; i < 3; i++) { const p = (t * 1.5 + i / 3) % 1; ctx.beginPath(); ctx.arc(Math.sin(i * 2.1 + t) * 4, -p * 12, 1 + p, 0, TAU); ctx.fill(); }
+    ctx.restore();
+    return;
+  }
+  if (g.phased(e)) ctx.globalAlpha = 0.28;
+  const borrow = BORROW[e.type];
+  const sheet = e.type === 'boss' ? bossSheet(zone.id) : borrow ? sheetFor(borrow[0]) : sheetFor(e.type);
+  if (sheet) drawFromSheet(ctx, e, borrow ? { ...sheet, len: borrow[3] } : sheet, t, dist, a, zone, borrow);
   else {
   ctx.rotate(a);
   ctx.scale(k, k);
@@ -670,6 +717,132 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, zone: 
       blit(ctx, sprite('hermit', 13, BODY.hermit), 13);
       break;
     }
+    case 'seahorse': {
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#2fa57a'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-3, 0); ctx.quadraticCurveTo(-10, 2, -9, 7); ctx.arc(-6.5, 7, 2.5, Math.PI, Math.PI * 2.6); ctx.stroke();
+      ctx.fillStyle = radial(ctx, 0, -2, 9, [[0, '#c9ffe6'], [0.5, '#5fd8a5'], [1, '#1f7a5a']]);
+      ctx.beginPath(); ctx.ellipse(0, 0, 6, 4.5, 0, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(6, -1, 3.5, 2.6, -0.2, 0, TAU); ctx.fill();
+      ctx.fillRect(8, -1.6, 4, 1.8);
+      ctx.strokeStyle = 'rgba(200,255,230,.8)'; ctx.lineWidth = 1;
+      for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i * 1.8, -4); ctx.lineTo(i * 1.8 - 1, -6.5 + Math.sin(t * 8 + i)); ctx.stroke(); }
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(6.5, -2, 0.9, 0, TAU); ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = `rgba(126,240,192,${0.3 + 0.2 * Math.sin(t * 4)})`; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(0, 0, 11 + Math.sin(t * 4) * 1.5, 0, TAU); ctx.stroke();
+      ctx.globalCompositeOperation = 'source-over';
+      break;
+    }
+    case 'star': case 'starlet': {
+      ctx.rotate(t * 0.8 - a);
+      const star = new Path2D();
+      for (let i = 0; i < 10; i++) { const rr = i % 2 ? 4.2 : 10, aa = (i / 10) * TAU - Math.PI / 2; i ? star.lineTo(Math.cos(aa) * rr, Math.sin(aa) * rr) : star.moveTo(Math.cos(aa) * rr, Math.sin(aa) * rr); }
+      star.closePath();
+      ctx.fillStyle = radial(ctx, -2, -2, 11, [[0, '#ffd9b3'], [0.5, '#ff9f6b'], [1, '#c2461f']]);
+      ctx.fill(star); ctx.strokeStyle = '#8a2f12'; ctx.lineWidth = 1; ctx.stroke(star);
+      ctx.fillStyle = 'rgba(255,235,210,.8)';
+      for (let i = 0; i < 5; i++) { const aa = (i / 5) * TAU - Math.PI / 2; for (const d of [3, 6]) { ctx.beginPath(); ctx.arc(Math.cos(aa) * d, Math.sin(aa) * d, 0.8, 0, TAU); ctx.fill(); } }
+      break;
+    }
+    case 'lobster': {
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#a3261a'; ctx.lineWidth = 1;
+      for (const sg of [-1, 1]) { ctx.beginPath(); ctx.moveTo(8, sg * 2); ctx.quadraticCurveTo(16, sg * 10, 22, sg * (14 + Math.sin(t * 3) * 2)); ctx.stroke(); }
+      for (const sg of [-1, 1]) {
+        ctx.strokeStyle = '#b3301f'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(4, sg * 4); ctx.lineTo(10, sg * 9); ctx.stroke();
+        ctx.fillStyle = radial(ctx, 13, sg * 10, 6, [[0, '#ff8a6b'], [1, '#a3261a']]);
+        ctx.beginPath(); ctx.ellipse(14 + Math.sin(t * 4 + sg) * 0.8, sg * 10, 5.5, 3.6, sg * 0.3, 0, TAU); ctx.fill();
+      }
+      ctx.fillStyle = '#c23a26';
+      for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.ellipse(-5 - i * 3.6, 0, 3.6 - i * 0.4, 4.6 - i * 0.6, 0, 0, TAU); ctx.fill(); }
+      ctx.beginPath(); ctx.moveTo(-17, 0); ctx.lineTo(-21, -4); ctx.lineTo(-21, 4); ctx.closePath(); ctx.fill();
+      const sh = e.shellMax > 0 ? e.shell / e.shellMax : 0;
+      ctx.fillStyle = radial(ctx, 0, -2, 10, sh > 0 ? [[0, '#ffc2a8'], [0.5, '#e0442e'], [1, '#6a140b']] : [[0, '#ff9d86'], [1, '#b3301f']]);
+      ctx.beginPath(); ctx.ellipse(1, 0, 8, 6, 0, 0, TAU); ctx.fill();
+      if (sh > 0) {
+        ctx.strokeStyle = 'rgba(255,230,210,.85)'; ctx.lineWidth = 1.3;
+        ctx.beginPath(); ctx.ellipse(1, 0, 8.5, 6.5, 0, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = 'rgba(60,10,5,.8)'; ctx.lineWidth = 0.8;
+        if (sh < 0.66) { ctx.beginPath(); ctx.moveTo(-2, -5); ctx.lineTo(1, -1); ctx.lineTo(-1, 3); ctx.stroke(); }
+        if (sh < 0.33) { ctx.beginPath(); ctx.moveTo(5, -4); ctx.lineTo(3, 0); ctx.lineTo(6, 4); ctx.stroke(); }
+      }
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(7, -2.5, 1, 0, TAU); ctx.arc(7, 2.5, 1, 0, TAU); ctx.fill();
+      break;
+    }
+    case 'lionfish': {
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 9; i++) {
+        const aa = Math.PI * 0.55 + (i / 8) * Math.PI * 0.9 + Math.sin(t * 3 + i) * 0.06;
+        for (const sg of [-1, 1]) {
+          ctx.strokeStyle = i % 2 ? '#fff1e6' : '#d9481f'; ctx.lineWidth = 1.2;
+          ctx.beginPath(); ctx.moveTo(-1, 0); ctx.lineTo(Math.cos(aa) * 13 - 1, sg * Math.sin(aa) * 13); ctx.stroke();
+        }
+      }
+      const lg = ctx.createLinearGradient(-8, 0, 8, 0);
+      for (let i = 0; i <= 8; i++) lg.addColorStop(i / 8, i % 2 ? '#fff1e6' : '#e0582c');
+      ctx.fillStyle = lg; ctx.beginPath(); ctx.ellipse(0, 0, 8, 3.8, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#e0582c'; ctx.beginPath(); ctx.moveTo(-7, 0); ctx.lineTo(-12, -3.5 + Math.sin(t * 9)); ctx.lineTo(-12, 3.5 + Math.sin(t * 9)); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(5.5, -1.2, 0.9, 0, TAU); ctx.fill();
+      break;
+    }
+    case 'narwhal': {
+      ctx.fillStyle = '#b8c9d6';
+      ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(-17, -5 + Math.sin(t * 4) * 1.5); ctx.lineTo(-15, 0); ctx.lineTo(-17, 5 + Math.sin(t * 4) * 1.5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = radial(ctx, 0, -3, 14, [[0, '#f2f8fc'], [0.55, '#9fb6c6'], [1, '#4c6273']]);
+      ctx.beginPath(); ctx.ellipse(0, 0, 12, 6.5, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(60,80,95,.45)';
+      for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.arc(-6 + hash(i) * 12, -3 + hash(i + 3) * 6, 0.9, 0, TAU); ctx.fill(); }
+      ctx.strokeStyle = '#f5ecd6'; ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(27, 0); ctx.stroke();
+      ctx.strokeStyle = 'rgba(150,130,100,.7)'; ctx.lineWidth = 0.7;
+      for (let x = 13; x < 26; x += 2.2) { ctx.beginPath(); ctx.moveTo(x, -0.9); ctx.lineTo(x + 1.2, 0.9); ctx.stroke(); }
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(8, -3, 0.9, 0, TAU); ctx.arc(8, 3, 0.9, 0, TAU); ctx.fill();
+      break;
+    }
+    case 'seal': {
+      ctx.fillStyle = '#6d7f8d';
+      for (const sg of [-1, 1]) { ctx.beginPath(); ctx.ellipse(1, sg * 7, 4, 1.8, sg * 0.5 + Math.sin(t * 5) * 0.2 * sg, 0, TAU); ctx.fill(); }
+      ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(-14, -4); ctx.lineTo(-13, 0); ctx.lineTo(-14, 4); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = radial(ctx, 2, -2, 12, [[0, '#d4dde4'], [0.5, '#8c9eac'], [1, '#4a5a66']]);
+      ctx.beginPath(); ctx.ellipse(0, 0, 10, 5.5, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(50,60,70,.5)';
+      for (let i = 0; i < 7; i++) { ctx.beginPath(); ctx.arc(-6 + hash(i + 9) * 12, -3 + hash(i + 2) * 6, 0.8, 0, TAU); ctx.fill(); }
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(7, -2.2, 1.1, 0, TAU); ctx.arc(7, 2.2, 1.1, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#2b2b2b'; ctx.beginPath(); ctx.arc(9.6, 0, 0.9, 0, TAU); ctx.fill();
+      break;
+    }
+    case 'firefish': {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = radial(ctx, -9, 0, 9, [[0, 'rgba(255,200,80,.8)'], [1, 'rgba(255,80,20,0)']]);
+      ctx.beginPath(); ctx.moveTo(-5, 0); ctx.lineTo(-16, -5 + Math.sin(t * 12) * 2); ctx.lineTo(-13, 0); ctx.lineTo(-16, 5 + Math.sin(t * 12 + 1) * 2); ctx.closePath(); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = radial(ctx, 1, -1, 10, [[0, '#ffe7a3'], [0.45, '#ff8a3d'], [1, '#8a2a10']]);
+      ctx.beginPath(); ctx.ellipse(0, 0, 8, 5, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#c23a14'; ctx.beginPath(); ctx.moveTo(-2, -4); ctx.lineTo(2, -8 + Math.sin(t * 8)); ctx.lineTo(4, -4); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#fff6d0'; ctx.beginPath(); ctx.arc(5, -1.5, 1.4, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(5.3, -1.5, 0.7, 0, TAU); ctx.fill();
+      break;
+    }
+    case 'angler': {
+      // Farolillo colgando delante
+      const lx = 15, ly = -9 + Math.sin(t * 3) * 1.5;
+      ctx.strokeStyle = '#3d4a5c'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(4, -5); ctx.quadraticCurveTo(10, -14, lx, ly); ctx.stroke();
+      ctx.fillStyle = radial(ctx, -1, -2, 13, [[0, '#4a5a70'], [0.6, '#232c3b'], [1, '#0c1018']]);
+      ctx.beginPath(); ctx.ellipse(0, 0, 11, 8, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#0c1018'; ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(-15, -4); ctx.lineTo(-15, 4); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#05070b'; ctx.beginPath(); ctx.ellipse(7, 1, 4.5, 4, 0, -1.2, 1.2); ctx.fill();
+      ctx.fillStyle = '#e9edf2';
+      for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(8.5, i * 1.2); ctx.lineTo(10.5, i * 1.2 + 0.4); ctx.lineTo(8.5, i * 1.2 + 0.8); ctx.fill(); }
+      ctx.fillStyle = '#b8f7ff'; ctx.beginPath(); ctx.arc(3, -4, 1.1, 0, TAU); ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = radial(ctx, lx, ly, 9, [[0, 'rgba(230,255,255,1)'], [0.3, 'rgba(94,231,255,.8)'], [1, 'rgba(94,231,255,0)']]);
+      ctx.beginPath(); ctx.arc(lx, ly, 9, 0, TAU); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      break;
+    }
     case 'boss': {
       ctx.lineCap = 'round';
       for (let i = 0; i < 8; i++) {
@@ -720,6 +893,19 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, zone: 
   if (e.stun > 0) {
     ctx.fillStyle = '#fff3b0';
     for (let i = 0; i < 3; i++) { const aa = t * 5 + (i * TAU) / 3; ctx.beginPath(); ctx.arc(e.x + Math.cos(aa) * (e.r + 4), e.y - e.r - 5 + Math.sin(aa) * 3, 1.8, 0, TAU); ctx.fill(); }
+  }
+  if (e.type === 'narwhal' && e.mode === 1) {
+    // Apunta: línea roja hacia el faro que se llena mientras carga
+    const k = 1 - e.chargeT, d = Math.hypot(e.x, e.y) || 1;
+    ctx.strokeStyle = `rgba(255,80,80,${0.35 + 0.45 * k})`; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); ctx.lineDashOffset = -t * 30;
+    ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo((e.x / d) * 30, (e.y / d) * 30 - 6); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = `rgba(255,120,120,${0.6 + 0.4 * Math.sin(t * 20)})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 5, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke();
+  }
+  if (e.shell > 0) {
+    const w = Math.max(14, e.r * 2);
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(e.x - w / 2 - 1, e.y - e.r - 14, w + 2, 4);
+    ctx.fillStyle = '#ffb08a'; ctx.fillRect(e.x - w / 2, e.y - e.r - 13, w * (e.shell / e.shellMax), 2);
   }
   if (e.hp < e.max && e.type !== 'boss') {
     const w = Math.max(14, e.r * 2);
@@ -912,6 +1098,12 @@ function lighting(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, vw:
   if (g) {
     for (const b of g.bolts) if (b.kind === 'light') light(b.x, b.y, b.crit ? 46 : 30, b.crit ? '255,210,90' : '255,240,200', 0.55);
     for (const s of g.eshots) light(s.x, s.y, 32, '90,240,150', 0.55);
+    for (const f of g.fireballs) { const p = g.fireballPos(f); light(p.x, p.y - p.h, 40, '255,140,50', 0.6); }
+    for (const e of g.enemies) {
+      if (e.type === 'angler') { const aa = Math.atan2(-e.y, -e.x); light(e.x + Math.cos(aa) * 16, e.y + Math.sin(aa) * 16 - 8, 34, '94,231,255', 0.55); }
+      else if (e.type === 'firefish' || e.type === 'lavacrab' || e.type === 'volturtle') light(e.x, e.y, e.type === 'volturtle' ? 34 : 26, '255,120,40', 0.4);
+      else if (e.type === 'seahorse') light(e.x, e.y, 22, '126,240,192', 0.3);
+    }
     for (const h of g.hazards) light(h.x, h.y, h.r * 2.2, '255,110,40', 0.35 + 0.35 * (1 - h.t / 1.3));
     for (const f of g.fx) {
       const k = f.t / f.max;
@@ -991,7 +1183,7 @@ function drawGulls(ctx: CanvasRenderingContext2D, now: number) {
 }
 
 /** Dibuja una criatura desde su hoja de sprites: fila = dirección (16), columna = cuadro de animación. */
-function drawFromSheet(ctx: CanvasRenderingContext2D, e: Enemy, sh: Sheet, t: number, dist: number, heading: number, zone: Zone) {
+function drawFromSheet(ctx: CanvasRenderingContext2D, e: Enemy, sh: Sheet, t: number, dist: number, heading: number, zone: Zone, borrow?: [string, string, number, number]) {
   const dir = Math.round((((heading % TAU) + TAU) % TAU) / (TAU / sh.dirs)) % sh.dirs;
   const moving = e.stun <= 0;
   const frame = moving ? Math.floor(t * sh.fps * (e.slowT > 0 ? 0.5 : 1)) % sh.frames : 0;
@@ -999,10 +1191,11 @@ function drawFromSheet(ctx: CanvasRenderingContext2D, e: Enemy, sh: Sheet, t: nu
   if (e.type === 'puffer' && dist < 95) k *= 1 + ((95 - dist) / 95) * 0.45 + 0.04 * Math.sin(t * 20);
   // Al aparecer: crece y se vuelve opaca en 0.35 s
   const born = Math.min(1, e.age / 0.35);
-  if (born < 1) { k *= 0.5 + 0.5 * born; ctx.globalAlpha = born; }
+  const a0 = ctx.globalAlpha;
+  if (born < 1) { k *= 0.5 + 0.5 * born; ctx.globalAlpha = born * a0; }
   const sx = frame * sh.px, sy = dir * sh.px, w = sh.px * k;
-  ctx.drawImage(e.type === 'boss' ? sh.img : tinted(sh, zone), sx, sy, sh.px, sh.px, -sh.ox * k, -sh.oy * k, w, w);
-  ctx.globalAlpha = 1;
+  ctx.drawImage(e.type === 'boss' ? sh.img : borrow ? tintedWith(sh, borrow[1], borrow[2]) : tinted(sh, zone), sx, sy, sh.px, sh.px, -sh.ox * k, -sh.oy * k, w, w);
+  ctx.globalAlpha = a0;
   if (e.hitT > 0) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = Math.min(1, e.hitT * 6);
@@ -1020,8 +1213,11 @@ const TINT: Record<string, [string, number] | undefined> = {
 const tintCache = new Map<string, HTMLCanvasElement>();
 function tinted(sh: Sheet, zone: Zone): CanvasImageSource {
   const t = TINT[zone.mech];
-  if (!t) return sh.img;
-  const key = sh.img.src.length + ':' + sh.img.src.slice(-40) + zone.mech;
+  return t ? tintedWith(sh, t[0], t[1]) : sh.img;
+}
+function tintedWith(sh: Sheet, rgb: string, alpha: number): CanvasImageSource {
+  const t = [rgb, alpha] as const;
+  const key = sh.img.src.length + ':' + sh.img.src.slice(-40) + rgb + alpha;
   let c = tintCache.get(key);
   if (!c) {
     c = document.createElement('canvas');
