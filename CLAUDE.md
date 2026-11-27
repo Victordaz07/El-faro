@@ -39,5 +39,5 @@ Idiomas del juego: **español e inglés** (`src/i18n.ts`). Comentarios del códi
 - La lógica de juego no toca el DOM (para que `npm run sim` siga funcionando).
 - El azar de oleadas y cartas usa la semilla (`mulberry`) para que el desafío diario sea igual para todos.
 - Arte, nombres y mecánicas son propios: no copiar recursos de otros juegos. El arte con IA (ChatGPT) es original y se guarda en `assets/art/`.
-- Retratos de Mar Helado, Volcán y Abismo: son renders provisionales del modelo 3D (`bake-fase2.py`). Si llegan versiones pintadas como las del Kraken y el Rey Cangrejo, reemplaza `assets/art/jefe-*.webp`.
+- Retratos de jefes: los 5 son ilustraciones pintadas con ChatGPT (originales de 1024 px en `assets/art/originales/`, WebP de 512 px en `assets/art/`). Un retrato nuevo sigue el estilo del Kraken, con la cabeza al centro porque se recorta en círculo. `bake-fase2.py` no los toca si existe el original.
 - Objetivo de dificultad: comprando al azar se muere ~oleada 6; un bot perfecto sin investigación llega a ~26-31.

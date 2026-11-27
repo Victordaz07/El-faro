@@ -83,10 +83,12 @@ async def main():
             sh = decode(s['png']); print(name, sh.size, save(sh, f'{name}.webp', 82))
             meta['jefes'][zone] = {**s['meta'], 'file': name}
 
-        # Retratos de los jefes que no tienen ilustración: modelo de frente, luz dramática
+        # Retratos provisionales solo para jefes sin ilustración pintada en assets/art/originales/
         LOOK = {'helado': ((150, 215, 255), (8, 22, 44)), 'volcan': ((255, 120, 50), (30, 8, 6)), 'abismo': ((150, 110, 255), (6, 6, 22))}
         for zone, (glow, dark) in LOOK.items():
             name = BOSSES[zone]
+            if os.path.exists(os.path.join(ROOT, 'assets', 'art', 'originales', f'{name}.png')):
+                continue  # ya hay retrato pintado: no se reemplaza
             r = await ev('bakeStatic', {'parts': [{'url': f'tmp/{name}.glb', 'rot': [0, -0.35, 0]}], 'ppu': 1100, 'w': 0.93, 'h': 0.93,
                 'elev': 14, 'lookY': 0.36, 'light': {'hemi': 0.9, 'key': 2.4, 'rim': 2.2}})
             fig = decode(r['png'])
