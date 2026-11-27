@@ -1,5 +1,5 @@
 // Lógica pura de una partida (sin DOM): se puede simular en Node.
-import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing, ZONES, CREATURES, LEVEL_WAVES, LEVEL_START, levelPearls, levelOf, MODE_RULES, COSTA, WEAPONS, WeaponId } from './data';
+import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing, ZONES, CREATURES, LEVEL_WAVES, LEVEL_START, levelPearls, levelOf, MODE_RULES, COSTA, WEAPONS, WeaponId, costaKind, WEAK, KIND_POOL, CostaKind } from './data';
 import { localize, t, L } from './i18n';
 import type { Save } from './save';
 
@@ -51,15 +51,17 @@ export interface Pickup { x: number; y: number; kind: 'barril' | 'restos' | 'cof
 export interface Bolt {
   x: number; y: number; px: number; py: number; t: Enemy | null; d: number; crit: boolean; bounce: boolean;
   kind: 'light' | 'harpoon' | 'cball' | 'quarrel'; speed: number; gone?: boolean;
+  /** Modo Costa: arma y rama que lo disparó (debilidades y especializaciones). */
+  w?: WeaponId; br?: number;
 }
 /** Hueco de la muralla (Modo Costa): arma, nivel y estado para dibujarla. */
-export interface Slot { x: number; open: boolean; w: WeaponId | null; lv: number; cd: number; aim: number; fire: number; on: boolean; tx: number; ty: number; }
+export interface Slot { x: number; open: boolean; w: WeaponId | null; lv: number; cd: number; aim: number; fire: number; on: boolean; tx: number; ty: number; /** Rama elegida en el nivel 4 (0 = ninguna). */ br: number; pulse: number; /** Para no llenar de textos: último aviso de eficaz/resiste. */ say: number; }
 /** Bomba de mortero en el aire: cae en (tx, ty) y explota en área. */
-export interface Shell { sx: number; sy: number; tx: number; ty: number; t: number; max: number; R: number; d: number; gone?: boolean; }
+export interface Shell { sx: number; sy: number; tx: number; ty: number; t: number; max: number; R: number; d: number; gone?: boolean; /** mortar = mortero, volley = Andanada, bomblet = racimo. */ kind?: 'mortar' | 'volley' | 'bomblet'; burn?: boolean; cluster?: boolean; }
 export interface EShot { x: number; y: number; d: number; c: string; gone?: boolean; }
 export interface Fx {
   kind: 'p' | 'ring' | 'nova' | 'wake' | 'splash' | 'boom' | 'net' | 'slam' | 'warn' | 'strike' | 'sink'
-    | 'zap' | 'bite' | 'sting' | 'bash' | 'netfly' | 'spray' | 'tap' | 'heal' | 'crack' | 'cannon';
+    | 'zap' | 'bite' | 'sting' | 'bash' | 'netfly' | 'spray' | 'tap' | 'heal' | 'crack' | 'cannon' | 'smoke' | 'chip';
   /** Para 'zap' y 'netfly': punto de destino. */
   tx?: number; ty?: number;
   x: number; y: number; vx: number; vy: number; t: number; max: number; c: string; r?: number;
@@ -70,7 +72,7 @@ export interface Txt { x: number; y: number; s: string; c: string; t: number; ma
 export interface Hazard { x: number; y: number; t: number; r: number; }
 export type GEvent = 'shot' | 'crit' | 'kill' | 'hurt' | 'wave' | 'boss' | 'bossdown' | 'over' | 'flash' | 'buy'
   | 'thunder' | 'boom' | 'enrage' | 'elite' | 'cards' | 'revive' | 'frostwarn' | 'frost' | 'erupt' | 'harpoon' | 'net' | 'slam'
-  | 'zap' | 'charge' | 'bite' | 'combo' | 'reveal' | 'win' | 'delivery' | 'sunk' | 'pickup' | 'cannon' | 'tap' | 'tapmiss' | 'heal' | 'crack' | 'fire' | 'poison' | 'newtype';
+  | 'zap' | 'charge' | 'bite' | 'combo' | 'reveal' | 'win' | 'delivery' | 'sunk' | 'pickup' | 'cannon' | 'tap' | 'tapmiss' | 'heal' | 'crack' | 'fire' | 'poison' | 'newtype' | 'early' | 'volley' | 'blind';
 
 interface Proto { hp: number; spd: number; r: number; dmg: number; rew: number; stop: number; atk: number; armor: number; }
 const P: Record<EType, Proto> = {
@@ -213,7 +215,12 @@ export class Game {
   voyage = 0;
   pickups: Pickup[] = [];
   /** Modo Costa: huecos de la muralla y bombas de mortero en el aire. */
-  slots: Slot[] = COSTA.slotX.map(x => ({ x, open: false, w: null, lv: 0, cd: 0.4, aim: -Math.PI / 2, fire: 0, on: false, tx: 0, ty: 0 }));
+  slots: Slot[] = COSTA.slotX.map(x => ({ x, open: false, w: null, lv: 0, cd: 0.4, aim: -Math.PI / 2, fire: 0, on: false, tx: 0, ty: 0, br: 0, pulse: 2, say: 0 }));
+  /** Modo Costa: la próxima oleada ya planeada (para el aviso) y por dónde entra cada criatura de la actual. */
+  plan: { w: number; q: EType[]; xs: number[]; rng: () => number; theme: CostaKind | null } | null = null;
+  costaXs: number[] = [];
+  /** Andanada: recarga en segundos. */
+  volleyCd = 6;
   shells: Shell[] = [];
   pickT = 3;
   /** Mejoras conseguidas en la Travesía (para la pantalla final). */
@@ -250,7 +257,7 @@ export class Game {
       this.st = this.stats(); this.hp = this.st.hp;
     }
     if (this.mode === 'travesia') { this.lv.dmg = this.lv.spd = this.lv.hp = 2; this.st = this.stats(); this.hp = this.st.hp; }
-    if (this.mode === 'costa') { const s0 = this.slots[0]; s0.open = true; s0.w = 'canon'; s0.lv = 1; this.pearls += 15; }
+    if (this.mode === 'costa') { const s0 = this.slots[0]; s0.open = true; s0.w = 'canon'; s0.lv = 1; this.pearls += 15; this.pauseT = 5; this.plan = this.costaPlan(1); }
     if (this.mode === 'escolta') this.ship = { x: 0, y: 0, hp: 0, max: 0, phase: 'gap', t: 4, ang: 0, n: 0, hitT: 0 };
     void R0;
     if (opts.level) {
@@ -369,9 +376,14 @@ export class Game {
     this.emit('buy');
     return true;
   }
-  upSlot(i: number) {
+  /** El siguiente nivel pide elegir rama (del 3 al 4). */
+  needsBranch(i: number) { const s = this.slots[i]; return s.open && s.lv === 3 && !s.br; }
+  upSlot(i: number, br?: 1 | 2) {
     const s = this.slots[i];
-    if (this.over || !s.open || s.lv >= COSTA.maxLv || !this.pay(this.upCost(i))) return false;
+    if (this.over || !s.open || s.lv >= COSTA.maxLv) return false;
+    if (this.needsBranch(i) && !br) return false;
+    if (!this.pay(this.upCost(i))) return false;
+    if (this.needsBranch(i)) s.br = br!;
     s.lv++;
     this.buys++;
     this.fx.push({ kind: 'ring', x: s.x, y: COSTA.gunY, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#ffe9a8' });
@@ -379,14 +391,107 @@ export class Game {
     return true;
   }
   /** Números de un arma según su nivel y las mejoras globales (Daño, Cadencia y Alcance). */
-  weaponStat(w: WeaponId, lv: number) {
+  weaponStat(w: WeaponId, lv: number, br = 0) {
     const st = this.st, L1 = lv - 1, sm = st.spd / 1.2, rm = st.rng / 200;
+    let o: { dmg: number; rate: number; range: number; R: number; n: number };
     switch (w) {
-      case 'canon': return { dmg: st.dmg * 2.4 * (1 + 0.5 * L1), rate: 0.5 * sm * (1 + 0.04 * L1), range: 270 * rm, R: 0, n: 1 };
-      case 'ballesta': return { dmg: st.dmg * 0.8 * (1 + 0.4 * L1), rate: 1.6 * sm * (1 + 0.04 * L1), range: 300 * rm, R: 0, n: lv >= 3 ? 2 : 1 };
-      case 'mortero': return { dmg: st.dmg * 2.0 * (1 + 0.5 * L1), rate: 0.28 * sm * (1 + 0.04 * L1), range: 290 * rm, R: 40 + 4 * lv, n: 1 };
-      default: return { dmg: st.dmg * 1.0 * (1 + 0.4 * L1), rate: 1, range: 230 * rm, R: 30 + 3 * lv, n: 1 + Math.floor(lv / 2) };
+      case 'canon': o = { dmg: st.dmg * 2.1 * (1 + 0.5 * L1), rate: 0.5 * sm * (1 + 0.04 * L1), range: 270 * rm, R: 0, n: 1 }; break;
+      case 'ballesta': o = { dmg: st.dmg * 0.55 * (1 + 0.4 * L1), rate: 1.6 * sm * (1 + 0.04 * L1), range: 300 * rm, R: 0, n: lv >= 3 ? 2 : 1 }; break;
+      case 'mortero': o = { dmg: st.dmg * 2.6 * (1 + 0.5 * L1), rate: 0.28 * sm * (1 + 0.04 * L1), range: 290 * rm, R: 40 + 4 * lv, n: 1 }; break;
+      default: o = { dmg: st.dmg * 1.3 * (1 + 0.4 * L1), rate: 1, range: 230 * rm, R: 30 + 3 * lv, n: 1 + Math.floor(lv / 2) };
     }
+    // Especializaciones del nivel 4
+    if (w === 'canon' && br === 1) { o.dmg *= 1.9; o.rate *= 0.7; o.R = 26; }
+    if (w === 'canon' && br === 2) { o.dmg *= 0.55; o.n = 3; }
+    if (w === 'ballesta' && br === 1) { o.dmg *= 2.3; o.rate *= 0.55; }
+    if (w === 'ballesta' && br === 2) { o.dmg *= 0.7; o.rate *= 1.6; o.n += 1; }
+    if (w === 'luz' && br === 2) { o.dmg *= 2; o.R *= 0.8; }
+    return o;
+  }
+  /** Multiplicador de un arma contra una criatura (la Escorpión no sufre contra blindados). */
+  weakMul(w: WeaponId, br: number, e: Enemy) {
+    const k = costaKind(e.type);
+    if (w === 'ballesta' && br === 1 && k === 'armor') return 1.1;
+    return WEAK[w][k];
+  }
+  /** Daño de un arma de la Costa, con aviso de "eficaz" o "resiste" y números de daño. */
+  private hitW(e: Enemy, d: number, w: WeaponId, br: number, crit: boolean, show = true) {
+    const m = this.weakMul(w, br, e), dealt = this.damage(e, d * m, w === 'ballesta' && br === 1, w === 'luz' ? 'area' : 'turret');
+    if (show && dealt > 0.5) {
+      const big = crit || m > 1.2;
+      this.text(e.x + (Math.random() - 0.5) * 10, e.y - 12, Math.round(dealt) + (crit ? '!' : ''), m > 1.2 ? '#ffe27a' : m < 0.8 ? '#9aa3b2' : '#e6fbff', big, big ? 0.7 : 0.45);
+    }
+    const sl = this.slots.find(s => s.w === w);
+    if (sl && this.t - sl.say > 3 && (m > 1.2 || m < 0.6) && !e.dead) {
+      sl.say = this.t;
+      this.text(e.x, e.y - 26, m > 1.2 ? t('¡EFICAZ!') : t('RESISTE'), m > 1.2 ? '#ffe27a' : '#9aa3b2', true, 0.9);
+    }
+    return dealt;
+  }
+
+  /* ---------- Modo Costa: oleadas planeadas, adelantar y Andanada ---------- */
+  /** Planea la oleada w de la Costa (lo que viene y por dónde entra) con su propia semilla. */
+  private costaPlan(w: number) {
+    const kw = this.wave, kr = this.wr;
+    this.wave = w; this.wr = mulberry(this.seed + w * 7919 + 13);
+    const n = Math.floor(5 + w * 1.5), q: EType[] = [];
+    // Desde la oleada 3, cada oleada trae mayoría de una clase: obliga a tener armas variadas
+    const kinds: CostaKind[] = ['armor', 'fast', 'swarm'];
+    const theme: CostaKind | null = w >= 3 && w !== this.lastWave ? kinds[(w + Math.floor(this.wr() * 3)) % 3] : null;
+    const one = (): EType => {
+      if (theme && this.wr() < 0.7) { const pool = KIND_POOL[theme].filter(ty => ty !== 'pirate' || w >= 2); return pool[Math.floor(this.wr() * pool.length)] as EType; }
+      return this.pick();
+    };
+    if (w === this.lastWave) { q.push('boss'); for (let i = 0; i < Math.floor(n / 3); i++) q.push(one()); }
+    else for (let i = 0; i < n; i++) q.push(one());
+    if (w === 8) q.push('captain');
+    const xs = q.map(() => (this.wr() * 2 - 1) * (COSTA.half + 25));
+    const rng = this.wr;
+    this.wave = kw; this.wr = kr;
+    return { w, q, xs, rng, theme };
+  }
+  /** Lo que trae la próxima oleada, por clase (para el aviso entre oleadas). */
+  get costaPreview() {
+    if (this.mode !== 'costa' || !this.plan || this.state !== 'pause') return null;
+    const c = { armor: 0, fast: 0, swarm: 0 } as Record<'armor' | 'fast' | 'swarm', number>;
+    for (const ty of this.plan.q) c[costaKind(ty)] += ty === 'sardine' ? 4 : 1;
+    return { w: this.plan.w, c, theme: this.plan.theme, boss: this.plan.q.includes('boss') || this.plan.q.includes('captain') };
+  }
+  /** Por dónde van a salir las próximas criaturas (flechas arriba de la pantalla). */
+  get costaArrows(): { x: number; k: 'armor' | 'fast' | 'swarm' }[] {
+    if (this.mode !== 'costa') return [];
+    if (this.state === 'pause' && this.plan) return this.plan.xs.slice(0, 4).map((x, i) => ({ x, k: costaKind(this.plan!.q[i]) }));
+    if (this.state === 'spawn') return this.costaXs.slice(0, 3).map((x, i) => ({ x, k: costaKind(this.queue[i]) }));
+    return [];
+  }
+  /** Perlas que da adelantar la oleada ahora. */
+  get earlyBonus() { return this.mode === 'costa' && this.state === 'pause' && this.wave >= 1 ? Math.ceil(Math.max(0, this.pauseT - 0.3) * COSTA.early * (1 + this.wave * 0.15)) : 0; }
+  /** ¡Que vengan!: empieza la oleada ya y paga por el tiempo que no se usó. */
+  callEarly() {
+    if (this.mode !== 'costa' || this.state !== 'pause' || this.over || this.pauseT <= 0.3) return 0;
+    const b = this.earlyBonus;
+    if (b > 0) { this.gain(b); this.text(0, -95, '+' + b + L(' perlas por valentía', ' pearls for bravery'), '#ffe27a', true, 1.2); }
+    this.pauseT = 0;
+    this.emit('early');
+    return b;
+  }
+  /** Andanada: todas las armas (menos las luces) disparan a la vez al punto tocado. */
+  volley(x: number, y: number) {
+    if (this.mode !== 'costa' || this.over || this.volleyCd > 0) return false;
+    const guns = this.slots.filter(s => s.open && s.w && s.w !== 'luz');
+    if (!guns.length) return false;
+    guns.forEach((s, i) => {
+      const W = this.weaponStat(s.w!, s.lv, s.br), d = W.dmg * W.n * COSTA.volleyDmg * (s.w === 'ballesta' ? 1.3 : 1);
+      const jx = (Math.random() - 0.5) * 36, jy = (Math.random() - 0.5) * 22;
+      const fly = 0.55 + Math.hypot(x - s.x, y) / 900;
+      this.shells.push({ sx: s.x, sy: COSTA.gunY, tx: x + jx, ty: y + jy, t: -i * 0.09, max: fly, R: 34, d, kind: 'volley' });
+      s.fire = 0.22; s.aim = Math.atan2(y - COSTA.gunY, x - s.x);
+      this.fx.push({ kind: 'cannon', x: s.x, y: COSTA.gunY, vx: 0, vy: 0, t: 0.35, max: 0.35, c: '', r: 14, h: s.aim });
+    });
+    this.volleyCd = COSTA.volleyCd;
+    this.shake = Math.max(this.shake, 0.12);
+    this.emit('volley');
+    return true;
   }
 
   get allTurrets() { return this.lv.tA > 0 && this.lv.tR > 0 && this.lv.tN > 0; }
@@ -533,6 +638,14 @@ export class Game {
     else for (let i = 0; i < n; i++) q.push(this.pick());
     if (this.mode === 'costa' && w === 8) q.push('captain');
     this.current = R() * Math.PI * 2;
+    if (this.mode === 'costa') {
+      // La Costa usa la oleada ya planeada (la misma que mostró el aviso)
+      const p = this.plan && this.plan.w === w ? this.plan : this.costaPlan(w);
+      q.length = 0; q.push(...p.q);
+      this.costaXs = [...p.xs];
+      this.plan = w < this.lastWave ? this.costaPlan(w + 1) : null;
+      this.wr = p.rng;
+    }
     this.queue = q;
     this.waveTotal = q.reduce((s, t) => s + (t === 'sardine' ? 4 : 1), 0);
     this.waveDone = 0;
@@ -603,7 +716,7 @@ export class Game {
     const a = this.mode === 'travesia' ? -Math.PI / 2 + (this.wr() - 0.5) * 2.4
       : this.mod?.id === 'corriente' ? this.current + (this.wr() - 0.5) * 1.4 : this.wr() * Math.PI * 2;
     let x = Math.cos(a) * R, y = Math.sin(a) * R;
-    if (this.mode === 'costa') { x = (this.wr() * 2 - 1) * (COSTA.half + 25); y = -R * 1.1; }
+    if (this.mode === 'costa') { x = this.costaXs.length ? this.costaXs.shift()! : (this.wr() * 2 - 1) * (COSTA.half + 25); y = -R * 1.1; }
     if (type === 'sardine') {
       for (let i = 0; i < 4; i++) this.make('sardine', x + (Math.random() - 0.5) * 30, y + (Math.random() - 0.5) * 30);
       return;
@@ -727,6 +840,11 @@ export class Game {
 
   private hurt(d: number, attacker?: Enemy, quiet = false) {
     d *= 1 - this.st.arm;
+    if (this.mode === 'costa' && attacker && !quiet) {
+      // Golpe a la muralla: saltan pedacitos de piedra
+      const x = Math.max(-COSTA.half, Math.min(COSTA.half, attacker.x));
+      for (let i = 0; i < 5; i++) this.fx.push({ kind: 'chip', x: x + (Math.random() - 0.5) * 14, y: -18, vx: (Math.random() - 0.5) * 90, vy: -60 - Math.random() * 70, t: 0.7, max: 0.7, c: Math.random() < 0.5 ? '#8a909c' : '#5d6370' });
+    }
     if (!quiet && this.shield > 0) { const a = Math.min(this.shield, d); this.shield -= a; d -= a; }
     if (quiet) { this.hp -= d; if (this.wave <= 10) this.hpLost10 += d; }
     else if (d > 0) {
@@ -899,10 +1017,10 @@ export class Game {
     return best;
   }
 
-  private nearestTo(x: number, y: number, maxD: number, not?: Enemy) {
+  private nearestTo(x: number, y: number, maxD: number, ...not: (Enemy | undefined)[]) {
     let b: Enemy | null = null, bd = maxD * maxD;
     for (const e of this.enemies) {
-      if (e.dead || e === not || this.hidden(e)) continue;
+      if (e.dead || not.includes(e) || this.hidden(e)) continue;
       const d = (e.x - x) ** 2 + (e.y - y) ** 2;
       if (d < bd) { bd = d; b = e; }
     }
@@ -1003,12 +1121,13 @@ export class Game {
   private costaUpdate(dt: number) {
     const st = this.st, gy = COSTA.gunY;
     this.lamp = 0;
+    this.volleyCd = Math.max(0, this.volleyCd - dt);
     for (const s of this.slots) {
       if (!s.open || !s.w) continue;
       s.fire = Math.max(0, s.fire - dt);
       s.cd -= dt;
       s.on = false;
-      const W = this.weaponStat(s.w, s.lv);
+      const W = this.weaponStat(s.w, s.lv, s.br);
       const tg = this.pickFor(s.x, gy, W.range, s.w === 'mortero' ? 60 : 0, s.w === 'mortero' ? W.R : 0);
       if (!tg) continue;
       const want = Math.atan2(tg.y - gy, tg.x - s.x);
@@ -1016,12 +1135,16 @@ export class Game {
       if (s.w === 'luz') {
         // Haz continuo sobre el objetivo y los que están pegados a él
         s.on = true; s.tx = tg.x; s.ty = tg.y;
+        s.pulse -= dt;
+        const flash = s.br === 1 && s.pulse <= 0;
+        if (flash) { s.pulse = 2.2; this.fx.push({ kind: 'ring', x: tg.x, y: tg.y, vx: 0, vy: 0, t: 0.35, max: 0.35, c: '#fff6c8' }); this.emit('blind'); }
         let n = 0;
         for (const e of this.enemies) {
           if (e.dead || n >= W.n || (e.x - tg.x) ** 2 + (e.y - tg.y) ** 2 > (W.R + e.r) ** 2) continue;
           n++;
-          this.damage(e, W.dmg * dt, true, 'area');
-          e.slowT = Math.max(e.slowT, 0.3);
+          this.hitW(e, W.dmg * dt, 'luz', s.br, false, false);
+          e.slowT = Math.max(e.slowT, s.br === 1 ? 0.6 : 0.3);
+          if (flash && e.type !== 'boss') e.stun = Math.max(e.stun, 0.6);
         }
         continue;
       }
@@ -1030,27 +1153,34 @@ export class Game {
       s.fire = 0.22;
       const crit = Math.random() < st.cc;
       const fcrit = crit ? st.cf : 1;
+      const mx = s.x + Math.cos(s.aim) * 14, my = gy + Math.sin(s.aim) * 14;
       if (s.w === 'canon') {
-        this.bolts.push({ x: s.x, y: gy, px: s.x, py: gy, t: tg, d: W.dmg * fcrit, crit, bounce: true, kind: 'cball', speed: 340 });
+        const tgs = [tg];
+        for (let i = 1; i < W.n; i++) { const o = this.nearestTo(tg.x, tg.y, 140, ...tgs); if (o) tgs.push(o); }
+        for (const t2 of tgs) this.bolts.push({ x: s.x, y: gy, px: s.x, py: gy, t: t2, d: W.dmg * fcrit, crit, bounce: true, kind: 'cball', speed: s.br === 1 ? 300 : 340, w: 'canon', br: s.br });
+        this.fx.push({ kind: 'cannon', x: s.x, y: gy, vx: 0, vy: 0, t: 0.35, max: 0.35, c: '', r: 14, h: s.aim });
+        this.fx.push({ kind: 'smoke', x: mx, y: my, vx: Math.cos(s.aim) * 14, vy: Math.sin(s.aim) * 14 - 6, t: 0.9, max: 0.9, c: '', r: s.br === 1 ? 9 : 6 });
+        this.shake = Math.max(this.shake, s.br === 1 ? 0.06 : 0.03);
         this.emit('cannon');
       } else if (s.w === 'ballesta') {
         for (let i = 0; i < W.n; i++) {
           const t2 = i === 0 ? tg : this.nearestTo(tg.x, tg.y, 120, tg) || tg;
-          this.bolts.push({ x: s.x + (i ? 5 : -(W.n - 1) * 2.5), y: gy, px: s.x, py: gy, t: t2, d: W.dmg * fcrit, crit, bounce: true, kind: 'quarrel', speed: 560 });
+          this.bolts.push({ x: s.x + (i ? 5 * i : -(W.n - 1) * 2.5), y: gy, px: s.x, py: gy, t: t2, d: W.dmg * fcrit, crit, bounce: true, kind: 'quarrel', speed: s.br === 1 ? 640 : 560, w: 'ballesta', br: s.br });
         }
         this.emit('harpoon');
       } else {
         const fly = Math.max(0.6, Math.min(1.2, Math.hypot(tg.x - s.x, tg.y - gy) / 260));
-        this.shells.push({ sx: s.x, sy: gy, tx: tg.x, ty: tg.y, t: 0, max: fly, R: W.R, d: W.dmg * fcrit });
+        this.shells.push({ sx: s.x, sy: gy, tx: tg.x, ty: tg.y, t: 0, max: fly, R: W.R, d: W.dmg * fcrit, kind: 'mortar', burn: s.br === 1, cluster: s.br === 2 });
+        this.fx.push({ kind: 'smoke', x: s.x, y: gy - 10, vx: 0, vy: -18, t: 1.0, max: 1.0, c: '', r: 7 });
         this.emit('slam');
       }
-      this.burst(s.x + Math.cos(s.aim) * 14, gy + Math.sin(s.aim) * 14, '#ffd9a0', 3, 50);
+      this.burst(mx, my, '#ffd9a0', 3, 50);
     }
   }
 
   /** Posición de una bomba de mortero (en el aire describe un arco). */
   shellPos(sh: Shell) {
-    const k = Math.min(1, sh.t / sh.max);
+    const k = Math.max(0, Math.min(1, sh.t / sh.max));
     return { x: sh.sx + (sh.tx - sh.sx) * k, y: sh.sy + (sh.ty - sh.sy) * k, h: Math.sin(k * Math.PI) * 70 };
   }
 
@@ -1153,6 +1283,7 @@ export class Game {
         if (this.bl.marea) this.hp = Math.min(st.hp, this.hp + st.hp * 0.2 * this.bl.marea);
         if ((this.level || this.mode === 'asedio' || this.mode === 'costa') && this.wave >= this.lastWave) { this.winLevel(); return; }
         if (this.mode === 'aguante' || this.mode === 'travesia') this.pauseT = 0.5;
+        if (this.mode === 'costa') this.pauseT = COSTA.pause;
         if ((this.level ? this.shownWave : this.wave) % 5 === 0) {
           this.dealCards();
           if (this.cardOpts.length) { this.state = 'cards'; this.emit('cards'); return; }
@@ -1194,14 +1325,21 @@ export class Game {
       b.px = b.x; b.py = b.y;
       if (d <= s + e.r * 0.6) {
         b.gone = true;
-        const dealt = this.damage(e, b.d, false, b.kind === 'light' ? 'beam' : 'turret');
-        if (b.kind === 'harpoon') { this.burst(e.x, e.y, '#c9a46a', 5, 70); continue; }
-        if (b.kind === 'cball' || b.kind === 'quarrel') {
-          this.burst(e.x, e.y, b.kind === 'cball' ? '#9aa3b2' : '#e6c58f', b.kind === 'cball' ? 7 : 3, b.kind === 'cball' ? 90 : 60);
-          if (b.kind === 'cball') this.fx.push({ kind: 'boom', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.3, max: 0.3, c: '#ffcf8a', r: 14 });
-          if (b.crit) { this.crits++; this.text(e.x, e.y - 10, Math.round(dealt) + '!', '#ffe27a', true, 0.7); this.emit('crit'); }
+        if (b.w) {
+          // Modo Costa: bala o virote, con debilidades y especialización
+          const br = b.br || 0;
+          this.hitW(e, b.d, b.w, br, b.crit, b.w === 'canon' || b.crit || Math.random() < 0.35);
+          if (b.crit) { this.crits++; this.emit('crit'); }
+          if (b.kind === 'cball') {
+            this.burst(e.x, e.y, '#9aa3b2', 7, 90);
+            this.fx.push({ kind: 'boom', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.3, max: 0.3, c: '#ffcf8a', r: br === 1 ? 26 : 14 });
+            this.fx.push({ kind: 'splash', x: e.x, y: e.y + 4, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '#bfe8ff', r: 10 });
+            if (br === 1) for (const o of this.enemies) if (o !== e && !o.dead && (o.x - e.x) ** 2 + (o.y - e.y) ** 2 < (26 + o.r) ** 2) this.hitW(o, b.d * 0.5, 'canon', 1, false, false);
+          } else this.burst(e.x, e.y, '#e6c58f', 3, 60);
           continue;
         }
+        const dealt = this.damage(e, b.d, false, b.kind === 'light' ? 'beam' : 'turret');
+        if (b.kind === 'harpoon') { this.burst(e.x, e.y, '#c9a46a', 5, 70); continue; }
         this.burst(e.x, e.y, b.crit ? '#ffe27a' : '#fff6c8', b.crit ? 6 : 2, 60);
         if (e.armor && dealt < b.d * 0.5) this.text(e.x, e.y - 12, t('coraza'), '#e8c39e', false, 0.5);
         if (this.bl.fuego && !e.dead) { e.burn = Math.max(e.burn, (dealt * 0.4 * this.bl.fuego) / 2); e.burnT = 2; }
@@ -1234,11 +1372,24 @@ export class Game {
     for (const sh of this.shells) {
       sh.t += dt;
       if (sh.t < sh.max) continue;
+      if (sh.gone) continue;
       sh.gone = true;
       this.fx.push({ kind: 'boom', x: sh.tx, y: sh.ty, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#ff8a3d', r: sh.R });
-      this.burst(sh.tx, sh.ty, '#ff9a52', 10, 110);
-      this.shake = Math.max(this.shake, 0.08);
-      for (const e of this.enemies) if (!e.dead && (e.x - sh.tx) ** 2 + (e.y - sh.ty) ** 2 < (sh.R + e.r) ** 2) this.damage(e, sh.d, true, 'turret');
+      this.fx.push({ kind: 'splash', x: sh.tx, y: sh.ty, vx: 0, vy: 0, t: 0.6, max: 0.6, c: '#bfe8ff', r: sh.R * 0.6 });
+      this.burst(sh.tx, sh.ty, sh.kind === 'volley' ? '#ffd27a' : '#ff9a52', sh.kind === 'bomblet' ? 5 : 10, 110);
+      this.shake = Math.max(this.shake, sh.kind === 'bomblet' ? 0.04 : 0.08);
+      for (const e of this.enemies) {
+        if (e.dead || (e.x - sh.tx) ** 2 + (e.y - sh.ty) ** 2 >= (sh.R + e.r) ** 2) continue;
+        if (sh.kind === 'volley') { const d = this.damage(e, sh.d, true, 'area'); if (d > 0.5) this.text(e.x, e.y - 12, String(Math.round(d)), '#ffd27a', true, 0.6); }
+        else {
+          this.hitW(e, sh.d, 'mortero', sh.burn ? 1 : sh.cluster ? 2 : 0, false, sh.kind !== 'bomblet');
+          if (sh.burn && !e.dead) { e.burn = Math.max(e.burn, sh.d * 0.3); e.burnT = 3; }
+        }
+      }
+      if (sh.cluster) for (let i = 0; i < 4; i++) {
+        const a = i * Math.PI / 2 + 0.4, r = sh.R * 0.9;
+        this.shells.push({ sx: sh.tx, sy: sh.ty, tx: sh.tx + Math.cos(a) * r, ty: sh.ty + Math.sin(a) * r * 0.7, t: 0, max: 0.3, R: sh.R * 0.5, d: sh.d * 0.4, kind: 'bomblet' });
+      }
       this.emit('boom');
     }
     this.shells = this.shells.filter(sh => !sh.gone);
@@ -1410,6 +1561,8 @@ export class Game {
       f.t -= dt;
       if (f.kind === 'p') { f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.94; f.vy *= 0.94; }
       else if (f.kind === 'spray') { f.x += f.vx * dt; f.y += f.vy * dt; f.vy += 260 * dt; f.vx *= 0.97; }
+      else if (f.kind === 'chip') { f.x += f.vx * dt; f.y += f.vy * dt; f.vy += 300 * dt; }
+      else if (f.kind === 'smoke') { f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.96; f.vy = f.vy * 0.96 - 8 * dt; }
     }
     this.fx = this.fx.filter(f => f.t > 0);
     for (const t of this.texts) { t.t -= dt; t.y -= 20 * dt; }

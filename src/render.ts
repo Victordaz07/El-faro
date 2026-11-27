@@ -237,7 +237,7 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
   }
   layers.sort((a, b) => a.y - b.y);
   for (const l of layers) l.draw();
-  if (costa) drawCostaFront(ctx, g!, t, now);
+  if (costa) { drawCostaFront(ctx, g!, t, now); drawCostaArrows(ctx, g!, cam, now); }
   if (g && g.frozen > 0) {
     ctx.fillStyle = `rgba(190,235,255,${Math.min(0.32, g.frozen * 0.2)})`;
     ctx.beginPath(); ctx.ellipse(0, -24, 20, 36, 0, 0, TAU); ctx.fill();
@@ -1357,6 +1357,9 @@ function lighting(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, vw:
     // Luz de luna difusa sobre el mar y la muralla
     light(0, -150, 330, '120,150,215', 0.4); light(-170, -70, 220, '110,140,205', 0.3); light(170, -70, 220, '110,140,205', 0.3); light(0, 20, 300, '150,160,190', 0.35);
     // Antorchas entre los huecos y luz en cada arma abierta
+    for (const h of COSTA_HOUSES) for (const wx of [-0.22, 0.22]) light(h.x + wx * h.w, h.y - h.h * 0.45, 26, '255,200,120', 0.55);
+    for (const lx of COSTA_LAMPS) light(lx, 30, 40, '255,210,140', 0.6);
+    for (const sd of [-1, 1]) light(sd * 214, -40, 40, '255,200,130', 0.5);
     for (const x of COSTA.slotX) for (const dx of [26, -26]) if (Math.abs(x + dx) < 190 && (x + dx) % 52 !== 0) light(x + dx, -8, 46, '255,176,96', 0.5 + 0.12 * Math.sin(now * 9 + x + dx));
     for (const s of g!.slots) {
       if (!s.open) continue;
@@ -1521,11 +1524,12 @@ function tintedWith(sh: Sheet, rgb: string, alpha: number): CanvasImageSource {
 
 /* ---------- Modo Costa: muralla abajo, el mar arriba ---------- */
 /** Adornos subtiles de la franja de tierra (modelos deco-*.glb); las rocas con algas quedan fuera. */
-const COSTA_DECO = [{ k: 'red', x: -128, y: 62, d: 3 }, { k: 'nasa', x: -66, y: 70, d: 5 }, { k: 'bote', x: 112, y: 64, d: 6 }, { k: 'boya', x: 168, y: 72, d: 0 }];
+const COSTA_DECO = [{ k: 'red', x: -150, y: 60, d: 3 }, { k: 'nasa', x: -84, y: 58, d: 5 }, { k: 'bote', x: 82, y: 62, d: 6 }, { k: 'boya', x: 168, y: 72, d: 0 }];
 
 /** Tierra, cara de la muralla (hacia nosotros) y espuma en su base. Va antes que las criaturas. */
 function drawCostaBase(ctx: CanvasRenderingContext2D, g: Game, t: number, now: number) {
   const X = 720, wall = costaPiece('muralla');
+  if (wall) { drawCostaScenery(ctx, g, now); return; }
   // Espuma del mar rompiendo contra la base norte de la muralla
   ctx.lineCap = 'round';
   for (let k = 0; k < 2; k++) {
@@ -1591,7 +1595,11 @@ function drawCostaFront(ctx: CanvasRenderingContext2D, g: Game, t: number, now: 
       ctx.fillStyle = radial(ctx, x, ty, 7 * f, [[0, 'rgba(255,240,170,1)'], [0.5, 'rgba(255,150,50,.9)'], [1, 'rgba(255,90,20,0)']]);
       ctx.beginPath(); ctx.arc(x, ty, 7 * f, 0, TAU); ctx.fill();
     }
+    drawBanners(ctx, now);
+    drawWallDamage(ctx, g, now);
+    for (const sd of [-1, 1]) drawCornerTower(ctx, sd * 214, sd, now);
     for (let i = 0; i < g.slots.length; i++) drawSlot(ctx, g, i, t, now);
+    drawCostaFx(ctx, g);
     return;
   }
   // Parapeto (almenas) en el borde del mar
@@ -1726,4 +1734,293 @@ function drawCostaBeams(ctx: CanvasRenderingContext2D, g: Game) {
     ctx.fillStyle = radial(ctx, s.tx, s.ty, 24 + s.lv * 3, [[0, 'rgba(255,246,200,.7)'], [1, 'rgba(255,230,150,0)']]);
     ctx.beginPath(); ctx.arc(s.tx, s.ty, 24 + s.lv * 3, 0, TAU); ctx.fill();
   }
+}
+
+
+/* ---------- Escenario de la Costa: rompeolas, aldea, torres, estandartes, daños ---------- */
+const h01 = (n: number) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+/** Casas de la aldea detrás de la muralla: x, y (frente, en el suelo), ancho, alto y colores. */
+const COSTA_HOUSES = [
+  { x: -176, y: 92, w: 34, h: 22, roof: '#2f7f86', wall: '#d9cdb2' }, { x: -112, y: 80, w: 28, h: 19, roof: '#a8553a', wall: '#cfc3a6' },
+  { x: -38, y: 100, w: 36, h: 24, roof: '#4a5566', wall: '#e2d6bb' }, { x: 48, y: 86, w: 30, h: 20, roof: '#a8553a', wall: '#d4c8ab' },
+  { x: 120, y: 98, w: 34, h: 23, roof: '#2f7f86', wall: '#ddd1b6' }, { x: 186, y: 82, w: 28, h: 19, roof: '#4a5566', wall: '#cfc3a6' },
+  { x: -146, y: 146, w: 32, h: 22, roof: '#4a5566', wall: '#d4c8ab' }, { x: -66, y: 156, w: 30, h: 20, roof: '#2f7f86', wall: '#ddd1b6' },
+  { x: 14, y: 146, w: 34, h: 23, roof: '#a8553a', wall: '#e2d6bb' }, { x: 94, y: 160, w: 30, h: 20, roof: '#4a5566', wall: '#cfc3a6' },
+  { x: 168, y: 146, w: 32, h: 22, roof: '#a8553a', wall: '#d9cdb2' },
+];
+const COSTA_TREES = [[-206, 66], [-80, 118], [-2, 70], [84, 124], [154, 66], [-18, 182], [58, 196], [-188, 130], [204, 124], [-112, 196], [138, 200]];
+const COSTA_LAMPS = [-182, -78, 26, 130];
+
+let sceneryCv: HTMLCanvasElement | null = null, sceneryKey = '';
+const SC_X0 = -270, SC_Y0 = 20, SC_W = 540, SC_H = 230;
+/** Tierra, camino empedrado, aldea y árboles: se dibuja una vez por escala y se reusa. */
+function costaScenery(scale: number): HTMLCanvasElement {
+  const key = scale.toFixed(2);
+  if (sceneryCv && sceneryKey === key) return sceneryCv;
+  const cv = sceneryCv || document.createElement('canvas');
+  cv.width = Math.ceil(SC_W * scale); cv.height = Math.ceil(SC_H * scale);
+  const c = cv.getContext('2d')!;
+  c.setTransform(scale, 0, 0, scale, -SC_X0 * scale, -SC_Y0 * scale);
+  // Pasto con manchas y florecitas
+  const gr = c.createLinearGradient(0, SC_Y0, 0, SC_Y0 + SC_H);
+  gr.addColorStop(0, '#5f7348'); gr.addColorStop(0.5, '#4f6540'); gr.addColorStop(1, '#3e5234');
+  c.fillStyle = gr; c.fillRect(SC_X0, SC_Y0, SC_W, SC_H);
+  for (let i = 0; i < 900; i++) {
+    const x = SC_X0 + h01(i) * SC_W, y = SC_Y0 + h01(i + 999) * SC_H, r = 1 + h01(i + 77) * 2.5;
+    c.fillStyle = h01(i + 3) < 0.5 ? 'rgba(20,40,20,.18)' : 'rgba(160,190,110,.14)';
+    c.beginPath(); c.ellipse(x, y, r * 1.4, r * 0.8, 0, 0, TAU); c.fill();
+  }
+  for (let i = 0; i < 90; i++) {
+    const x = SC_X0 + h01(i + 5000) * SC_W, y = 50 + h01(i + 6000) * 180;
+    c.fillStyle = ['#f2e7c9', '#f0b6c0', '#ffe9a8', '#bfe8ff'][i % 4]; c.globalAlpha = 0.7;
+    c.beginPath(); c.arc(x, y, 0.9, 0, TAU); c.fill();
+  }
+  c.globalAlpha = 1;
+  // Camino empedrado junto a la muralla
+  c.fillStyle = '#7d7768'; c.fillRect(SC_X0, 24, SC_W, 22);
+  for (let row = 0; row < 4; row++) for (let i = 0; i < 70; i++) {
+    const x = SC_X0 + i * 8 + (row % 2) * 4 + h01(i * 7 + row) * 2, y = 26 + row * 5;
+    const v = 120 + Math.floor(h01(i * 13 + row * 5) * 40);
+    c.fillStyle = `rgb(${v},${v - 6},${v - 18})`;
+    c.beginPath(); c.roundRect(x, y, 6.5, 4, 1.6); c.fill();
+  }
+  const edge = c.createLinearGradient(0, 44, 0, 50); edge.addColorStop(0, 'rgba(60,50,35,.45)'); edge.addColorStop(1, 'rgba(60,50,35,0)');
+  c.fillStyle = edge; c.fillRect(SC_X0, 44, SC_W, 6);
+  // Senderos a las casas
+  c.fillStyle = 'rgba(150,135,100,.45)';
+  for (const hx of [-112, 48, 186]) { c.beginPath(); c.moveTo(hx - 4, 46); c.lineTo(hx + 4, 46); c.lineTo(hx + 6, 80); c.lineTo(hx - 6, 80); c.closePath(); c.fill(); }
+  // Árboles y casas ordenados por profundidad
+  type Item = { y: number; d: () => void };
+  const items: Item[] = [];
+  for (const [x, y] of COSTA_TREES) items.push({ y, d: () => tree(c, x, y, 10 + h01(x) * 5) });
+  for (const h of COSTA_HOUSES) items.push({ y: h.y, d: () => house(c, h) });
+  for (const lx of COSTA_LAMPS) items.push({ y: 48, d: () => { c.fillStyle = '#2a2620'; c.fillRect(lx - 1, 32, 2, 16); c.fillStyle = '#3b3328'; c.fillRect(lx - 3, 29, 6, 4); c.fillStyle = '#ffe2a0'; c.fillRect(lx - 2, 30, 4, 2.5); } });
+  items.sort((a, b) => a.y - b.y).forEach(i => i.d());
+  sceneryCv = cv; sceneryKey = key;
+  return cv;
+}
+function tree(c: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  c.fillStyle = 'rgba(0,10,10,.28)'; c.beginPath(); c.ellipse(x + 3, y + 1, r * 1.1, r * 0.45, 0, 0, TAU); c.fill();
+  c.fillStyle = '#4a3524'; c.fillRect(x - 1.6, y - r * 0.9, 3.2, r * 0.9);
+  const blobs = [[0, -r * 1.5, r], [-r * 0.6, -r * 1.05, r * 0.75], [r * 0.6, -r * 1.1, r * 0.75]];
+  for (const [bx, by, br] of blobs) { c.fillStyle = '#2d4a2c'; c.beginPath(); c.arc(x + bx, y + by, br, 0, TAU); c.fill(); }
+  for (const [bx, by, br] of blobs) { c.fillStyle = '#3f6a37'; c.beginPath(); c.arc(x + bx - br * 0.2, y + by - br * 0.25, br * 0.72, 0, TAU); c.fill(); }
+  c.fillStyle = 'rgba(190,230,150,.35)'; c.beginPath(); c.arc(x - r * 0.35, y - r * 1.85, r * 0.35, 0, TAU); c.fill();
+}
+function house(c: CanvasRenderingContext2D, h: { x: number; y: number; w: number; h: number; roof: string; wall: string }) {
+  const { x, y, w } = h, H = h.h, d = w * 0.45, x0 = x - w / 2, x1 = x + w / 2, top = y - H;
+  c.fillStyle = 'rgba(0,10,20,.3)'; c.beginPath(); c.ellipse(x + d * 0.4, y + 1, w * 0.7, 5, 0, 0, TAU); c.fill();
+  // Costado (más oscuro) y frente
+  c.fillStyle = shade(h.wall, -0.28); c.beginPath(); c.moveTo(x1, y); c.lineTo(x1 + d * 0.5, y - d * 0.55); c.lineTo(x1 + d * 0.5, top - d * 0.55); c.lineTo(x1, top); c.closePath(); c.fill();
+  c.fillStyle = h.wall; c.fillRect(x0, top, w, H);
+  c.fillStyle = 'rgba(0,0,0,.08)'; c.fillRect(x0, y - 4, w, 4);
+  // Vigas de madera
+  c.fillStyle = '#5b4026'; c.fillRect(x0, top, w, 1.6); c.fillRect(x0, top, 1.6, H); c.fillRect(x1 - 1.6, top, 1.6, H);
+  // Puerta y ventanas iluminadas
+  c.fillStyle = '#4a3220'; c.beginPath(); c.roundRect(x - 3.5, y - 10, 7, 10, [3.5, 3.5, 0, 0]); c.fill();
+  for (const wx of [-0.3, 0.3]) {
+    const cx = x + wx * w;
+    c.fillStyle = '#ffd68a'; c.fillRect(cx - 3, top + H * 0.3, 6, 5.5);
+    c.strokeStyle = '#5b4026'; c.lineWidth = 1; c.strokeRect(cx - 3, top + H * 0.3, 6, 5.5);
+    c.beginPath(); c.moveTo(cx, top + H * 0.3); c.lineTo(cx, top + H * 0.3 + 5.5); c.stroke();
+  }
+  // Techo a cuatro aguas
+  const rh = H * 0.75;
+  c.fillStyle = shade(h.roof, -0.25);
+  c.beginPath(); c.moveTo(x1 + 3, top + 1); c.lineTo(x1 + d * 0.5 + 2, top - d * 0.55); c.lineTo(x1 + d * 0.25 - 2, top - rh - d * 0.3); c.lineTo(x1 - 5, top - rh); c.closePath(); c.fill();
+  c.fillStyle = h.roof;
+  c.beginPath(); c.moveTo(x0 - 3, top + 1); c.lineTo(x1 + 3, top + 1); c.lineTo(x1 - 5, top - rh); c.lineTo(x0 + 5, top - rh); c.closePath(); c.fill();
+  c.strokeStyle = shade(h.roof, -0.18); c.lineWidth = 0.8;
+  for (let i = 1; i < 4; i++) { const yy = top + 1 - (rh * i) / 4, k = i / 4; c.beginPath(); c.moveTo(x0 - 3 + 8 * k, yy); c.lineTo(x1 + 3 - 8 * k, yy); c.stroke(); }
+  c.fillStyle = 'rgba(255,255,255,.18)'; c.fillRect(x0 + 5, top - rh, w - 10, 1.5);
+  // Chimenea
+  c.fillStyle = '#6b5a4a'; c.fillRect(x1 - 9, top - rh - 4, 5, 9); c.fillStyle = '#3a3028'; c.fillRect(x1 - 9.5, top - rh - 5, 6, 2);
+}
+function shade(hex: string, k: number) {
+  const n = parseInt(hex.slice(1), 16), f = (v: number) => Math.max(0, Math.min(255, Math.round(v + (k < 0 ? v * k : (255 - v) * k))));
+  return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
+}
+
+let rocksCv: HTMLCanvasElement | null = null, rocksKey = '';
+/** Rompeolas: rocas en el agua pegadas a la muralla (se dibuja una vez por escala). */
+function costaRocks(scale: number) {
+  const key = scale.toFixed(2);
+  if (rocksCv && rocksKey === key) return rocksCv;
+  const cv = rocksCv || document.createElement('canvas');
+  cv.width = Math.ceil(SC_W * scale); cv.height = Math.ceil(40 * scale);
+  const c = cv.getContext('2d')!;
+  c.setTransform(scale, 0, 0, scale, -SC_X0 * scale, 40 * scale);
+  for (let i = 0; i < 60; i++) {
+    const x = SC_X0 + i * 9.5 + h01(i + 40) * 5, y = -16 - h01(i + 90) * 12, r = 5 + h01(i + 7) * 6;
+    c.fillStyle = 'rgba(0,15,30,.35)'; c.beginPath(); c.ellipse(x + 1, y + r * 0.35, r * 1.15, r * 0.45, 0, 0, TAU); c.fill();
+    c.beginPath();
+    for (let k = 0; k < 7; k++) { const a = (k / 7) * TAU, rr = r * (0.8 + h01(i * 11 + k) * 0.35); const px = x + Math.cos(a) * rr * 1.1, py = y + Math.sin(a) * rr * 0.62 - (Math.sin(a) < 0 ? r * 0.25 : 0); k ? c.lineTo(px, py) : c.moveTo(px, py); }
+    c.closePath();
+    const gr = c.createLinearGradient(0, y - r, 0, y + r * 0.6); gr.addColorStop(0, '#8b929e'); gr.addColorStop(0.55, '#5b616d'); gr.addColorStop(1, '#353a44');
+    c.fillStyle = gr; c.fill();
+    c.fillStyle = 'rgba(255,255,255,.14)'; c.beginPath(); c.ellipse(x - r * 0.25, y - r * 0.5, r * 0.45, r * 0.18, -0.2, 0, TAU); c.fill();
+    if (h01(i + 300) < 0.35) { c.fillStyle = 'rgba(70,110,60,.55)'; c.beginPath(); c.ellipse(x + r * 0.2, y - r * 0.05, r * 0.5, r * 0.18, 0, 0, TAU); c.fill(); }
+  }
+  rocksCv = cv; rocksKey = key;
+  return cv;
+}
+
+/** Pasada de fondo de la Costa: espuma y rocas al pie de la muralla, y la aldea detrás. */
+function drawCostaScenery(ctx: CanvasRenderingContext2D, g: Game, now: number) {
+  const m = ctx.getTransform(), scale = Math.hypot(m.a, m.b);
+  // Agua revuelta y espuma contra el rompeolas
+  const band = ctx.createLinearGradient(0, -70, 0, -12); band.addColorStop(0, 'rgba(200,230,245,0)'); band.addColorStop(1, 'rgba(200,230,245,.16)');
+  ctx.fillStyle = band; ctx.fillRect(SC_X0, -70, SC_W, 58);
+  ctx.lineCap = 'round';
+  for (let k = 0; k < 3; k++) {
+    ctx.strokeStyle = `rgba(235,246,255,${0.55 - k * 0.15})`; ctx.lineWidth = 2.2 - k * 0.5;
+    ctx.setLineDash([18 + k * 6, 12 + k * 9]); ctx.lineDashOffset = -now * (6 + k * 4) * (k % 2 ? -1 : 1);
+    ctx.beginPath();
+    for (let x = SC_X0; x <= -SC_X0; x += 10) { const y = -30 - k * 7 + Math.sin(x * 0.05 + now * (1.2 + k * 0.3) + k * 2) * 2.2; x === SC_X0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.drawImage(costaRocks(scale), SC_X0, -40, SC_W, 40);
+  // Olas que revientan en las rocas (salpicaduras)
+  for (let i = 0; i < 9; i++) {
+    const per = 2.6 + h01(i) * 2, ph = ((now + h01(i + 20) * per) % per) / per;
+    if (ph > 0.35) continue;
+    const k = ph / 0.35, x = SC_X0 + 30 + h01(i + 50) * (SC_W - 60), y = -24;
+    ctx.fillStyle = `rgba(240,250,255,${0.7 * (1 - k)})`;
+    for (let j = 0; j < 6; j++) { const a = -Math.PI / 2 + (j - 2.5) * 0.35, rr = k * (10 + j % 3 * 4); ctx.beginPath(); ctx.arc(x + Math.cos(a) * rr * 1.4, y + Math.sin(a) * rr - k * 4, 1.8 * (1 - k) + 0.6, 0, TAU); ctx.fill(); }
+  }
+  // Tierra y aldea
+  ctx.drawImage(costaScenery(scale), SC_X0, SC_Y0, SC_W, SC_H);
+  // Humo de chimeneas
+  for (const h of COSTA_HOUSES) {
+    const cx = h.x + h.w / 2 - 6.5, cy = h.y - h.h - h.h * 0.75 - 6;
+    for (let j = 0; j < 3; j++) {
+      const p = ((now * 0.35 + j / 3 + h01(h.x)) % 1);
+      ctx.fillStyle = `rgba(190,198,210,${0.28 * (1 - p)})`;
+      ctx.beginPath(); ctx.arc(cx + Math.sin(p * 4 + h.x) * 3 + p * 6, cy - p * 22, 2 + p * 4, 0, TAU); ctx.fill();
+    }
+  }
+  // Adornos de la costa (red, nasa y bote junto al camino)
+  for (const d of COSTA_DECO) {
+    if (d.k === 'boya') continue;
+    const sp = decoSheet(d.k);
+    if (!sp) continue;
+    ctx.save(); ctx.translate(d.x, d.y);
+    ctx.fillStyle = 'rgba(0,10,25,.28)'; ctx.beginPath(); ctx.ellipse(1, 3, sp.len * 0.42, sp.len * 0.2, 0, 0, TAU); ctx.fill();
+    blitSheet(ctx, sp, (d.d / sp.dirs) * TAU, Math.floor(now * sp.fps + d.x * 0.05), sp.len / sp.ppu);
+    ctx.restore();
+  }
+  // Sombra de la muralla sobre el camino
+  const sh = ctx.createLinearGradient(0, 22, 0, 40); sh.addColorStop(0, 'rgba(0,8,20,.5)'); sh.addColorStop(1, 'rgba(0,8,20,0)');
+  ctx.fillStyle = sh; ctx.fillRect(SC_X0, 22, SC_W, 18);
+  void g;
+}
+
+/** Estandartes turquesa con un faro bordado, colgados en la cara de la muralla. */
+function drawBanners(ctx: CanvasRenderingContext2D, now: number) {
+  for (const sx of COSTA.slotX) for (const dx of [26, -26]) {
+    const x = sx + dx;
+    if (Math.abs(x) > 190 || x % 52 === 0) continue;
+    const sw = Math.sin(now * 1.8 + x * 0.1) * 1.2, y0 = 6, L1 = 17;
+    ctx.fillStyle = '#3b2c1d'; ctx.fillRect(x - 6.5, y0 - 1, 13, 2);
+    ctx.fillStyle = '#1f6f78';
+    ctx.beginPath(); ctx.moveTo(x - 5.5, y0); ctx.lineTo(x + 5.5, y0); ctx.lineTo(x + 5.5 + sw, y0 + L1); ctx.lineTo(x + sw, y0 + L1 - 4); ctx.lineTo(x - 5.5 + sw, y0 + L1); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x - 5.5, y0, 2, L1 - 2);
+    ctx.strokeStyle = '#e9dfc4'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(x - 4.5, y0 + 1.5); ctx.lineTo(x + 4.5, y0 + 1.5); ctx.stroke();
+    // Faro bordado
+    const cx = x + sw * 0.5, cy = y0 + 8;
+    ctx.fillStyle = '#f2ead6'; ctx.beginPath(); ctx.moveTo(cx - 1.6, cy + 4); ctx.lineTo(cx + 1.6, cy + 4); ctx.lineTo(cx + 1, cy - 2.5); ctx.lineTo(cx - 1, cy - 2.5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ffe9a8'; ctx.beginPath(); ctx.arc(cx, cy - 3.6, 1.3, 0, TAU); ctx.fill();
+  }
+}
+
+/** Torre de esquina redonda con techo cónico y bandera. */
+function drawCornerTower(ctx: CanvasRenderingContext2D, x: number, side: number, now: number) {
+  const R = 25, base = 26, top = -46;
+  ctx.fillStyle = 'rgba(0,8,20,.35)'; ctx.beginPath(); ctx.ellipse(x + 4, base + 2, R * 1.15, 8, 0, 0, TAU); ctx.fill();
+  const gr = ctx.createLinearGradient(x - R, 0, x + R, 0);
+  gr.addColorStop(0, '#5b616d'); gr.addColorStop(0.35, '#9aa1ae'); gr.addColorStop(0.7, '#6f7581'); gr.addColorStop(1, '#454a55');
+  ctx.fillStyle = gr;
+  ctx.beginPath(); ctx.moveTo(x - R, top); ctx.lineTo(x - R, base); ctx.ellipse(x, base, R, 7, 0, Math.PI, 0, true); ctx.lineTo(x + R, top); ctx.closePath(); ctx.fill();
+  // Hileras de piedra
+  ctx.strokeStyle = 'rgba(25,30,40,.35)'; ctx.lineWidth = 0.9;
+  for (let y = top + 8, r = 0; y < base; y += 8, r++) {
+    ctx.beginPath(); ctx.ellipse(x, y, R, 7, 0, 0, Math.PI); ctx.stroke();
+    for (let k = 0; k < 6; k++) { const a = ((k + (r % 2) * 0.5) / 6) * Math.PI, px = x + Math.cos(a) * R; ctx.beginPath(); ctx.moveTo(px, y + Math.sin(a) * 7); ctx.lineTo(px, y + Math.sin(a) * 7 - 8); ctx.stroke(); }
+  }
+  // Ventana alta iluminada
+  ctx.fillStyle = '#2a2520'; ctx.beginPath(); ctx.roundRect(x - side * 6 - 3, top + 14, 6, 11, [3, 3, 0, 0]); ctx.fill();
+  ctx.fillStyle = `rgba(255,214,140,${0.85 + 0.1 * Math.sin(now * 3 + x)})`; ctx.beginPath(); ctx.roundRect(x - side * 6 - 2, top + 15, 4, 9, [2, 2, 0, 0]); ctx.fill();
+  // Almenas
+  ctx.fillStyle = '#8d94a1'; ctx.beginPath(); ctx.ellipse(x, top, R + 3, 8, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#a9b0bc';
+  for (let k = 0; k < 7; k++) { const a = (k / 7) * Math.PI + 0.15, px = x + Math.cos(a) * (R + 1), py = top + Math.sin(a) * 7; ctx.fillRect(px - 3, py - 6, 6, 6); }
+  // Techo cónico
+  const rg = ctx.createLinearGradient(x - R, 0, x + R, 0); rg.addColorStop(0, '#24585e'); rg.addColorStop(0.4, '#3b8f96'); rg.addColorStop(1, '#1d454a');
+  ctx.fillStyle = rg; ctx.beginPath(); ctx.moveTo(x - R - 2, top - 3); ctx.lineTo(x, top - 44); ctx.lineTo(x + R + 2, top - 3); ctx.ellipse(x, top - 3, R + 2, 7, 0, 0, Math.PI); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,.18)'; ctx.lineWidth = 0.8;
+  for (let k = 1; k < 5; k++) { const yy = top - 3 - k * 8, rr = (R + 2) * (1 - k * 8 / 41); ctx.beginPath(); ctx.ellipse(x, yy, rr, rr * 0.28, 0, 0, Math.PI); ctx.stroke(); }
+  // Bandera
+  ctx.strokeStyle = '#2a2520'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x, top - 44); ctx.lineTo(x, top - 62); ctx.stroke();
+  ctx.fillStyle = '#3fd7c4';
+  ctx.beginPath(); ctx.moveTo(x, top - 62);
+  for (let k = 0; k <= 6; k++) { const fx = x - side * k * 2.6, fy = top - 62 + Math.sin(now * 6 - k * 0.8) * 1.4 * (k / 6); ctx.lineTo(fx, fy); }
+  for (let k = 6; k >= 0; k--) { const fx = x - side * k * 2.6, fy = top - 54 + Math.sin(now * 6 - k * 0.8) * 1.4 * (k / 6); ctx.lineTo(fx, fy); }
+  ctx.closePath(); ctx.fill();
+}
+
+/** Grietas, humo y fuego en la muralla según la vida que le queda. */
+function drawWallDamage(ctx: CanvasRenderingContext2D, g: Game, now: number) {
+  const p = Math.max(0, g.hp) / g.st.hp, n = Math.floor((1 - p) * 16);
+  ctx.strokeStyle = 'rgba(25,20,18,.75)'; ctx.lineWidth = 1.1; ctx.lineCap = 'round';
+  for (let i = 0; i < n; i++) {
+    let x = -185 + h01(i * 3 + 1) * 370, y = -6 + h01(i * 3 + 2) * 22;
+    ctx.beginPath(); ctx.moveTo(x, y);
+    for (let k = 0; k < 4; k++) { x += (h01(i * 17 + k) - 0.5) * 9; y += 2.5 + h01(i * 29 + k) * 3; ctx.lineTo(x, y); }
+    ctx.stroke();
+  }
+  if (p < 0.4) for (let i = 0; i < 3; i++) {
+    const x = -140 + i * 140 + (h01(i + 70) - 0.5) * 40, y = -4;
+    ctx.fillStyle = radial(ctx, x, y, 7, [[0, 'rgba(255,220,120,.9)'], [0.5, 'rgba(255,120,40,.7)'], [1, 'rgba(255,60,20,0)']]);
+    ctx.beginPath(); ctx.arc(x, y - 2 + Math.sin(now * 12 + i) * 1, 6 + Math.sin(now * 9 + i) * 1.5, 0, TAU); ctx.fill();
+    for (let j = 0; j < 4; j++) {
+      const q = (now * 0.5 + j / 4 + i * 0.3) % 1;
+      ctx.fillStyle = `rgba(60,58,62,${0.4 * (1 - q)})`;
+      ctx.beginPath(); ctx.arc(x + Math.sin(q * 5 + i) * 4 + q * 8, y - 6 - q * 40, 3 + q * 7, 0, TAU); ctx.fill();
+    }
+  }
+}
+
+/** Humo de los disparos y pedacitos de piedra de la muralla. */
+function drawCostaFx(ctx: CanvasRenderingContext2D, g: Game) {
+  for (const f of g.fx) {
+    const k = f.t / f.max;
+    if (f.kind === 'smoke') {
+      const r = (f.r || 6) * (1 + (1 - k) * 2.2);
+      ctx.fillStyle = `rgba(200,204,212,${0.45 * k})`;
+      ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, TAU); ctx.fill();
+      ctx.fillStyle = `rgba(235,238,242,${0.3 * k})`;
+      ctx.beginPath(); ctx.arc(f.x - r * 0.3, f.y - r * 0.3, r * 0.55, 0, TAU); ctx.fill();
+    } else if (f.kind === 'chip') {
+      ctx.fillStyle = f.c; ctx.globalAlpha = Math.min(1, k * 2);
+      ctx.fillRect(f.x - 1.4, f.y - 1.4, 2.8, 2.8);
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+/** Flechas arriba de la pantalla: por dónde van a entrar las próximas criaturas. */
+function drawCostaArrows(ctx: CanvasRenderingContext2D, g: Game, cam: { x: number; y: number; s: number }, now: number) {
+  const arr = g.costaArrows;
+  if (!arr.length) return;
+  const top = (250 - cam.y) / cam.s;
+  const col: Record<string, string> = { armor: '201,210,224', fast: '143,233,255', swarm: '255,179,92' };
+  arr.forEach((a, i) => {
+    const p = 0.55 + 0.45 * Math.sin(now * 5 - i * 0.6), y = top + Math.sin(now * 5 - i) * 2.5;
+    ctx.fillStyle = `rgba(${col[a.k]},${(0.85 - i * 0.15) * p})`;
+    ctx.strokeStyle = 'rgba(0,10,20,.6)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(a.x - 9, y); ctx.lineTo(a.x + 9, y); ctx.lineTo(a.x, y + 11); ctx.closePath(); ctx.stroke(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(a.x - 6, y - 7); ctx.lineTo(a.x + 6, y - 7); ctx.lineTo(a.x, y + 1); ctx.closePath(); ctx.globalAlpha = 0.5; ctx.fill(); ctx.globalAlpha = 1;
+  });
 }

@@ -1,5 +1,5 @@
 // Controlador de interfaz: pantallas, panel de mejoras, HUD, tutorial y bucle principal.
-import { MODES, MODE_RULES, LEVELS_PER_WORLD, LEVEL_WAVES, levelClearCoral, starsFor, levelOf, runXp, levelCoral, SKINS, BEAMS, STREAK, CHEST_HOURS, CREATURES, DEFS, tabName, branchName, BLESSINGS, PERM, BRANCHES, TABS, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone, COSTA, WEAPONS, WeaponId } from './data';
+import { MODES, MODE_RULES, LEVELS_PER_WORLD, LEVEL_WAVES, levelClearCoral, starsFor, levelOf, runXp, levelCoral, SKINS, BEAMS, STREAK, CHEST_HOURS, CREATURES, DEFS, tabName, branchName, BLESSINGS, PERM, BRANCHES, TABS, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone, COSTA, WEAPONS, WeaponId, WBRANCHES, KIND_INFO, CostaKind } from './data';
 import {
   load, persist, ensureDaily, track, zoneUnlocked, readyMissions, checkAchievements,
   researchTotal, zonesOpen, challengeZone, challengeSeed, today, chestState,
@@ -104,6 +104,9 @@ function onEvent(e: GEvent, d?: number) {
     case 'bossdown': banner(t('¡JEFE DERROTADO!')); sfx.bossdown(); vibrate(80); break;
     case 'flash': sfx.flash(); vibrate(40); break;
     case 'buy': sfx.buy(); break;
+    case 'early': sfx.coin(); sfx.wave(); vibrate(40); break;
+    case 'volley': sfx.boom(); vibrate(70); break;
+    case 'blind': sfx.flash(); break;
     case 'thunder': sfx.thunder(); break;
     case 'boom': sfx.boom(); vibrate(90); break;
     case 'enrage': sfx.enrage(); banner(L('¡' + bossName() + ' FURIOSO!', bossName() + ' ENRAGED!')); vibrate(200); break;
@@ -201,6 +204,7 @@ function start(daily = false, level: { zi: number; n: number } | null = null, mo
   // En Aguante y Travesía no hay tienda
   $('bar').style.display = g.mode === 'aguante' || g.mode === 'travesia' ? 'none' : '';
   for (const id of ['flash', 'aim', 'taps']) $(id).style.display = '';
+  $('volley').classList.toggle('on', g.mode === 'costa'); volleyArm = false; $('volley').classList.remove('arm');
   $('frostw').style.display = 'none';
   $('aim').querySelector('span')!.textContent = AIMS[0].name;
   tab = g.mode === 'costa' ? 3 : 0;
@@ -253,6 +257,7 @@ function endRun() {
   $('flash').style.display = 'none';
   $('aim').style.display = 'none';
   $('taps').style.display = 'none';
+  $('volley').classList.remove('on'); $('cnext').classList.remove('on');
   $('frostw').style.display = 'none';
   let html: string;
   $('next').style.display = 'none';
@@ -478,8 +483,22 @@ cv.addEventListener('pointerdown', ev => {
   const r = cv.getBoundingClientRect();
   const x = (ev.clientX - r.left - lastCam.x) / lastCam.s, y = (ev.clientY - r.top - lastCam.y) / lastCam.s;
   audio();
+  if (volleyArm && g.mode === 'costa') {
+    volleyArm = false; $('volley').classList.remove('arm');
+    if (y < -6 && g.volley(x, y)) return;
+  }
   g.tapAt(x, y);
 });
+// Modo Costa: Andanada (el siguiente toque en el mar elige dónde caen todos los disparos)
+let volleyArm = false;
+$('volley').addEventListener('click', () => {
+  audio();
+  if (!g || g.mode !== 'costa' || paused || g.volleyCd > 0) return;
+  volleyArm = !volleyArm; sfx.click();
+  $('volley').classList.toggle('arm', volleyArm);
+  if (volleyArm) banner(t('Toca dónde disparar'), 1.1);
+});
+$('early').addEventListener('click', () => { audio(); if (g && !paused) g.callEarly(); });
 const tapDots: HTMLElement[] = [];
 for (let i = 0; i < TAP_MAX; i++) { const d = document.createElement('i'); $('taps').appendChild(d); tapDots.push(d); }
 
@@ -626,13 +645,36 @@ let pickSlot = -1;
 function openPicker(i: number) {
   if (!g || g.over) return;
   pickSlot = i; paused = true; stopHold();
+  $('wpick').querySelector('h2')!.textContent = t('ELIGE UN ARMA');
+  $('wpick').querySelector('p')!.textContent = t('Para este hueco de la muralla.');
   const list = $('wlist'); list.innerHTML = '';
   for (const w of WEAPONS) {
     const c = g.openCost(i, w.id), el = document.createElement('div');
     el.className = 'card';
-    el.innerHTML = `<div><b>${w.icon} ${esc(w.name)}</b><span>${esc(w.desc)}</span></div><button${g.pearls < c ? ' disabled' : ''}>${c}</button>`;
+    const good = (Object.keys(KIND_INFO) as CostaKind[]).filter(k => KIND_INFO[k].best === w.id || (w.id === 'luz' && k === 'swarm')).map(k => KIND_INFO[k].icon + ' ' + KIND_INFO[k].name).join(', ');
+    el.innerHTML = `<div><b>${w.icon} ${esc(w.name)}</b><span>${esc(w.desc)}${good ? '<br><i style="color:#ffe27a;font-style:normal">' + L('Fuerte contra: ', 'Strong vs: ') + esc(good) + '</i>' : ''}</span></div><button${g.pearls < c ? ' disabled' : ''}>${c}</button>`;
     el.querySelector('button')!.addEventListener('click', () => {
       if (g && g.openSlot(i, w.id)) { sfx.buy(); closePicker(); updatePanel(); updateHud(); }
+    });
+    list.appendChild(el);
+  }
+  $('wpick').classList.add('on');
+}
+/** Especialización del nivel 4: dos ramas por arma. */
+function openBranch(i: number) {
+  if (!g || g.over) return;
+  const s = g.slots[i]; if (!s.w) return;
+  pickSlot = i; paused = true; stopHold();
+  $('wpick').querySelector('h2')!.textContent = t('ELIGE SU ESPECIALIZACIÓN');
+  $('wpick').querySelector('p')!.textContent = L('Nivel 4: esta elección es para toda la partida.', 'Level 4: this choice lasts the whole run.');
+  const list = $('wlist'); list.innerHTML = '';
+  const c = g.upCost(i);
+  for (const b of WBRANCHES.filter(x => x.w === s.w)) {
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.innerHTML = `<div><b>${b.icon} ${esc(b.name)}</b><span>${esc(b.desc)}</span></div><button${g.pearls < c ? ' disabled' : ''}>${c}</button>`;
+    el.querySelector('button')!.addEventListener('click', () => {
+      if (g && g.upSlot(i, b.br)) { sfx.card(); closePicker(); updatePanel(); updateHud(); }
     });
     list.appendChild(el);
   }
@@ -655,6 +697,7 @@ function buildSlotCards() {
       if (!g || paused || g.over) return false;
       const s = g.slots[i];
       if (!s.open) { if (g.slotAvail(i)) openPicker(i); return false; }
+      if (g.needsBranch(i)) { if (g.pearls >= g.upCost(i)) openBranch(i); else showHint(L('Junta perlas para elegir su especialización', 'Save pearls to pick its specialization')); return false; }
       const ok = g.upSlot(i);
       if (ok) { sfx.buy(); updatePanel(); updateHud(); }
       return ok;
@@ -718,8 +761,9 @@ function updatePanel() {
     const avail = g!.slotAvail(i);
     if (s.open && s.w) {
       const W = WEAPONS.find(w => w.id === s.w)!, c = g!.upCost(i), max = !isFinite(c);
-      b.n.textContent = W.icon + ' ' + W.name; b.lv.textContent = String(s.lv);
-      b.v.innerHTML = max ? L('NIVEL MÁX', 'MAX LEVEL') : L('Nivel ', 'Level ') + s.lv + ' <i>→ ' + (s.lv + 1) + '</i>';
+      const B = WBRANCHES.find(x => x.w === s.w && x.br === s.br);
+      b.n.textContent = (B ? B.icon + ' ' + B.name : W.icon + ' ' + W.name); b.lv.textContent = String(s.lv);
+      b.v.innerHTML = max ? L('NIVEL MÁX', 'MAX LEVEL') : g!.needsBranch(i) ? '<span style="color:#ffe27a">' + L('¡Elige rama!', 'Pick a branch!') + '</span>' : L('Nivel ', 'Level ') + s.lv + ' <i>→ ' + (s.lv + 1) + '</i>';
       b.k.textContent = max ? '★' : String(c);
       b.el.classList.toggle('off', max || g!.pearls < c); b.el.classList.toggle('ready', !max && g!.pearls >= c);
     } else if (avail) {
@@ -783,6 +827,22 @@ function updateHud() {
   }
   // Preparación antes de la primera oleada de un nivel: comprar con calma y tocar LISTO
   $('ready').classList.toggle('on', !!g.level && g.state === 'pause' && g.wave < g.level.start && g.pauseT > 0.4);
+  if (g.mode === 'costa') {
+    const vb = $('volley'), vm = 24;
+    vb.style.setProperty('--p', String(1 - g.volleyCd / vm));
+    vb.classList.toggle('cd', g.volleyCd > 0);
+    const pv = g.costaPreview;
+    $('cnext').classList.toggle('on', !!pv && g.wave >= 1);
+    if (pv) {
+      const order: CostaKind[] = ['armor', 'fast', 'swarm'];
+      $('cnexttxt').innerHTML = '<b>' + L('PRÓXIMA OLEADA ', 'NEXT WAVE ') + pv.w + (pv.boss ? ' · ☠️' : '') + '</b><br>' +
+        order.filter(k => pv.c[k] > 0).map(k => {
+          const ki = KIND_INFO[k], w = WEAPONS.find(x => x.id === ki.best)!;
+          return `<em class="${pv.theme === k ? 'th' : ''}">${ki.icon} ${esc(ki.name)} ×${pv.c[k]} <small>→ ${w.icon}</small></em>`;
+        }).join('');
+      $('earlyb').textContent = g.earlyBonus > 0 ? '+' + g.earlyBonus + ' ●' : '';
+    }
+  }
   $('pearls').textContent = String(g.pearls);
   tapDots.forEach((d, i) => d.classList.toggle('off', i >= Math.floor(g!.taps)));
   const cb = $('combo');

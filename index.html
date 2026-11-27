@@ -86,6 +86,24 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #flash small{position:absolute;bottom:9px;left:0;right:0;font-family:var(--fd);font-size:9px;letter-spacing:.03em;color:var(--txt2)}
 #flash:not(.cd){box-shadow:0 0 0 2px rgba(63,215,196,.5),0 0 22px rgba(63,215,196,.45)}
 #flash:active{transform:scale(.94)}
+#volley{position:absolute;right:66px;bottom:8px;width:52px;height:52px;border-radius:50%;border:0;padding:0;display:none;place-items:center;
+  background:conic-gradient(#ff9a52 calc(var(--p,1)*360deg),rgba(255,255,255,.12) 0);box-shadow:0 6px 18px rgba(0,0,0,.45)}
+#volley::before{content:'';position:absolute;inset:4px;border-radius:50%;background:radial-gradient(circle at 50% 35%,#3a2614,#160e08)}
+#volley span{position:relative;font-size:19px;line-height:1;filter:drop-shadow(0 0 6px rgba(255,154,82,.7))}
+#volley small{position:absolute;bottom:7px;left:0;right:0;font-family:var(--fd);font-size:7.5px;letter-spacing:.02em;color:#f3d2b5}
+#volley.on{display:grid}
+#volley:not(.cd){box-shadow:0 0 0 2px rgba(255,154,82,.55),0 0 20px rgba(255,154,82,.45)}
+#volley.arm{animation:breath .7s ease-in-out infinite;box-shadow:0 0 0 3px #ffe27a,0 0 26px rgba(255,200,80,.8)}
+#volley:active{transform:scale(.94)}
+#cnext{position:absolute;left:50%;top:calc(118px + env(safe-area-inset-top));transform:translateX(-50%);z-index:3;display:none;flex-direction:column;align-items:center;gap:6px;pointer-events:none;width:max-content;max-width:92vw}
+#cnext.on{display:flex}
+#cnexttxt{padding:6px 11px;border-radius:12px;background:var(--glass);border:1px solid var(--line);font-size:12px;font-weight:800;text-align:center;line-height:1.35}
+#cnexttxt b{font-family:var(--fd);font-weight:400;font-size:13px;letter-spacing:.03em}
+#cnexttxt em{font-style:normal;display:inline-block;margin:0 4px;white-space:nowrap}
+#cnexttxt em.th{color:#ffe27a}
+#early{pointer-events:auto;padding:9px 18px;border-radius:13px;border:0;background:#ff9a52;color:#2a1405;font-family:var(--fd);font-size:15px;letter-spacing:.03em;box-shadow:0 6px 18px rgba(255,154,82,.35)}
+#early i{font-style:normal;margin-left:6px;font-size:12px;opacity:.85}
+#early:active{transform:scale(.96)}
 #bar{display:flex;gap:6px;align-items:stretch;padding:5px;border-radius:16px}
 #tabs{display:grid;grid-template-columns:34px 34px;grid-template-rows:34px 34px;gap:4px;flex:none}
 .tab{--c:#fff;position:relative;display:grid;place-items:center;padding:0;border-radius:10px;border:1px solid transparent;background:rgba(255,255,255,.05);color:var(--txt2)}
@@ -272,6 +290,7 @@ html[lang=en] .up.new::after{content:'NEW'}
     <div id="frostw">❄ ESCARCHA</div>
     <div id="bossart"><img alt=""></div>
     <div id="banner"></div>
+    <div id="cnext"><div id="cnexttxt"></div><button id="early">¡QUE VENGAN!<i id="earlyb"></i></button></div>
     <div id="combo"></div>
   </div>
   <div id="hud">
@@ -293,6 +312,7 @@ html[lang=en] .up.new::after{content:'NEW'}
       <button id="ready">¡LISTO!</button>
       <button id="aim"><b>OBJETIVO</b><span>CERCANO</span></button>
       <button id="flash"><span>⚡</span><small>DESTELLO</small></button>
+      <button id="volley"><span>💥</span><small>ANDANADA</small></button>
     </div>
     <div id="hint"></div>
     <div id="bar" class="panel">

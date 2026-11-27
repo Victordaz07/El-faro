@@ -1,5 +1,5 @@
 // Bot del Modo Costa: abre huecos, mejora armas y compra mejoras globales.
-// Uso: npm run sim:costa   (N=partidas, PERM=nivel de investigación, ARMAS=canon,ballesta,mortero,luz)
+// Uso: npm run sim:costa   (N=partidas, PERM=nivel de investigación, ARMAS=canon,ballesta,mortero,luz, BR=1|2 rama, EARLY=1 adelanta oleadas, VOLLEY=0 sin Andanada)
 import { Game } from '../src/game';
 import { ZONES, COSTA, WEAPONS, WeaponId } from '../src/data';
 import { fresh } from '../src/save';
@@ -9,7 +9,8 @@ const N = +(process.env.N || 6), PERMS = (process.env.PERM || '0,3').split(',').
 if (process.env.HP) COSTA.hp = +process.env.HP;
 if (process.env.SC) COSTA.slotCost.splice(0, 7, ...process.env.SC.split(',').map(Number));
 if (process.env.WC) WEAPONS.forEach((w, i) => (w.cost = +process.env.WC!.split(',')[i]));
-const ORDER = ((process.env.ARMAS || 'canon,ballesta,mortero,luz,canon,ballesta,mortero').split(',')) as WeaponId[];
+const BR = +(process.env.BR || 0), EARLY = process.env.EARLY === '1', VOLLEY = process.env.VOLLEY !== '0';
+const ORDER = ((process.env.ARMAS || 'canon,ballesta,mortero,canon,ballesta,mortero,luz').split(',')) as WeaponId[];
 
 function play(perm: number) {
   const save = fresh();
@@ -23,6 +24,9 @@ function play(perm: number) {
     if (g.state === 'cards') g.pickCard(g.cardOpts[0].id);
     if (steps % 30 === 0) {
       g.useFlash();
+      // Andanada sobre la criatura más cercana a la muralla; y adelantar la oleada si se pidió
+      if (VOLLEY && g.volleyCd <= 0) { const e = g.enemies.filter(x => !x.dead).sort((a, b) => b.y - a.y)[0]; if (e && e.y > -200) g.volley(e.x, e.y); }
+      if (EARLY && g.state === 'pause' && g.pauseT < COSTA.pause - 2) g.callEarly();
       for (let k = 0; k < 12; k++) {
         let did = false;
         // 1) abrir el siguiente hueco si ya se puede y alcanza
@@ -33,7 +37,7 @@ function play(perm: number) {
         // 2) mejorar el hueco de menor nivel
         if (!did) {
           const open = g.slots.map((s, i) => ({ s, i })).filter(o => o.s.open && o.s.lv < COSTA.maxLv).sort((a, b) => a.s.lv - b.s.lv || g.upCost(a.i) - g.upCost(b.i));
-          if (open.length && g.pearls >= g.upCost(open[0].i) && (g.slots.every(s => s.open) || g.wave < 1 || open[0].s.lv < 1 + g.wave / 3)) did = g.upSlot(open[0].i);
+          if (open.length && g.pearls >= g.upCost(open[0].i) && (g.slots.every(s => s.open) || g.wave < 1 || open[0].s.lv < 1 + g.wave / 3)) did = g.upSlot(open[0].i, g.needsBranch(open[0].i) ? ((BR || 1 + (open[0].i % 2)) as 1 | 2) : undefined);
         }
         // 3) mejoras globales por valor
         if (!did) {

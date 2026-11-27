@@ -168,10 +168,51 @@ export const COSTA = {
   slotCost: [0, 25, 48, 78, 110, 160, 220],
   maxLv: 6,
   /** La vida de las criaturas sube hasta ×(1+hp) en la última oleada, con curva cuadrática (balance: npm run sim:costa). */
-  hp: 18,
+  hp: 21,
   /** Altura (y) de la boca de las armas. */
   gunY: -8,
+  /** Segundos de calma entre oleadas (para comprar y ver lo que viene) y perlas por segundo al adelantar la oleada. */
+  pause: 9, early: 0.9,
+  /** Andanada: recarga (s) y multiplicador del daño de cada arma. */
+  volleyCd: 24, volleyDmg: 1.7,
 };
+/** Clase de criatura en la Costa: cada arma es buena contra una. */
+export type CostaKind = 'armor' | 'fast' | 'swarm';
+export function costaKind(type: string): CostaKind {
+  if (type === 'turtle' || type === 'hermit' || type === 'pirate' || type === 'captain' || type === 'boss' || type === 'volturtle' || type === 'lobster') return 'armor';
+  if (type === 'sardine' || type === 'eel' || type === 'raider' || type === 'seahorse' || type === 'narwhal' || type === 'lavacrab') return 'fast';
+  return 'swarm';
+}
+/** Criaturas de cada clase que puede traer una oleada temática de la Costa. */
+export const KIND_POOL: Record<CostaKind, string[]> = {
+  armor: ['turtle', 'hermit', 'pirate'],
+  fast: ['raider', 'eel', 'sardine', 'seahorse'],
+  swarm: ['crab', 'jelly', 'star', 'puffer'],
+};
+export const KIND_INFO: Record<CostaKind, { icon: string; name: string; col: string; best: WeaponId }> = {
+  armor: { icon: '🛡️', name: 'Blindados', col: '#c9d2e0', best: 'canon' },
+  fast: { icon: '💨', name: 'Rápidos', col: '#8fe9ff', best: 'ballesta' },
+  swarm: { icon: '🫧', name: 'Enjambre', col: '#ffb35c', best: 'mortero' },
+};
+/** Multiplicador de daño de cada arma según la clase de criatura. */
+export const WEAK: Record<WeaponId, Record<CostaKind, number>> = {
+  canon: { armor: 1.8, fast: 0.4, swarm: 0.7 },
+  ballesta: { armor: 0.35, fast: 1.8, swarm: 0.9 },
+  mortero: { armor: 0.6, fast: 0.6, swarm: 1.8 },
+  luz: { armor: 0.5, fast: 1.2, swarm: 1.4 },
+};
+/** Especialización al llegar al nivel 4: cada arma elige una de dos ramas. */
+export interface WBranch { w: WeaponId; br: 1 | 2; icon: string; name: string; desc: string; }
+export const WBRANCHES: WBranch[] = [
+  { w: 'canon', br: 1, icon: '💥', name: 'Bombarda', desc: 'Bala enorme y lenta que también golpea alrededor.' },
+  { w: 'canon', br: 2, icon: '🎯', name: 'Metralla', desc: 'Dispara tres balas a la vez a criaturas distintas.' },
+  { w: 'ballesta', br: 1, icon: '🦂', name: 'Escorpión', desc: 'Virote pesado que atraviesa corazas: ya no sufre contra blindados.' },
+  { w: 'ballesta', br: 2, icon: '⚡', name: 'Repetidora', desc: 'Casi el doble de rápida y un virote más.' },
+  { w: 'mortero', br: 1, icon: '🔥', name: 'Incendiario', desc: 'Las criaturas alcanzadas arden unos segundos.' },
+  { w: 'mortero', br: 2, icon: '🎆', name: 'Racimo', desc: 'La bomba se parte en cuatro explosiones más.' },
+  { w: 'luz', br: 1, icon: '✨', name: 'Cegadora', desc: 'Cada poco deslumbra y aturde a todo lo que alumbra.' },
+  { w: 'luz', br: 2, icon: '☀️', name: 'Lupa ardiente', desc: 'Haz más estrecho que quema el doble.' },
+];
 export interface WeaponInfo { id: WeaponId; icon: string; name: string; desc: string; cost: number; up: number; col: string; }
 export const WEAPONS: WeaponInfo[] = [
   { id: 'canon', icon: '💣', name: 'Cañón', desc: 'Bala pesada: mucho daño a un solo objetivo.', cost: 22, up: 30, col: '#c9d2e0' },
@@ -354,6 +395,8 @@ localize(SKINS, ['name']);
 localize(BEAMS, ['name']);
 localize(MODES, ['name', 'desc']);
 localize(WEAPONS, ['name', 'desc']);
+localize(WBRANCHES, ['name', 'desc']);
+localize(Object.values(KIND_INFO), ['name']);
 for (const k of Object.keys(HINTS)) { const es = HINTS[k]; Object.defineProperty(HINTS, k, { get: () => t(es), enumerable: true }); }
 /** Nombre de pestaña / rama en el idioma activo. */
 export const tabName = (i: number) => t(TABS[i]);

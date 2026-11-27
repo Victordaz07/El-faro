@@ -159,3 +159,52 @@ Parts: single mesh "Torch". Triangle budget: 300 to 800.
 ## Cuando lleguen
 
 Pasar los `.glb` a `assets/models/` y avisar: se hornean con `tools/glb-sprite/` (nuevo `bake-costa.py` + entradas en `ANIM` de `sheet.js`: retroceso de `Barrel`/`Tube`, flexión de `Bow`, giro de `Lamp`), se cargan desde `art.ts` y `drawCostaBase/Front` dibujan el sprite si existe y el código si no.
+
+---
+
+## Fase 2 del escenario (opcional, para subir aún más el nivel)
+
+Hoy la aldea, las torres de esquina, el rompeolas y los estandartes se dibujan por código (`drawCostaScenery`, `drawCornerTower`, `drawBanners` en render.ts). Con estos modelos se pueden reemplazar por sprites 3D como el faro. Usa el mismo prompt maestro.
+
+| Modelo | Archivo | Tamaño en pantalla |
+|---|---|---|
+| Torre de esquina | `costa-torre.glb` | ~50 px de ancho, ~110 de alto |
+| Casa de pescadores (2 variantes) | `costa-casa-1.glb`, `costa-casa-2.glb` | ~34 px |
+| Rocas del rompeolas | `costa-rocas.glb` | tramo de ~64 px que se repite |
+| Árbol | `costa-arbol.glb` | ~26 px |
+
+### Torre de esquina (`costa-torre.glb`)
+```
+Asset: costa-torre.glb - a round coastal fort corner tower.
+Size: height exactly 1.0 unit; diameter about 0.45. Origin at bottom center.
+Design: blue-grey stone cylinder with visible block rows, a crenellated ring at the top, a tall conical roof in dark teal slate (#2f7f86) with a small iron spire, one arched window with warm emissive glass (#ffd68a), a wooden door at the base on the -Z side (land side). No flag (the game draws it).
+Materials (max 5): stone, dark stone, teal roof, wood, warm emissive glass.
+Parts: single mesh "Tower". Triangle budget: 1,500 to 3,500.
+```
+
+### Casa de pescadores (`costa-casa-1.glb` y `costa-casa-2.glb`)
+```
+Asset: costa-casa-1.glb - a small cozy fisherman's cottage seen from above at 32 degrees.
+Size: longest horizontal dimension exactly 1.0 unit. Origin at bottom center. FRONT (+Z) is the door side.
+Design: cream plaster walls with dark wooden beams, a hip roof in terracotta (#a8553a) [variant 2: teal #2f7f86 roof and stone walls], two small windows with warm emissive glass (#ffd68a), a wooden door, a stone chimney, a little wooden bench or barrel by the door.
+Materials (max 6): plaster, wood, roof tiles, stone, warm emissive glass, dark wood.
+Parts: single mesh "House". Triangle budget: 1,200 to 3,000.
+```
+
+### Rocas del rompeolas (`costa-rocas.glb`)
+```
+Asset: costa-rocas.glb - a modular strip of breakwater boulders that tiles left to right.
+Size: width (X) exactly 1.0 unit, depth about 0.35, height about 0.2. Origin at bottom center. Left and right ends must tile without a visible seam.
+Design: 6 to 9 chunky rounded blue-grey boulders of different sizes, a few with small dark green algae patches on the lower half, wet darker bottoms. No water, no foam (the game draws them).
+Materials (max 3): rock, dark wet rock, algae.
+Parts: single mesh "Rocks". Triangle budget: 800 to 2,000.
+```
+
+### Árbol (`costa-arbol.glb`)
+```
+Asset: costa-arbol.glb - a stylized round leafy tree.
+Size: height exactly 1.0 unit. Origin at bottom center.
+Design: short brown trunk, a canopy of 3 to 4 overlapping chunky low-poly spheres in two greens (#2d4a2c, #3f6a37), slightly lighter on top.
+Materials (max 3): bark, dark leaves, light leaves.
+Parts: single mesh "Tree". Triangle budget: 400 to 1,200.
+```
