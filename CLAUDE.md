@@ -8,6 +8,7 @@ Idioma de la interfaz y de los comentarios: **español**.
 - `npm run dev` — servidor local (con `--host` para probar desde el celular)
 - `npm run build` — typecheck + `dist/index.html` en un solo archivo
 - `npm run sim` — bot que juega partidas en todas las zonas; úsalo después de cualquier cambio de balance
+- `npm test` — verifica que las perlas cuadren (iniciales + ganadas − gastadas) en partidas completas
 - `npm run android:sync` / `npm run android:open` — Capacitor
 
 ## Estructura
@@ -23,6 +24,8 @@ Idioma de la interfaz y de los comentarios: **español**.
 - `assets/` — `icon.png` (ícono de la app, 1024) y `thumb.png` (portada 1200×630), ambos renderizados desde el propio juego.
 
 ## Reglas
+- Las perlas solo entran por `gain()` y solo salen por `buy()` en game.ts; nunca modificar `pearls` directamente.
+- Comprar manteniendo presionado usa una sola repetición global (`holdStop` en main.ts) que se detiene al soltar, al fallar una compra o con otro toque.
 - La lógica de juego no toca el DOM (para que `npm run sim` siga funcionando).
 - El azar de oleadas y cartas usa la semilla (`mulberry`) para que el desafío diario sea igual para todos.
 - Arte, nombres y mecánicas son propios: no copiar recursos de otros juegos.

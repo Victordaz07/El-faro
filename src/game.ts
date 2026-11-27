@@ -118,6 +118,9 @@ export class Game {
   // estadísticas de la partida
   kills = 0; crits = 0; buys = 0; bosses = 0; flashes = 0; earned = 0; elites = 0; puffers = 0; cards = 0;
   hpLost10 = 0;
+  pearlsEarned = 0;
+  pearlsSpent = 0;
+  pearlsStart: number;
   seed: number;
   daily: boolean;
   private nid = 1;
@@ -140,6 +143,7 @@ export class Game {
     this.st = this.stats();
     this.hp = this.st.hp;
     this.pearls = 20 + 25 * (this.perm.start || 0);
+    this.pearlsStart = this.pearls;
   }
 
   stats(lv: Record<string, number> = this.lv): Stats {
@@ -196,6 +200,7 @@ export class Game {
     const c = this.cost(id);
     if (this.pearls < c) return false;
     this.pearls -= c;
+    this.pearlsSpent += c;
     this.lv[id]++;
     this.refresh();
     this.flashCd = Math.min(this.flashCd, this.st.fcd);
@@ -238,7 +243,7 @@ export class Game {
     this.cards++;
     if (id === 'cofre') {
       const p = 40 + this.wave * 14;
-      this.pearls += p;
+      this.gain(p);
       this.text(0, -95, '+' + p + ' perlas', '#8fe9ff', true, 1.4);
     }
     this.refresh();
@@ -265,6 +270,12 @@ export class Game {
     this.shake = Math.max(this.shake, 0.18);
     this.emit('flash');
     return true;
+  }
+
+  private gain(n: number) {
+    n = Math.max(0, Math.round(n));
+    this.pearls += n;
+    this.pearlsEarned += n;
   }
 
   abandon() { if (!this.over) { this.revived = true; this.gameOver(); } }
@@ -372,7 +383,7 @@ export class Game {
     if (e.type === 'puffer') this.puffers++;
     let pr = Math.max(1, Math.round(e.rew * this.st.pk * (1 + 0.06 * (this.wave - 1))));
     if (this.mod?.id === 'tregua') pr = Math.round(pr * 1.6);
-    this.pearls += pr;
+    this.gain(pr);
     this.coral += 0.03 * e.rew * this.st.ck * this.zone.reward;
     if (this.st.vamp > 0) this.hp = Math.min(this.st.hp, this.hp + this.st.vamp);
     if (this.bl.voraz) this.flashCd = Math.max(0, this.flashCd - 0.25 * this.bl.voraz);
@@ -609,7 +620,7 @@ export class Game {
         let pw = Math.round(st.pw) + 3 + this.wave;
         const it = Math.min(Math.floor(this.pearls * st.int), (6 + this.wave) * Math.max(1, this.lv.int + (this.perm.interest || 0)));
         if (it > 0) pw += it;
-        this.pearls += pw;
+        this.gain(pw);
         this.text(0, -95, '+' + pw + ' perlas' + (it > 0 ? ' (+' + it + ' interés)' : ''), '#8fe9ff', true, 1.4);
         this.coral += st.cw * this.zone.reward;
         if (this.bl.marea) this.hp = Math.min(st.hp, this.hp + st.hp * 0.2 * this.bl.marea);

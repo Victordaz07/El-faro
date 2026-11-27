@@ -90,6 +90,7 @@ function onEvent(e: GEvent, d?: number) {
 
 /* ---------- Partida ---------- */
 function start(daily = false) {
+  stopHold();
   audio();
   hideAll();
   paused = false; $('pause').textContent = 'II';
@@ -115,6 +116,7 @@ function start(daily = false) {
 }
 
 function endRun() {
+  stopHold();
   if (!g) return;
   const z = runZone, zi = ZONES.indexOf(z);
   const nextWasOpen = zi + 1 < ZONES.length && zoneUnlocked(save, zi + 1);
@@ -233,17 +235,41 @@ $('reroll').addEventListener('click', () => { if (g?.reroll()) showCards(); });
 interface Btn { id: string; tab: number; el: HTMLElement; n: HTMLElement; lv: HTMLElement; v: HTMLElement; k: HTMLElement; }
 const btns: Btn[] = [];
 
-function holdToBuy(el: HTMLElement, fn: () => void) {
-  let to = 0, iv = 0;
-  const stop = () => { clearTimeout(to); clearInterval(iv); };
+/*
+ * Mantener presionado para comprar varias veces.
+ * Solo existe UNA repetición activa en todo el juego: un toque nuevo (otro dedo,
+ * doble toque) detiene la anterior. La repetición también se detiene sola si una
+ * compra falla, si la tarjeta deja de verse, al soltar en cualquier parte, al
+ * perder el foco o tras unos segundos. Así nunca puede quedar comprando sola.
+ */
+let holdStop: (() => void) | null = null;
+const stopHold = () => holdStop?.();
+
+function holdToBuy(el: HTMLElement, onPress: () => void, buyOnce: () => boolean) {
   el.addEventListener('pointerdown', ev => {
     ev.preventDefault();
+    stopHold();
     audio();
-    fn();
-    to = window.setTimeout(() => { iv = window.setInterval(fn, 90); }, 350);
+    onPress();
+    if (!buyOnce()) return;
+    try { el.setPointerCapture(ev.pointerId); } catch { /* sin captura */ }
+    let to = 0, iv = 0, n = 0;
+    const stop = () => {
+      clearTimeout(to);
+      clearInterval(iv);
+      if (holdStop === stop) holdStop = null;
+    };
+    holdStop = stop;
+    to = window.setTimeout(() => {
+      iv = window.setInterval(() => {
+        if (++n > 60 || el.offsetParent === null || !buyOnce()) stop();
+      }, 90);
+    }, 380);
   });
-  for (const t of ['pointerup', 'pointerleave', 'pointercancel']) el.addEventListener(t, stop);
+  for (const t of ['pointerup', 'pointercancel', 'lostpointercapture', 'pointerleave']) el.addEventListener(t, stopHold);
 }
+for (const t of ['pointerup', 'pointercancel', 'blur']) window.addEventListener(t, stopHold);
+document.addEventListener('visibilitychange', stopHold);
 
 function buildPanel() {
   const grid = $('grid');
@@ -253,8 +279,11 @@ function buildPanel() {
     el.innerHTML = '<div class="n"><span></span><span></span></div><div class="v"></div><div class="k"></div><div class="ic">' + (ICONS[d.id] || '') + '</div>';
     holdToBuy(el, () => {
       $('hint').innerHTML = '<b>' + d.name + ':</b> ' + (HINTS[d.id] || 'mejora de ' + TABS[d.tab].toLowerCase());
-      if (!g || paused || g.over) return;
-      if (g.buy(d.id)) { updatePanel(); updateHud(); }
+    }, () => {
+      if (!g || paused || g.over) return false;
+      const ok = g.buy(d.id);
+      if (ok) { updatePanel(); updateHud(); }
+      return ok;
     });
     el.style.display = d.tab === 0 ? '' : 'none';
     grid.appendChild(el);
@@ -264,7 +293,7 @@ function buildPanel() {
   TABS.forEach((t, i) => {
     const b = document.createElement('button');
     b.className = 'tab'; b.innerHTML = TAB_ICONS[i] + '<span>' + t + '</span><span class="dot"></span>';
-    b.addEventListener('click', () => { tab = i; sfx.click(); updatePanel(); });
+    b.addEventListener('click', () => { stopHold(); tab = i; sfx.click(); updatePanel(); });
     $('tabs').appendChild(b);
   });
 }
@@ -520,6 +549,7 @@ function toggleMusic() {
 }
 
 function setPaused(p: boolean) {
+  stopHold();
   if (!g || g.over || g.state === 'cards') return;
   paused = p;
   $('pause').textContent = p ? '▶' : 'II';
