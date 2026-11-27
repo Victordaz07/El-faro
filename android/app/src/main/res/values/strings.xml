@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Faro en la Tormenta</string>
+    <string name="title_activity_main">Faro en la Tormenta</string>
+    <string name="package_name">com.victordiaz.farotormenta</string>
+    <string name="custom_url_scheme">com.victordiaz.farotormenta</string>
+</resources>

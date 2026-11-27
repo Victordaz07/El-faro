@@ -1,0 +1,757 @@
+// Lógica pura de una partida (sin DOM): se puede simular en Node.
+import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing } from './data';
+import type { Save } from './save';
+
+export interface Stats {
+  dmg: number; spd: number; cc: number; cf: number; rng: number; chain: number; twin: number;
+  hp: number; rep: number; arm: number; bar: number; thorn: number; vamp: number;
+  pk: number; pw: number; int: number; ck: number; cw: number; fcd: number;
+  tA: number; tR: number; tN: number;
+}
+export type EType = 'crab' | 'jelly' | 'mini' | 'sardine' | 'eel' | 'puffer' | 'turtle' | 'hermit' | 'boss';
+export type Aim = 'cerca' | 'peligro' | 'fuerte' | 'debil';
+export const AIMS: { id: Aim; name: string }[] = [
+  { id: 'cerca', name: 'CERCANO' }, { id: 'peligro', name: 'PELIGRO' },
+  { id: 'fuerte', name: 'FUERTE' }, { id: 'debil', name: 'DÉBIL' },
+];
+
+export interface Enemy {
+  id: number; x: number; y: number; type: EType; hp: number; max: number; spd: number; r: number;
+  dmg: number; rew: number; stop: number; atkRate: number; atk: number; armor: number;
+  dead: boolean; wob: number; stun: number; hitT: number; elite: boolean;
+  age: number; summonT: number; enraged: boolean; wakeT: number;
+  slowT: number; burn: number; burnT: number;
+}
+export interface Bolt {
+  x: number; y: number; px: number; py: number; t: Enemy | null; d: number; crit: boolean; bounce: boolean;
+  kind: 'light' | 'harpoon'; speed: number; gone?: boolean;
+}
+export interface EShot { x: number; y: number; d: number; c: string; gone?: boolean; }
+export interface Fx {
+  kind: 'p' | 'ring' | 'nova' | 'wake' | 'splash' | 'boom' | 'net' | 'slam' | 'warn' | 'strike';
+  x: number; y: number; vx: number; vy: number; t: number; max: number; c: string; r?: number;
+}
+export interface Txt { x: number; y: number; s: string; c: string; t: number; max: number; big: boolean; }
+export interface Hazard { x: number; y: number; t: number; r: number; }
+export type GEvent = 'shot' | 'crit' | 'kill' | 'hurt' | 'wave' | 'boss' | 'bossdown' | 'over' | 'flash' | 'buy'
+  | 'thunder' | 'boom' | 'enrage' | 'elite' | 'cards' | 'revive' | 'frostwarn' | 'frost' | 'erupt' | 'harpoon' | 'net' | 'slam';
+
+interface Proto { hp: number; spd: number; r: number; dmg: number; rew: number; stop: number; atk: number; armor: number; }
+const P: Record<EType, Proto> = {
+  crab: { hp: 20, spd: 26, r: 10, dmg: 5, rew: 2, stop: 36, atk: 0.9, armor: 0 },
+  jelly: { hp: 12, spd: 46, r: 9, dmg: 3.5, rew: 2, stop: 34, atk: 0.8, armor: 0 },
+  mini: { hp: 4, spd: 64, r: 5, dmg: 1.5, rew: 1, stop: 32, atk: 0.7, armor: 0 },
+  sardine: { hp: 5, spd: 80, r: 5, dmg: 1.2, rew: 1, stop: 32, atk: 0.7, armor: 0 },
+  eel: { hp: 14, spd: 36, r: 9, dmg: 6, rew: 4, stop: 150, atk: 2.0, armor: 0 },
+  puffer: { hp: 18, spd: 30, r: 11, dmg: 24, rew: 3, stop: 36, atk: 0, armor: 0 },
+  turtle: { hp: 60, spd: 16, r: 13, dmg: 9, rew: 6, stop: 40, atk: 1.4, armor: 0 },
+  hermit: { hp: 30, spd: 22, r: 11, dmg: 7, rew: 5, stop: 36, atk: 1.0, armor: 4 },
+  boss: { hp: 160, spd: 15, r: 32, dmg: 15, rew: 40, stop: 72, atk: 2.2, armor: 0 },
+};
+// [tipo, oleada mínima, peso]
+const TABLE: [EType, number, number][] = [
+  ['crab', 1, 10], ['jelly', 1, 7], ['sardine', 6, 3], ['eel', 4, 4],
+  ['puffer', 5, 3], ['turtle', 7, 3], ['hermit', 9, 3],
+];
+export const COLORS: Record<EType, string> = {
+  crab: '#ff7a5c', jelly: '#d28bff', mini: '#e3b3ff', sardine: '#cfe3f2', eel: '#4ade80',
+  puffer: '#ffd166', turtle: '#9be15d', hermit: '#e8c39e', boss: '#ffd27a',
+};
+export const LAMP_Y = -52;
+/** Posición de cada torreta sobre la isla. */
+export const TURRET_POS: Record<'tA' | 'tR' | 'tN', { x: number; y: number }> = {
+  tA: { x: -24, y: 10 }, tR: { x: 24, y: 10 }, tN: { x: 0, y: 24 },
+};
+const BOSS_ENRAGE = 40;
+
+export function mulberry(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export interface GameOpts { seed?: number; daily?: boolean; }
+
+export class Game {
+  lv: Record<string, number> = {};
+  bl: Record<string, number> = {};
+  perm: Record<string, number>;
+  st: Stats;
+  hp: number;
+  shield = 0;
+  pearls: number;
+  coral = 0;
+  wave = 0;
+  enemies: Enemy[] = [];
+  bolts: Bolt[] = [];
+  eshots: EShot[] = [];
+  fx: Fx[] = [];
+  texts: Txt[] = [];
+  hazards: Hazard[] = [];
+  aim: Aim = 'cerca';
+  mod: ModDef | null = null;
+  cd = 0; lamp = 0; hurtT = 0; shake = 0; t = 0; over = false;
+  state: 'spawn' | 'clear' | 'pause' | 'cards' = 'pause';
+  pauseT = 1.0;
+  queue: EType[] = [];
+  spawnT = 0;
+  waveTotal = 1;
+  waveDone = 0;
+  current = 0;
+  flashCd = 4;
+  lightning = 0;
+  nextLightning = 6;
+  bolt: { x: number; y: number }[] = [];
+  cardOpts: Blessing[] = [];
+  rerolls: number;
+  revived = false;
+  frostT = 18; frozen = 0; frostWarned = false;
+  eruptT = 10;
+  tcd = { tA: 0, tR: 2, tN: 1 };
+  tAim = { tA: -2.4, tR: -0.7 };
+  slamT = 0;
+  // estadísticas de la partida
+  kills = 0; crits = 0; buys = 0; bosses = 0; flashes = 0; earned = 0; elites = 0; puffers = 0; cards = 0;
+  hpLost10 = 0;
+  seed: number;
+  daily: boolean;
+  private nid = 1;
+  private wr: () => number = Math.random; // azar de la oleada (sembrado)
+
+  constructor(
+    public save: Save,
+    public zone: Zone,
+    public emit: (e: GEvent, d?: number) => void = () => {},
+    public spawnR: () => number = () => 260,
+    opts: GameOpts = {},
+  ) {
+    this.daily = !!opts.daily;
+    this.seed = opts.seed ?? Math.floor(Math.random() * 1e9);
+    this.perm = this.daily ? {} : save.perm;
+    DEFS.forEach(d => (this.lv[d.id] = 0));
+    BLESSINGS.forEach(b => (this.bl[b.id] = 0));
+    if (this.perm.turret) this.lv.tA = 1;
+    this.rerolls = this.perm.reroll || 0;
+    this.st = this.stats();
+    this.hp = this.st.hp;
+    this.pearls = 20 + 25 * (this.perm.start || 0);
+  }
+
+  stats(lv: Record<string, number> = this.lv): Stats {
+    const Q = (k: string) => this.perm[k] || 0, B = this.bl;
+    const a = lv.arm * 0.04;
+    const dmg = (12 + 3.5 * lv.dmg) * (1 + 0.1 * Q('dmg'));
+    const tm = 1 + 0.4 * B.torretas;
+    const turret = (l: number, k: number) => (l > 0 ? dmg * k * (1 + 0.35 * (l - 1)) * tm : 0);
+    return {
+      dmg,
+      spd: (1.2 + 0.1 * lv.spd) * (1 + 0.05 * Q('spd')) * (1 + 0.2 * B.furia),
+      cc: Math.min(0.75, 0.02 + 0.02 * lv.cc + 0.02 * Q('pcrit')),
+      cf: 1.5 + 0.12 * lv.cf,
+      rng: Math.min(340, 200 + 12 * lv.rng) * (1 + 0.2 * B.gigante),
+      chain: Math.min(0.8, 0.07 * lv.chain + 0.2 * B.prisma),
+      twin: Math.min(0.7, 0.05 * Q('twin') + 0.2 * B.doble),
+      hp: (120 + 16 * lv.hp) * (1 + 0.1 * Q('hull')) * Math.max(0.5, 1 - 0.15 * B.avaricia),
+      rep: 0.3 * lv.rep + 0.3 * Q('prep'),
+      arm: Math.min(0.75, a / (1 + a) + 0.12 * B.coral),
+      bar: 10 * lv.bar + 15 * Q('pbar') + 30 * B.escudo,
+      thorn: 0.4 * lv.thorn,
+      vamp: 0.5 * lv.vamp + 1.5 * B.vampiro,
+      pk: (1 + 0.12 * lv.pk) * (1 + 0.1 * Q('pearl')) * (1 + 0.35 * B.avaricia),
+      pw: 3 * lv.pw * (1 + 0.1 * Q('pearl')),
+      int: Math.min(0.25, 0.02 * lv.int + 0.01 * Q('interest')),
+      ck: (1 + 0.15 * lv.ck) * (1 + 0.1 * Q('coral')),
+      cw: 0.3 * lv.cw * (1 + 0.1 * Q('coral')),
+      fcd: 25 * Math.pow(0.92, Q('flash')) * Math.max(0.5, 1 - 0.06 * lv.fcd),
+      tA: turret(lv.tA, 1.1), tR: turret(lv.tR, 0.35), tN: turret(lv.tN, 0.7),
+    };
+  }
+
+  private refresh() {
+    const old = this.st.hp;
+    this.st = this.stats();
+    if (this.st.hp > old) this.hp += this.st.hp - old;
+    this.hp = Math.min(this.hp, this.st.hp);
+  }
+
+  get flashMax() { return this.st.fcd; }
+  get range() {
+    return this.st.rng * (this.mod?.id === 'niebla' ? 0.65 : 1) * (this.zone.mech === 'dark' ? 0.85 : 1);
+  }
+
+  cost(id: string) {
+    const d = DEFS.find(x => x.id === id)!;
+    return Math.ceil(d.base * Math.pow(d.tab === 3 ? 1.6 : 1.3, this.lv[id]));
+  }
+
+  preview(id: string) { return this.stats({ ...this.lv, [id]: this.lv[id] + 1 }); }
+
+  buy(id: string) {
+    if (this.over || this.state === 'cards') return false;
+    const c = this.cost(id);
+    if (this.pearls < c) return false;
+    this.pearls -= c;
+    this.lv[id]++;
+    this.refresh();
+    this.flashCd = Math.min(this.flashCd, this.st.fcd);
+    this.buys++;
+    this.emit('buy');
+    return true;
+  }
+
+  get allTurrets() { return this.lv.tA > 0 && this.lv.tR > 0 && this.lv.tN > 0; }
+
+  cycleAim() {
+    const i = AIMS.findIndex(a => a.id === this.aim);
+    this.aim = AIMS[(i + 1) % AIMS.length].id;
+  }
+
+  /* ---------- Cartas ---------- */
+  private dealCards() {
+    const r = mulberry(this.seed * 7 + this.wave * 13 + (this.perm.reroll || 0) * 0 + this.rerollCount * 101);
+    const n = this.perm.cards ? 4 : 3;
+    const pool = BLESSINGS.filter(b => this.bl[b.id] < b.max);
+    const out: Blessing[] = [];
+    while (out.length < n && pool.length) out.push(pool.splice(Math.floor(r() * pool.length), 1)[0]);
+    this.cardOpts = out;
+  }
+  private rerollCount = 0;
+
+  reroll() {
+    if (this.state !== 'cards' || this.rerolls <= 0) return false;
+    this.rerolls--;
+    this.rerollCount++;
+    this.dealCards();
+    return true;
+  }
+
+  pickCard(id: string) {
+    if (this.state !== 'cards') return;
+    const b = BLESSINGS.find(x => x.id === id);
+    if (!b) return;
+    this.bl[id]++;
+    this.cards++;
+    if (id === 'cofre') {
+      const p = 40 + this.wave * 14;
+      this.pearls += p;
+      this.text(0, -95, '+' + p + ' perlas', '#8fe9ff', true, 1.4);
+    }
+    this.refresh();
+    if (id === 'escudo') this.shield = this.st.bar;
+    this.cardOpts = [];
+    this.state = 'pause';
+    this.pauseT = 0.8;
+  }
+
+  useFlash() {
+    if (this.over || this.flashCd > 0 || this.state === 'cards') return false;
+    this.flashCd = this.st.fcd;
+    this.flashes++;
+    this.frozen = 0;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const d = Math.hypot(e.x, e.y);
+      if (d > 240) continue;
+      this.damage(e, this.st.dmg * 4 * (e.type === 'boss' ? 0.4 : 1), true);
+      e.stun = e.type === 'boss' ? 0.6 : 1.6;
+      if (d > 1 && e.type !== 'boss') { e.x += (e.x / d) * 28; e.y += (e.y / d) * 28; }
+    }
+    this.fx.push({ kind: 'nova', x: 0, y: 0, vx: 0, vy: 0, t: 0.6, max: 0.6, c: '#fff3b0' });
+    this.shake = Math.max(this.shake, 0.18);
+    this.emit('flash');
+    return true;
+  }
+
+  abandon() { if (!this.over) { this.revived = true; this.gameOver(); } }
+
+  /* ---------- Oleadas ---------- */
+  private startWave() {
+    const w = this.wave, boss = w % 10 === 0;
+    this.wr = mulberry(this.seed + w * 7919);
+    const R = this.wr;
+    this.mod = null;
+    if (!boss && w >= 6 && (w >= 15 || R() < 0.45)) {
+      const pool = MODS.filter(m => (!m.good || R() < 0.35) && (w >= 11 || m.id !== 'marea'));
+      this.mod = pool[Math.floor(R() * pool.length)];
+    }
+    let n = Math.floor(5 + w * 1.5);
+    if (this.mod?.id === 'marea') n = Math.floor(n * 1.4);
+    const q: EType[] = [];
+    if (boss) { q.push('boss'); for (let i = 0; i < Math.floor(n / 3); i++) q.push(this.pick()); }
+    else for (let i = 0; i < n; i++) q.push(this.pick());
+    this.current = R() * Math.PI * 2;
+    this.queue = q;
+    this.waveTotal = q.reduce((s, t) => s + (t === 'sardine' ? 4 : 1), 0);
+    this.waveDone = 0;
+    this.spawnT = 0.4;
+    this.state = 'spawn';
+    this.shield = this.st.bar;
+    this.emit(boss ? 'boss' : 'wave', w);
+  }
+
+  private pick(): EType {
+    const opts = TABLE.filter(r => this.wave >= r[1]);
+    let r = this.wr() * opts.reduce((s, o) => s + o[2], 0);
+    for (const o of opts) { r -= o[2]; if (r <= 0) return o[0]; }
+    return 'crab';
+  }
+
+  private scale() {
+    const w = this.wave;
+    let hs = Math.pow(1.075, w - 1) * Math.pow(1.065, Math.max(0, w - 10)) * Math.pow(1.03, Math.max(0, w - 20)) * this.zone.hp;
+    if (this.mod?.id === 'caparazon') hs *= 1.35;
+    return { hs, ds: Math.pow(1.05, w - 1) * this.zone.dmg };
+  }
+
+  private make(type: EType, x: number, y: number, elite = false): Enemy {
+    const p = P[type], { hs, ds } = this.scale(), w = this.wave;
+    const hpMul = type === 'boss' ? Math.pow(1.15, w) * this.zone.hp : hs;
+    const em = elite ? 3 : 1;
+    const e: Enemy = {
+      id: this.nid++, x, y, type, hp: p.hp * hpMul * em, max: p.hp * hpMul * em,
+      spd: p.spd * (this.mod?.id === 'frenesi' ? 1.3 : 1) * (0.92 + Math.random() * 0.16),
+      r: p.r * (elite ? 1.3 : 1), dmg: p.dmg * ds * (elite ? 1.5 : 1), rew: p.rew * (elite ? 3 : 1),
+      stop: p.stop, atkRate: p.atk, atk: Math.random() * 0.5, armor: p.armor * (1 + w * 0.12),
+      dead: false, wob: Math.random() * 6, stun: 0, hitT: 0, elite, age: 0, summonT: 5, enraged: false, wakeT: 0,
+      slowT: 0, burn: 0, burnT: 0,
+    };
+    this.enemies.push(e);
+    return e;
+  }
+
+  private spawn(type: EType) {
+    const R = this.spawnR();
+    const a = this.mod?.id === 'corriente' ? this.current + (this.wr() - 0.5) * 1.4 : this.wr() * Math.PI * 2;
+    const x = Math.cos(a) * R, y = Math.sin(a) * R;
+    if (type === 'sardine') {
+      for (let i = 0; i < 4; i++) this.make('sardine', x + (Math.random() - 0.5) * 30, y + (Math.random() - 0.5) * 30);
+      return;
+    }
+    const elite = type !== 'boss' && this.wave >= 12 && this.wr() < 0.06 + (this.wave - 12) * 0.004;
+    if (elite) this.emit('elite');
+    this.make(type, x, y, elite);
+  }
+
+  private burst(x: number, y: number, c: string, n: number, sp = 90) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, v = sp * (0.4 + Math.random());
+      this.fx.push({ kind: 'p', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0.55, max: 0.55, c });
+    }
+  }
+
+  private text(x: number, y: number, s: string, c: string, big = false, t = 0.8) {
+    this.texts.push({ x, y, s, c, t, max: t, big });
+  }
+
+  /** Aplica daño teniendo en cuenta la coraza del ermitaño. */
+  private damage(e: Enemy, d: number, pierce = false) {
+    if (e.dead) return 0;
+    const dealt = pierce || !e.armor ? d : Math.max(d * 0.15, d - e.armor);
+    e.hp -= dealt;
+    e.hitT = 0.12;
+    if (this.bl.verdugo && e.type !== 'boss' && e.hp > 0 && e.hp < e.max * 0.12) {
+      e.hp = 0;
+      this.text(e.x, e.y - 14, '💀', '#fff', false, 0.6);
+    }
+    if (e.hp <= 0) this.kill(e);
+    return dealt;
+  }
+
+  private kill(e: Enemy, reward = true) {
+    if (e.dead) return;
+    e.dead = true;
+    this.waveDone++;
+    if (!reward) return;
+    this.kills++;
+    if (e.elite) this.elites++;
+    if (e.type === 'puffer') this.puffers++;
+    let pr = Math.max(1, Math.round(e.rew * this.st.pk * (1 + 0.06 * (this.wave - 1))));
+    if (this.mod?.id === 'tregua') pr = Math.round(pr * 1.6);
+    this.pearls += pr;
+    this.coral += 0.03 * e.rew * this.st.ck * this.zone.reward;
+    if (this.st.vamp > 0) this.hp = Math.min(this.st.hp, this.hp + this.st.vamp);
+    if (this.bl.voraz) this.flashCd = Math.max(0, this.flashCd - 0.25 * this.bl.voraz);
+    this.text(e.x, e.y, '+' + pr, '#8fe9ff');
+    this.burst(e.x, e.y, COLORS[e.type], e.type === 'boss' ? 46 : e.elite ? 20 : 9, e.type === 'boss' ? 170 : 90);
+    this.fx.push({ kind: 'splash', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#bfe8ff', r: e.r });
+    if (e.type === 'jelly' && this.wave >= 6) {
+      for (let i = 0; i < 2; i++) { this.make('mini', e.x + (i ? 8 : -8), e.y); this.waveTotal++; }
+    }
+    if (e.type === 'boss') {
+      this.bosses++;
+      this.shake = 0.6;
+      this.fx.push({ kind: 'ring', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.9, max: 0.9, c: '#ffd27a' });
+      this.emit('bossdown');
+    } else this.emit('kill');
+  }
+
+  private hurt(d: number, attacker?: Enemy) {
+    d *= 1 - this.st.arm;
+    if (this.shield > 0) { const a = Math.min(this.shield, d); this.shield -= a; d -= a; }
+    if (d > 0) {
+      this.hp -= d;
+      if (this.wave <= 10) this.hpLost10 += d;
+      this.hurtT = Math.min(0.5, 0.25 + d * 0.01);
+      this.shake = Math.min(0.5, this.shake + 0.08 + d * 0.006);
+      this.emit('hurt');
+    }
+    if (attacker && this.st.thorn > 0 && !attacker.dead) {
+      this.damage(attacker, this.st.dmg * this.st.thorn, true);
+      this.burst(attacker.x, attacker.y, '#7dd3fc', 3, 50);
+    }
+    if (this.hp <= 0 && !this.over) {
+      if (this.perm.revive && !this.revived) {
+        this.revived = true;
+        this.hp = this.st.hp * 0.4;
+        for (const e of this.enemies) { e.stun = 2; const dd = Math.hypot(e.x, e.y) || 1; if (e.type !== 'boss') { e.x += (e.x / dd) * 40; e.y += (e.y / dd) * 40; } }
+        this.fx.push({ kind: 'nova', x: 0, y: 0, vx: 0, vy: 0, t: 0.9, max: 0.9, c: '#ffb35c' });
+        this.text(0, -100, '¡SEGUNDA LLAMA!', '#ffb35c', true, 1.6);
+        this.emit('revive');
+      } else this.gameOver();
+    }
+  }
+
+  private gameOver() {
+    this.over = true;
+    this.hp = Math.max(0, this.hp);
+    this.earned = Math.floor(this.coral + this.wave * 1.5 * this.zone.reward);
+    this.emit('over');
+  }
+
+  get score() { return this.wave * 1000 + this.kills; }
+
+  private threat(e: Enemy) {
+    return (e.type === 'puffer' ? 60 : e.type === 'boss' ? 45 : e.type === 'eel' ? 35 : 0) + (e.elite ? 25 : 0);
+  }
+
+  private target(): Enemy | null {
+    const R = this.range;
+    let best: Enemy | null = null, bs = -Infinity;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const d = Math.hypot(e.x, e.y);
+      if (d > R + e.r) continue;
+      const s = this.aim === 'cerca' ? -d
+        : this.aim === 'fuerte' ? e.hp
+        : this.aim === 'debil' ? -e.hp
+        : this.threat(e) + (400 - d) / 8;
+      if (s > bs) { bs = s; best = e; }
+    }
+    return best;
+  }
+
+  private nearestTo(x: number, y: number, maxD: number, not?: Enemy) {
+    let b: Enemy | null = null, bd = maxD * maxD;
+    for (const e of this.enemies) {
+      if (e.dead || e === not) continue;
+      const d = (e.x - x) ** 2 + (e.y - y) ** 2;
+      if (d < bd) { bd = d; b = e; }
+    }
+    return b;
+  }
+
+  private makeLightning(tx: number, ty: number) {
+    const pts: { x: number; y: number }[] = [];
+    const x = tx + (Math.random() - 0.5) * 200, y = -340;
+    for (let i = 0; i <= 12; i++) {
+      const k = i / 12;
+      pts.push({ x: x + (tx - x) * k + (Math.random() - 0.5) * 40 * (1 - k), y: y + (ty - y) * k });
+    }
+    this.bolt = pts;
+  }
+
+  /* ---------- Torretas ---------- */
+  private turrets(dt: number) {
+    const st = this.st;
+    // Arponero: al de más vida a su alcance
+    if (st.tA > 0) {
+      this.tcd.tA -= dt;
+      const p = TURRET_POS.tA;
+      let best: Enemy | null = null;
+      for (const e of this.enemies) if (!e.dead && Math.hypot(e.x - p.x, e.y - p.y) < 250 && (!best || e.hp > best.hp)) best = e;
+      if (best) {
+        this.tAim.tA = Math.atan2(best.y - p.y, best.x - p.x);
+        if (this.tcd.tA <= 0) {
+          this.tcd.tA = 1 / (0.6 * (1 + 0.08 * (this.lv.tA - 1)));
+          this.bolts.push({ x: p.x, y: p.y, px: p.x, py: p.y, t: best, d: st.tA, crit: false, bounce: true, kind: 'harpoon', speed: 380 });
+          this.emit('harpoon');
+        }
+      }
+    }
+    // Lanzarredes: al grupo más denso
+    if (st.tR > 0) {
+      this.tcd.tR -= dt;
+      if (this.tcd.tR <= 0) {
+        const R = 45 + 5 * (this.lv.tR - 1);
+        let best: Enemy | null = null, bn = 0;
+        for (const e of this.enemies) {
+          if (e.dead || Math.hypot(e.x, e.y) > 230) continue;
+          let n = 0;
+          for (const o of this.enemies) if (!o.dead && (o.x - e.x) ** 2 + (o.y - e.y) ** 2 < R * R) n++;
+          if (n > bn) { bn = n; best = e; }
+        }
+        if (best) {
+          this.tcd.tR = Math.max(2.2, 4 - 0.2 * (this.lv.tR - 1));
+          const p = TURRET_POS.tR;
+          this.tAim.tR = Math.atan2(best.y - p.y, best.x - p.x);
+          this.fx.push({ kind: 'net', x: best.x, y: best.y, vx: 0, vy: 0, t: 2.5, max: 2.5, c: '#e8d9b0', r: R });
+          for (const e of this.enemies) {
+            if (e.dead || (e.x - best.x) ** 2 + (e.y - best.y) ** 2 > R * R) continue;
+            e.slowT = 2.5 + 0.3 * (this.lv.tR - 1);
+            this.damage(e, st.tR, true);
+          }
+          this.emit('net');
+        } else this.tcd.tR = 0.5;
+      }
+    }
+    // Ancla: golpe en área alrededor de la isla
+    if (st.tN > 0) {
+      this.tcd.tN -= dt;
+      this.slamT = Math.max(0, this.slamT - dt);
+      const R = 80 + 6 * (this.lv.tN - 1);
+      if (this.tcd.tN <= 0 && this.enemies.some(e => !e.dead && Math.hypot(e.x, e.y) < R)) {
+        this.tcd.tN = Math.max(1.5, 3 - 0.15 * (this.lv.tN - 1));
+        this.slamT = 0.5;
+        this.fx.push({ kind: 'slam', x: 0, y: 10, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#c9a46a', r: R });
+        for (const e of this.enemies) if (!e.dead && Math.hypot(e.x, e.y) < R + e.r) this.damage(e, st.tN, true);
+        this.shake = Math.max(this.shake, 0.1);
+        this.emit('slam');
+      }
+    }
+  }
+
+  /* ---------- Mecánicas de zona ---------- */
+  private mechanics(dt: number) {
+    const m = this.zone.mech;
+    if (m === 'ice' && this.wave > 0) {
+      this.frozen = Math.max(0, this.frozen - dt);
+      this.frostT -= dt;
+      if (this.frostT <= 3 && !this.frostWarned) { this.frostWarned = true; this.emit('frostwarn'); }
+      if (this.frostT <= 0) {
+        this.frostT = 16 + Math.random() * 6;
+        this.frostWarned = false;
+        this.frozen = 4.5;
+        this.text(0, -100, '¡ESCARCHA!', '#bfe8ff', true, 1.2);
+        this.emit('frost');
+      }
+    }
+    if (m === 'lava' && this.wave > 0) {
+      this.eruptT -= dt;
+      if (this.eruptT <= 0) {
+        this.eruptT = 9 + Math.random() * 5;
+        const n = 2 + Math.floor(this.wave / 12);
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2, d = 70 + Math.random() * 150;
+          this.hazards.push({ x: Math.cos(a) * d, y: Math.sin(a) * d, t: 1.3, r: 42 });
+        }
+      }
+      for (const h of this.hazards) {
+        h.t -= dt;
+        if (h.t <= 0) {
+          this.fx.push({ kind: 'boom', x: h.x, y: h.y, vx: 0, vy: 0, t: 0.7, max: 0.7, c: '#ff8a3d', r: h.r * 1.6 });
+          this.burst(h.x, h.y, '#ff8a3d', 16, 150);
+          for (const e of this.enemies) {
+            if (e.dead || (e.x - h.x) ** 2 + (e.y - h.y) ** 2 > (h.r + e.r) ** 2) continue;
+            this.damage(e, this.st.dmg * 3 + (e.type === 'boss' ? 0 : e.max * 0.25), true);
+          }
+          this.hurt(this.st.hp * 0.02); // ceniza
+          this.emit('erupt');
+        }
+      }
+      this.hazards = this.hazards.filter(h => h.t > 0);
+    }
+  }
+
+  /* ---------- Bucle ---------- */
+  update(dt: number) {
+    if (this.over || this.state === 'cards') return;
+    const st = this.st;
+    this.t += dt;
+    this.hurtT = Math.max(0, this.hurtT - dt);
+    this.shake = Math.max(0, this.shake - dt * 1.4);
+    this.flashCd = Math.max(0, this.flashCd - dt);
+    this.lightning = Math.max(0, this.lightning - dt);
+    this.nextLightning -= dt;
+    if (this.nextLightning <= 0) {
+      this.lightning = 0.4;
+      this.nextLightning = this.bl.tormenta ? 3 + Math.random() * 4 : 7 + Math.random() * 11;
+      const alive = this.enemies.filter(e => !e.dead && Math.hypot(e.x, e.y) < 260);
+      if (this.bl.tormenta && alive.length) {
+        const hits = alive.sort(() => Math.random() - 0.5).slice(0, 2 + 2 * this.bl.tormenta);
+        this.makeLightning(hits[0].x, hits[0].y);
+        for (const e of hits) {
+          this.fx.push({ kind: 'strike', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.4, max: 0.4, c: '#dfe8ff', r: 30 });
+          this.damage(e, st.dmg * 6, true);
+        }
+      } else this.makeLightning((Math.random() - 0.5) * 260, (Math.random() - 0.5) * 200);
+      this.emit('thunder');
+    }
+    this.hp = Math.min(st.hp, this.hp + st.rep * dt);
+    if (this.bl.escudo && this.state !== 'pause') this.shield = Math.min(st.bar, this.shield + 3 * this.bl.escudo * dt);
+
+    // Oleadas
+    if (this.state === 'spawn') {
+      this.spawnT -= dt;
+      if (this.spawnT <= 0 && this.queue.length) {
+        this.spawn(this.queue.shift()!);
+        this.spawnT = Math.max(0.18, 0.95 - this.wave * 0.025);
+      }
+      if (!this.queue.length) this.state = 'clear';
+    } else if (this.state === 'clear') {
+      if (!this.enemies.some(e => !e.dead)) {
+        this.state = 'pause';
+        this.pauseT = 1.6;
+        let pw = Math.round(st.pw) + 3 + this.wave;
+        const it = Math.min(Math.floor(this.pearls * st.int), (6 + this.wave) * Math.max(1, this.lv.int + (this.perm.interest || 0)));
+        if (it > 0) pw += it;
+        this.pearls += pw;
+        this.text(0, -95, '+' + pw + ' perlas' + (it > 0 ? ' (+' + it + ' interés)' : ''), '#8fe9ff', true, 1.4);
+        this.coral += st.cw * this.zone.reward;
+        if (this.bl.marea) this.hp = Math.min(st.hp, this.hp + st.hp * 0.2 * this.bl.marea);
+        if (this.wave % 5 === 0) {
+          this.dealCards();
+          if (this.cardOpts.length) { this.state = 'cards'; this.emit('cards'); return; }
+        }
+      }
+    } else {
+      this.pauseT -= dt;
+      if (this.pauseT <= 0) { this.wave++; this.startWave(); }
+    }
+
+    this.mechanics(dt);
+    if (this.over) return;
+    this.turrets(dt);
+
+    // Apuntar y disparar desde la linterna
+    const tg = this.target();
+    if (tg) {
+      const want = Math.atan2(tg.y - LAMP_Y, tg.x);
+      const diff = Math.atan2(Math.sin(want - this.lamp), Math.cos(want - this.lamp));
+      this.lamp += diff * Math.min(1, dt * 18);
+    } else this.lamp += dt * 0.7;
+    this.cd -= dt * (this.frozen > 0 ? 0.45 : 1);
+    if (tg && this.cd <= 0) {
+      this.cd = Math.max(0, this.cd + 1 / st.spd);
+      const fire = (t: Enemy) => {
+        const crit = Math.random() < st.cc;
+        this.bolts.push({ x: 0, y: LAMP_Y, px: 0, py: LAMP_Y, t, d: st.dmg * (crit ? st.cf : 1), crit, bounce: false, kind: 'light', speed: 480 });
+      };
+      fire(tg);
+      if (st.twin > 0 && Math.random() < st.twin) fire(this.nearestTo(tg.x, tg.y, 160, tg) || tg);
+      this.emit('shot');
+    }
+
+    // Proyectiles del faro y arpones
+    for (const b of this.bolts) {
+      if (!b.t || b.t.dead) { b.t = this.nearestTo(b.x, b.y, 400); if (!b.t) { b.gone = true; continue; } }
+      const e = b.t, dx = e.x - b.x, dy = e.y - b.y, d = Math.hypot(dx, dy) || 1, s = b.speed * dt;
+      b.px = b.x; b.py = b.y;
+      if (d <= s + e.r * 0.6) {
+        b.gone = true;
+        const dealt = this.damage(e, b.d);
+        if (b.kind === 'harpoon') { this.burst(e.x, e.y, '#c9a46a', 5, 70); continue; }
+        this.burst(e.x, e.y, b.crit ? '#ffe27a' : '#fff6c8', b.crit ? 6 : 2, 60);
+        if (e.armor && dealt < b.d * 0.5) this.text(e.x, e.y - 12, 'coraza', '#e8c39e', false, 0.5);
+        if (this.bl.fuego && !e.dead) { e.burn = Math.max(e.burn, (dealt * 0.4 * this.bl.fuego) / 2); e.burnT = 2; }
+        if (b.crit) {
+          this.crits++;
+          if (this.bl.hielo) e.slowT = Math.max(e.slowT, 1.5);
+          this.text(e.x, e.y - 10, Math.round(dealt) + '!', '#ffe27a', true, 0.7);
+          this.emit('crit');
+        }
+        if (!b.bounce && Math.random() < st.chain) {
+          const n = this.nearestTo(e.x, e.y, 110, e);
+          if (n) this.bolts.push({ x: e.x, y: e.y, px: e.x, py: e.y, t: n, d: b.d * 0.6, crit: false, bounce: true, kind: 'light', speed: 480 });
+        }
+      } else { b.x += (dx / d) * s; b.y += (dy / d) * s; }
+    }
+    this.bolts = this.bolts.filter(b => !b.gone);
+
+    // Disparos enemigos (anguilas)
+    for (const s of this.eshots) {
+      const d = Math.hypot(s.x, s.y), v = 170 * dt;
+      if (d <= v + 30) { s.gone = true; this.hurt(s.d); this.burst(s.x, s.y, s.c, 5, 50); if (this.over) return; }
+      else { s.x -= (s.x / d) * v; s.y -= (s.y / d) * v; }
+    }
+    this.eshots = this.eshots.filter(s => !s.gone);
+
+    // Criaturas
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      e.age += dt;
+      e.hitT = Math.max(0, e.hitT - dt);
+      e.slowT = Math.max(0, e.slowT - dt);
+      if (e.burnT > 0) {
+        e.burnT -= dt;
+        this.damage(e, e.burn * dt, true);
+        if (Math.random() < dt * 8) this.fx.push({ kind: 'p', x: e.x + (Math.random() - 0.5) * e.r, y: e.y, vx: 0, vy: -30, t: 0.4, max: 0.4, c: '#ff9a3d' });
+        if (e.dead) continue;
+      }
+      if (e.stun > 0) { e.stun -= dt; continue; }
+      if (e.type === 'boss') {
+        e.summonT -= dt;
+        if (e.summonT <= 0) {
+          e.summonT = e.enraged ? 3.5 : 6;
+          for (let i = 0; i < 3; i++) {
+            const a = Math.random() * Math.PI * 2;
+            this.make(this.zone.minion as EType, e.x + Math.cos(a) * 30, e.y + Math.sin(a) * 30);
+            this.waveTotal++;
+          }
+          this.fx.push({ kind: 'ring', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.5, max: 0.5, c: this.zone.tint });
+        }
+        if (!e.enraged && e.age > BOSS_ENRAGE) {
+          e.enraged = true; e.dmg *= 1.6; e.atkRate *= 0.6; e.spd *= 1.5;
+          this.text(e.x, e.y - 40, '¡FURIA!', '#ff5c7a', true, 1.4);
+          this.emit('enrage');
+        }
+      }
+      const d = Math.hypot(e.x, e.y);
+      e.wakeT -= dt;
+      if (d > e.stop) {
+        const s = e.spd * dt * (e.slowT > 0 ? 0.5 : 1) * (e.type === 'sardine' ? 1 + 0.25 * Math.sin(e.age * 6 + e.wob) : 1);
+        e.x -= (e.x / d) * s;
+        e.y -= (e.y / d) * s;
+        if (e.wakeT <= 0) {
+          e.wakeT = e.type === 'sardine' || e.type === 'mini' ? 0.6 : 0.35;
+          this.fx.push({ kind: 'wake', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.9, max: 0.9, c: '', r: e.r });
+        }
+      } else if (e.type === 'puffer') {
+        this.fx.push({ kind: 'boom', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#ffd166', r: 50 });
+        this.burst(e.x, e.y, '#ffd166', 18, 140);
+        this.kill(e, false);
+        this.emit('boom');
+        this.hurt(e.dmg);
+        if (this.over) return;
+      } else {
+        e.atk -= dt * (e.slowT > 0 ? 0.6 : 1);
+        if (e.atk <= 0) {
+          e.atk = e.atkRate;
+          if (e.type === 'eel') {
+            this.eshots.push({ x: e.x, y: e.y, d: e.dmg, c: '#4ade80' });
+          } else if (e.type === 'boss') {
+            this.fx.push({ kind: 'ring', x: 0, y: 0, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#ff5ca8' });
+            this.hurt(e.dmg, e);
+          } else this.hurt(e.dmg, e);
+          if (this.over) return;
+        }
+      }
+    }
+    this.enemies = this.enemies.filter(e => !e.dead);
+
+    for (const f of this.fx) {
+      f.t -= dt;
+      if (f.kind === 'p') { f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.94; f.vy *= 0.94; }
+    }
+    this.fx = this.fx.filter(f => f.t > 0);
+    for (const t of this.texts) { t.t -= dt; t.y -= 20 * dt; }
+    this.texts = this.texts.filter(t => t.t > 0);
+  }
+
+  get boss() { return this.enemies.find(e => e.type === 'boss') || null; }
+  get waveProgress() { return this.state === 'pause' || this.state === 'cards' ? 1 : Math.min(1, this.waveDone / Math.max(1, this.waveTotal)); }
+}
