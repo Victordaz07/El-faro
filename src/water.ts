@@ -6,98 +6,165 @@ import type { Zone } from './data';
 const VERT = `attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }`;
 
 const FRAG = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
 precision mediump float;
+#endif
 uniform vec2 uRes;      // resolución en píxeles
 uniform float uT;       // tiempo
 uniform vec2 uC;        // centro del mundo en píxeles
 uniform float uS;       // píxeles por unidad de mundo
 uniform vec3 uDeep, uShal, uTint;
 uniform float uLamp, uLampOn, uFlash, uIce, uLava;
+uniform float uQ;       // calidad: 0 baja (sin detalle fino), 1 media, 2 alta
 
-float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-float n(vec2 p){
+// Hash sin seno: estable también en GPUs de celular (el seno con números grandes se ve en bloques)
+float hash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float noise(vec2 p){
   vec2 i = floor(p), f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y);
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
 }
+// Octavas rotadas: sin cuadrícula visible
 float fbm(vec2 p){
+  mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
   float a = 0.5, s = 0.0;
-  for (int i = 0; i < 4; i++) { s += a * n(p); p = p * 2.03 + 7.1; a *= 0.5; }
+  for (int i = 0; i < 5; i++) { s += a * noise(p); p = m * p; a *= 0.5; }
   return s;
 }
-float height(vec2 q){
-  return fbm(q + vec2(uT * 0.05, uT * 0.03)) + 0.5 * fbm(q * 2.3 - vec2(uT * 0.08, -uT * 0.05));
+
+float fbm3(vec2 p){
+  mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+  float a = 0.5, s = 0.0;
+  for (int i = 0; i < 3; i++) { s += a * noise(p); p = m * p; a *= 0.5; }
+  return s;
 }
-// Cáusticas: patrón iterativo clásico de luz bajo el agua
-float caustic(vec2 p){
-  vec2 i = p;
-  float c = 1.0, inten = 0.005, t = uT * 0.35 + 23.0;
-  for (int k = 0; k < 4; k++) {
-    float tt = t * (1.0 - (3.5 / float(k + 1)));
-    i = p + vec2(cos(tt - i.x) + sin(tt + i.y), sin(tt - i.y) + cos(tt + i.x));
-    c += 1.0 / length(vec2(p.x / (sin(i.x + tt) / inten), p.y / (cos(i.y + tt) / inten)));
+
+// Oleaje: suma de olas direccionales con crestas afiladas (exp(sin)), con su pendiente exacta.
+// Devuelve (altura, pendiente x, pendiente y). p en unidades del juego.
+vec3 swell(vec2 p, float t){
+  float hgt = 0.0; vec2 g = vec2(0.0);
+  float wl = 230.0, amp = 1.0, dir = 0.55;
+  for (int i = 0; i < 7; i++) {
+    vec2 d = vec2(cos(dir), sin(dir));
+    float k = 6.28318 / wl;
+    float x = dot(d, p) * k - t * sqrt(9.8 * k) * 9.0;
+    float e = exp(sin(x) - 1.0);
+    hgt += amp * e;
+    g += amp * e * cos(x) * k * d;
+    wl *= 0.66; amp *= 0.62; dir += 1.05 + 0.4 * float(i); // cada ola en otra dirección
   }
-  c /= 4.0;
-  c = 1.17 - pow(c, 1.4);
-  return pow(abs(c), 8.0);
+  return vec3(hgt, g);
 }
+
 void main(){
   vec2 frag = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
   vec2 w = (frag - uC) / uS;
+  // La cámara mira inclinada: el oleaje se ve algo más corto en vertical
+  vec2 pw = vec2(w.x, w.y * 1.3);
+  float t = uT;
+
+  // Deformación lenta para que el patrón nunca se repita
+  vec2 warp = vec2(fbm3(pw * 0.004 + vec2(t * 0.02, 0.0)), fbm3(pw * 0.004 + vec2(5.2, -t * 0.017))) - 0.5;
+  vec2 pp = pw + warp * 60.0;
+
+  vec3 sw = swell(pp, t);
+  // Rizos que viajan con el viento (sin detalle más fino que un píxel, para que no parpadee)
+  vec2 grad = sw.yz * 15.0;
+  if (uQ > 0.5) {
+    vec2 rp = pp * 0.035 + vec2(t * 0.25, t * 0.14);
+    float rz = fbm3(rp), rzx = fbm3(rp + vec2(0.1, 0.0)), rzy = fbm3(rp + vec2(0.0, 0.1));
+    grad += vec2(rz - rzx, rz - rzy) * 1.1 * clamp(uS * 0.6, 0.3, 1.0);
+  }
+  vec3 N = normalize(vec3(-grad.x, -grad.y, 1.0));
+
   float r = length(w);
+  // Orilla: elipse de la isla (centro un poco abajo, achatada por la cámara)
+  float re = length(vec2(w.x, (w.y - 3.0) / 0.62));
+  float depth = smoothstep(42.0, 230.0, re);
 
-  // Relieve de las olas -> normal
-  vec2 q = w * 0.018;
-  float e = 0.03;
-  float h0 = height(q), hx = height(q + vec2(e, 0.0)), hy = height(q + vec2(0.0, e));
-  vec3 nrm = normalize(vec3((h0 - hx) * 7.0, (h0 - hy) * 7.0, 1.0));
+  // Color del agua: turquesa cerca de la isla, oscuro mar adentro
+  vec3 body = mix(uShal * 1.05, uDeep, depth);
+  // Luz que atraviesa las crestas
+  float crest = clamp(sw.x / 2.2, 0.0, 1.0);
+  body += uShal * crest * crest * 0.35;
 
-  // Color base: más claro cerca de la isla
-  float depth = smoothstep(45.0, 210.0, r);
-  vec3 col = mix(uShal, uDeep, depth);
+  // Reflejo del cielo nocturno (Fresnel): más reflejo en las caras que miran lejos de la cámara
+  vec3 V = normalize(vec3(0.0, 0.55, 0.84));
+  float fres = 0.02 + 0.98 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+  vec3 R = reflect(-V, N);
+  vec3 sky = mix(uDeep * 1.6 + 0.03, uShal * 1.2 + vec3(0.05, 0.07, 0.1), clamp(R.z * 0.9 + 0.2, 0.0, 1.0));
+  vec3 col = mix(body, sky, clamp(fres, 0.0, 0.75));
+  // Relieve: las caras que miran a la luna se aclaran, las de atrás se oscurecen
+  vec3 Lm = normalize(vec3(-0.45, -0.75, 0.5));
+  col *= 0.62 + 0.55 * clamp(dot(N, normalize(vec3(Lm.xy, 0.9))), 0.0, 1.0);
+  // Valles más oscuros, crestas más claras
+  col *= 0.8 + 0.32 * clamp(sw.x / 2.0, 0.0, 1.0);
 
-  // Luz difusa de la luna y brillos
-  float dif = dot(nrm, normalize(vec3(-0.35, -0.55, 1.0)));
-  col *= 0.72 + 0.38 * dif;
-  col += pow(max(0.0, dif), 80.0) * 0.25;
+  // Luna: brillo intenso en las crestas y uno suave más amplio
+  float rl = max(dot(R, Lm), 0.0);
+  // Camino de luna: los destellos se juntan en una franja hacia la luna (arriba a la izquierda)
+  vec2 md = normalize(vec2(-0.45, -0.75));
+  float across = dot(w, vec2(-md.y, md.x)), along = dot(w, md);
+  float path = exp(-pow(across / (90.0 + max(along, 0.0) * 0.35), 2.0)) * smoothstep(-120.0, 60.0, along);
+  col += vec3(0.85, 0.92, 1.0) * (pow(rl, 120.0) * (0.25 + 1.3 * path) + pow(rl, 12.0) * 0.06 * (0.4 + path));
 
-  // Cáusticas, más fuertes en lo poco profundo
-  float ca = clamp(caustic(w * 0.085 + vec2(40.0)), 0.0, 1.0);
-  col += uTint * ca * (0.05 + 0.22 * (1.0 - depth));
+  // Sombras de nubes, grandes y lentas
+  float cl = fbm3(w * 0.0035 + vec2(t * 0.01, t * 0.006));
+  col *= mix(0.78, 1.05, smoothstep(0.3, 0.7, cl));
 
-  // Sombras de nubes
-  float cl = fbm(w * 0.0045 + vec2(uT * 0.012, uT * 0.007));
-  col *= mix(0.7, 1.06, smoothstep(0.32, 0.72, cl));
+  // Fondo claro y ondulado cerca de la orilla (no cáusticas en bloques)
+  float sh = 1.0 - smoothstep(48.0, 110.0, re);
+  if (sh > 0.0) {
+    float v = fbm3(w * 0.04 + vec2(t * 0.15, -t * 0.1) + warp * 2.0);
+    float rid = pow(1.0 - abs(v * 2.0 - 1.0), 7.0);
+    col += uTint * rid * 0.16 * sh;
+  }
+
+  // Espuma en las crestas más altas, en jirones
+  float whitecap = smoothstep(1.35, 1.9, sw.x) * smoothstep(0.42, 0.72, fbm3(pp * 0.035 + t * 0.12));
+  col = mix(col, vec3(0.85, 0.93, 1.0), whitecap * 0.55);
+  // Vetas de espuma que arrastra el viento
+  vec2 wd = vec2(cos(0.55), sin(0.55));
+  vec2 sp = vec2(dot(pp, wd) * 0.012, dot(pp, vec2(-wd.y, wd.x)) * 0.06) + vec2(t * 0.05, 0.0);
+  float streak = smoothstep(0.62, 0.8, fbm3(sp + warp));
+  col += vec3(0.6, 0.72, 0.82) * streak * 0.07;
 
   // Haz del faro reflejado en el agua
-  vec2 d = w - vec2(0.0, -52.0);
+  vec2 d = w - vec2(0.0, -48.0);
   float ang = atan(d.y, d.x);
   float da = abs(mod(ang - uLamp + 3.14159, 6.28318) - 3.14159);
   float len = length(d);
-  float cone = smoothstep(0.2, 0.0, da) * smoothstep(340.0, 30.0, len) * uLampOn;
-  float spec = pow(max(0.0, nrm.x * cos(uLamp) + nrm.y * sin(uLamp) + 0.25), 5.0);
-  col += vec3(1.0, 0.92, 0.7) * cone * (0.18 + spec * 1.1);
+  float cone = smoothstep(0.22, 0.0, da) * smoothstep(340.0, 30.0, len) * uLampOn;
+  float spec = pow(max(0.0, N.x * cos(uLamp) + N.y * sin(uLamp) + 0.2), 6.0);
+  col += vec3(1.0, 0.9, 0.68) * cone * (0.1 + spec * 1.4);
 
   // Hielo flotando
   if (uIce > 0.0) {
-    float fl = smoothstep(0.6, 0.64, fbm(w * 0.012 + vec2(uT * 0.004, 0.0)));
-    float edge = smoothstep(0.58, 0.6, fbm(w * 0.012 + vec2(uT * 0.004, 0.0))) - fl;
-    col = mix(col, vec3(0.78, 0.88, 0.96) * (0.8 + 0.2 * dif), fl * 0.75 * uIce);
-    col += edge * 0.25 * uIce;
+    float f0 = fbm(w * 0.018 + vec2(t * 0.004, 0.0));
+    float fl = smoothstep(0.66, 0.69, f0) * smoothstep(60.0, 90.0, re);
+    float edge = smoothstep(0.63, 0.66, f0) * smoothstep(60.0, 90.0, re) - fl;
+    vec3 ice = mix(vec3(0.58, 0.7, 0.8), vec3(0.82, 0.9, 0.97), fbm3(w * 0.03)) * (0.85 + 0.15 * N.z);
+    col = mix(col, ice, fl * 0.85 * uIce);
+    col += vec3(0.5, 0.65, 0.75) * edge * 0.35 * uIce;
   }
   // Grietas de lava bajo el agua
   if (uLava > 0.0) {
-    float v = fbm(w * 0.01 + vec2(0.0, uT * 0.01));
-    float crack = pow(1.0 - abs(v * 2.0 - 1.0), 40.0);
-    col += vec3(1.0, 0.35, 0.06) * crack * (0.35 + 0.3 * sin(uT * 2.0 + v * 20.0)) * uLava;
+    float v = fbm3(w * 0.009 + vec2(0.0, t * 0.01));
+    float crack = pow(1.0 - abs(v * 2.0 - 1.0), 26.0) * smoothstep(0.4, 0.6, fbm3(w * 0.02 + vec2(t * 0.03, 3.0)));
+    col += vec3(1.0, 0.35, 0.06) * crack * (0.16 + 0.12 * sin(t * 2.0 + v * 20.0)) * uLava;
+    col += vec3(0.25, 0.06, 0.0) * smoothstep(0.55, 0.8, v) * 0.25 * uLava; // brasa difusa
   }
 
-  // Espuma alrededor de la isla
-  float a = atan(w.y, w.x);
-  float fr = 40.0 + 3.5 * sin(uT * 2.0 + a * 5.0) + 2.0 * sin(uT * 3.1 - a * 9.0);
-  float foam = smoothstep(9.0, 0.0, abs(r - fr)) * (0.45 + 0.55 * n(w * 0.25 + uT * 1.5));
-  foam += smoothstep(5.0, 0.0, abs(r - fr - 12.0 - 6.0 * fract(uT * 0.4))) * 0.35 * (1.0 - fract(uT * 0.4));
-  col = mix(col, vec3(0.92, 0.97, 1.0), clamp(foam, 0.0, 1.0) * 0.7);
+  // Espuma de la orilla: sigue el borde de la isla, rota por el ruido
+  float a = atan(w.y - 3.0, w.x);
+  float fr = 43.0 + 2.5 * sin(t * 1.7 + a * 5.0) + 1.5 * sin(t * 2.6 - a * 9.0);
+  float br = smoothstep(0.35, 0.65, fbm3(vec2(a * 6.0, t * 0.8)));
+  float foam = smoothstep(7.0, 0.0, abs(re - fr)) * (0.35 + 0.65 * br);
+  float ph = fract(t * 0.35);
+  foam += smoothstep(4.0, 0.0, abs(re - fr - 6.0 - 16.0 * ph)) * (1.0 - ph) * 0.45 * br;
+  col = mix(col, vec3(0.92, 0.97, 1.0), clamp(foam, 0.0, 1.0) * 0.65);
 
   col += uFlash * vec3(0.45, 0.5, 0.62);
   gl_FragColor = vec4(col, 1.0);
@@ -118,7 +185,7 @@ export class Water {
   private constructor(canvas: HTMLCanvasElement, gl: WebGLRenderingContext, prog: WebGLProgram) {
     this.canvas = canvas;
     this.gl = gl;
-    for (const k of ['uRes', 'uT', 'uC', 'uS', 'uDeep', 'uShal', 'uTint', 'uLamp', 'uLampOn', 'uFlash', 'uIce', 'uLava'])
+    for (const k of ['uRes', 'uT', 'uC', 'uS', 'uDeep', 'uShal', 'uTint', 'uLamp', 'uLampOn', 'uFlash', 'uIce', 'uLava', 'uQ'])
       this.u[k] = gl.getUniformLocation(prog, k);
   }
 
@@ -168,7 +235,7 @@ export class Water {
   }
 
   /** Dibuja el mar; cx, cy y s describen la cámara en píxeles CSS. */
-  render(w: number, h: number, res: number, z: Zone, t: number, cx: number, cy: number, s: number, lamp: number, lampOn: number, flash: number) {
+  render(w: number, h: number, res: number, z: Zone, t: number, cx: number, cy: number, s: number, lamp: number, lampOn: number, flash: number, q = 2) {
     const gl = this.gl, W = Math.max(1, Math.round(w * res)), H = Math.max(1, Math.round(h * res));
     if (this.canvas.width !== W || this.canvas.height !== H) { this.canvas.width = W; this.canvas.height = H; }
     gl.viewport(0, 0, W, H);
@@ -185,6 +252,7 @@ export class Water {
     gl.uniform1f(this.u.uFlash, flash);
     gl.uniform1f(this.u.uIce, z.mech === 'ice' ? 1 : 0);
     gl.uniform1f(this.u.uLava, z.mech === 'lava' ? 1 : 0);
+    gl.uniform1f(this.u.uQ, q);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return this.canvas;
   }

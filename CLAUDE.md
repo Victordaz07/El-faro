@@ -14,7 +14,7 @@ Idiomas del juego: **español e inglés** (`src/i18n.ts`). Comentarios del códi
 ## Estructura
 - `src/data.ts` — números de diseño: mejoras, torretas, investigación, bendiciones, zonas, misiones, logros. **El balance se toca aquí y en `scale()` de game.ts.**
 - `src/game.ts` — lógica pura sin DOM (se simula en Node). Todo lo de la partida vive aquí.
-- `src/water.ts` — mar con shader WebGL (olas, cáusticas, nubes, espuma, reflejo del haz, hielo, lava). Si no hay WebGL se usa el mar 2D.
+- `src/water.ts` — mar con shader WebGL: oleaje de 7 olas direccionales con crestas afiladas (`swell`) y deformación lenta para que no se repita, reflejo del cielo (Fresnel), camino de luna, espuma en crestas y orilla (elipse de la isla), vetas de viento, nubes, hielo y lava. Ruido con hash sin seno (el seno se ve en bloques en GPUs de celular) y sin detalle más fino que un píxel. Con poca potencia baja la resolución y quita los rizos (`uQ`), pero nunca se apaga; el mar 2D (líneas de oleaje, sin mosaico) es solo para equipos sin WebGL.
 - `src/render.ts` — canvas: faro 2.5D, criaturas (sprites cacheados), efectos, clima por zona e **iluminación** (lightmap a media resolución que se multiplica sobre la escena). Tiene calidad automática (`adaptQuality`).
 - `src/audio.ts` / `src/music.ts` — sonido y música generados con Web Audio (sin archivos con derechos).
 - `src/save.ts` — guardado local, misiones diarias, logros, desafío diario.

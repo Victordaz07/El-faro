@@ -12,7 +12,7 @@ export const camFocus = { x: 0, y: 0, z: 1 };
 export const view = { offY: 0 };
 
 /* Calidad automática: si el dispositivo no alcanza ~25 FPS se baja la resolución
-   del mar y de la luz; si aún así no alcanza, se usa el mar 2D. */
+   del mar y de la luz, y el mar pierde el detalle fino. El mar 2D solo se usa sin WebGL. */
 let quality = 2, lastNow = 0, slow = 0, ema = 1 / 60;
 function adaptQuality(now: number) {
   const dt = now - lastNow;
@@ -20,11 +20,11 @@ function adaptQuality(now: number) {
   if (dt <= 0 || dt > 0.5) return;
   ema = ema * 0.95 + dt * 0.05;
   slow = ema > 0.04 ? slow + dt : Math.max(0, slow - dt * 0.5);
-  if (slow > 3 && quality > 0) { quality--; slow = 0; ema = 1 / 60; if (quality === 0) water = null; }
+  if (slow > 3 && quality > 0) { quality--; slow = 0; ema = 1 / 60; }
 }
 /** Cámara del último cuadro (para convertir un toque en pantalla a coordenadas del juego). */
 export const lastCam = { x: 0, y: 0, s: 1 };
-export function setQuality(q: number) { quality = q; if (q === 0) water = null; }
+export function setQuality(q: number) { quality = q; }
 
 const TAU = Math.PI * 2;
 const SS = 3; // superresolución de sprites
@@ -55,29 +55,6 @@ function radial(c: CanvasRenderingContext2D, x: number, y: number, r: number, st
 const hash = (n: number) => { const s = Math.sin(n * 127.1) * 43758.5453; return s - Math.floor(s); };
 
 /* ---------- Agua ---------- */
-const waterCache = new Map<string, CanvasPattern>();
-function waterPattern(ctx: CanvasRenderingContext2D, zone: Zone) {
-  let p = waterCache.get(zone.id);
-  if (!p) {
-    const c = document.createElement('canvas');
-    c.width = c.height = 256;
-    const x = c.getContext('2d')!;
-    for (let i = 0; i < 70; i++) {
-      const px = hash(i) * 256, py = hash(i + 50) * 256, r = 8 + hash(i + 99) * 26;
-      for (const [ox, oy] of [[0, 0], [256, 0], [-256, 0], [0, 256], [0, -256]]) {
-        x.strokeStyle = `rgba(${zone.ring},${0.05 + hash(i + 7) * 0.08})`;
-        x.lineWidth = 1 + hash(i + 3) * 1.5;
-        x.beginPath();
-        x.ellipse(px + ox, py + oy, r, r * 0.45, hash(i + 11) * 3, 0, TAU);
-        x.stroke();
-      }
-    }
-    p = ctx.createPattern(c, 'repeat')!;
-    waterCache.set(zone.id, p);
-  }
-  return p;
-}
-
 /* ---------- Escena ---------- */
 export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, vw: number, vh: number, dpr: number, now: number) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -98,21 +75,27 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
   // Fondo y agua: shader en la GPU, o patrón 2D si no hay WebGL
   if (water === undefined) water = Water.create();
   if (water) {
-    const c = water.render(vw, vh, quality === 2 ? Math.min(1, dpr * 0.6) : 0.4, zone, now, cam.x, cam.y, cam.s, lampA, 1, g ? g.lightning : 0);
+    const c = water.render(vw, vh, quality === 2 ? Math.min(1, dpr * 0.6) : quality === 1 ? 0.45 : 0.3, zone, now, cam.x, cam.y, cam.s, lampA, 1, g ? g.lightning : 0, quality);
     ctx.drawImage(c, 0, 0, vw, vh);
   } else {
     ctx.fillStyle = radial(ctx, vw / 2, vh / 2, Math.max(vw, vh) * 0.8, [[0, zone.sky0], [1, zone.sky1]]);
     ctx.fillRect(0, 0, vw, vh);
-    const pat = waterPattern(ctx, zone);
-    for (const [sp, a, k] of [[14, 0.9, 1], [-9, 0.6, 1.6]] as const) {
-      ctx.save();
-      ctx.globalAlpha = a;
-      ctx.translate((now * sp) % 256, (now * sp * 0.6) % 256);
-      ctx.scale(k * sc, k * sc * 0.9);
-      ctx.fillStyle = pat;
-      ctx.fillRect(-512, -512, vw / sc + 1024, vh / sc + 1024);
-      ctx.restore();
+    // Sin WebGL: líneas de oleaje largas que avanzan con el viento (sin mosaico que se repita)
+    ctx.save();
+    ctx.translate(vw / 2, vh / 2);
+    ctx.rotate(0.55 + Math.PI / 2);
+    const span = Math.hypot(vw, vh);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 34; i++) {
+      const y0 = ((hash(i) * span * 1.4 + now * (8 + hash(i + 3) * 6)) % (span * 1.4)) - span * 0.7;
+      const len = 60 + hash(i + 5) * 160, x0 = (hash(i + 9) - 0.5) * span;
+      ctx.strokeStyle = `rgba(${zone.ring},${0.05 + hash(i + 7) * 0.07})`;
+      ctx.lineWidth = 1 + hash(i + 2) * 2;
+      ctx.beginPath();
+      for (let k = 0; k <= 12; k++) { const x = x0 - len / 2 + (len * k) / 12, y = y0 + Math.sin(k * 0.6 + now * 0.8 + i) * 3; k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+      ctx.stroke();
     }
+    ctx.restore();
   }
 
   ctx.save();
