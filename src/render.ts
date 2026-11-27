@@ -4,7 +4,7 @@ import type { Zone, SkinDef } from './data';
 import { MODE_RULES, COSTA, WEAPONS } from './data';
 import { L } from './i18n';
 import { Water } from './water';
-import { ready, sheetFor, Sheet, islaArt, faroArt, redArt, arponArt, turretArt, bossSheet, boatSheet, decoSheet, Still } from './art';
+import { ready, sheetFor, Sheet, islaArt, faroArt, redArt, arponArt, turretArt, bossSheet, boatSheet, decoSheet, costaPiece, weaponArt, Still } from './art';
 
 let water: Water | null | undefined;
 
@@ -1525,24 +1525,25 @@ const COSTA_DECO = [{ k: 'red', x: -128, y: 62, d: 3 }, { k: 'nasa', x: -66, y: 
 
 /** Tierra, cara de la muralla (hacia nosotros) y espuma en su base. Va antes que las criaturas. */
 function drawCostaBase(ctx: CanvasRenderingContext2D, g: Game, t: number, now: number) {
-  const X = 720;
+  const X = 720, wall = costaPiece('muralla');
   // Espuma del mar rompiendo contra la base norte de la muralla
   ctx.lineCap = 'round';
   for (let k = 0; k < 2; k++) {
     ctx.strokeStyle = `rgba(235,246,255,${0.5 - k * 0.22})`; ctx.lineWidth = 2.4 - k;
     ctx.setLineDash([22, 14 + k * 10]); ctx.lineDashOffset = -now * (8 + k * 5);
     ctx.beginPath();
-    for (let x = -X; x <= X; x += 12) { const y = -27 - k * 5 + Math.sin(x * 0.045 + now * 1.4 + k) * 1.8; x === -X ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+    for (let x = -X; x <= X; x += 12) { const y = (wall ? 2 : -27) - k * 5 + Math.sin(x * 0.045 + now * 1.4 + k) * 1.8; x === -X ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
     ctx.stroke();
   }
   ctx.setLineDash([]);
   // Tierra detrás
   const land = ctx.createLinearGradient(0, 10, 0, 240);
   land.addColorStop(0, '#6d7258'); land.addColorStop(0.4, '#5b6648'); land.addColorStop(1, '#46513a');
-  ctx.fillStyle = land; ctx.fillRect(-X, 30, X * 2, 600);
+  ctx.fillStyle = land; ctx.fillRect(-X, wall ? 18 : 30, X * 2, 600);
   // Camino de tierra a lo largo de la muralla
   ctx.fillStyle = 'rgba(176,158,112,.5)'; ctx.fillRect(-X, 40, X * 2, 14);
-  // Cara de la muralla (se ve desde atrás): sillares
+  // Cara de la muralla (se ve desde atrás): sillares (si hay modelo 3D, la dibuja drawCostaFront)
+  if (!wall) {
   const face = ctx.createLinearGradient(0, 8, 0, 34);
   face.addColorStop(0, '#6b717e'); face.addColorStop(1, '#4a505c');
   ctx.fillStyle = face; ctx.fillRect(-X, 8, X * 2, 26);
@@ -1554,9 +1555,11 @@ function drawCostaBase(ctx: CanvasRenderingContext2D, g: Game, t: number, now: n
   }
   // Contrafuertes bajo cada hueco
   for (const x of COSTA.slotX) { ctx.fillStyle = '#585e6b'; ctx.fillRect(x - 6, 8, 12, 28); ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(x - 6, 8, 3, 28); }
+  }
   // Sombra de la muralla sobre la tierra
-  const sh = ctx.createLinearGradient(0, 34, 0, 52); sh.addColorStop(0, 'rgba(0,8,20,.45)'); sh.addColorStop(1, 'rgba(0,8,20,0)');
-  ctx.fillStyle = sh; ctx.fillRect(-X, 34, X * 2, 18);
+  const sy0 = wall ? 24 : 34;
+  const sh = ctx.createLinearGradient(0, sy0, 0, sy0 + 18); sh.addColorStop(0, 'rgba(0,8,20,.45)'); sh.addColorStop(1, 'rgba(0,8,20,0)');
+  ctx.fillStyle = sh; ctx.fillRect(-X, sy0, X * 2, 18);
   // Adornos de la costa (sutiles)
   ctx.globalAlpha = 0.92;
   for (const d of COSTA_DECO) {
@@ -1574,6 +1577,23 @@ function drawCostaBase(ctx: CanvasRenderingContext2D, g: Game, t: number, now: n
 /** Pasillo de la muralla, parapeto, antorchas, huecos y armas. Va después de las criaturas (ellas quedan al otro lado). */
 function drawCostaFront(ctx: CanvasRenderingContext2D, g: Game, t: number, now: number) {
   const X = 720;
+  const wall = costaPiece('muralla'), torch = costaPiece('antorcha');
+  if (wall) {
+    // Tramos del modelo 3D repetidos a lo ancho (1 unidad = 64 px)
+    const k = wall.k, pitch = 64;
+    for (let x = -Math.ceil(X / pitch) * pitch; x <= X; x += pitch) ctx.drawImage(wall.img, x - wall.ox * k, 16 - wall.oy * k, wall.w * k, wall.h * k);
+    // Antorchas entre huecos
+    for (const sx of COSTA.slotX) for (const dx of [26, -26]) {
+      const x = sx + dx;
+      if (Math.abs(x) > 190 || x % 52 === 0) continue;
+      if (torch) ctx.drawImage(torch.img, x - torch.ox * torch.k, 2 - torch.oy * torch.k, torch.w * torch.k, torch.h * torch.k);
+      const f = 1 + 0.25 * Math.sin(now * 11 + x), ty = 2 - 18;
+      ctx.fillStyle = radial(ctx, x, ty, 7 * f, [[0, 'rgba(255,240,170,1)'], [0.5, 'rgba(255,150,50,.9)'], [1, 'rgba(255,90,20,0)']]);
+      ctx.beginPath(); ctx.arc(x, ty, 7 * f, 0, TAU); ctx.fill();
+    }
+    for (let i = 0; i < g.slots.length; i++) drawSlot(ctx, g, i, t, now);
+    return;
+  }
   // Parapeto (almenas) en el borde del mar
   ctx.fillStyle = '#7b8190'; ctx.fillRect(-X, -22, X * 2, 8);
   ctx.fillStyle = '#9097a6';
@@ -1602,11 +1622,18 @@ function drawCostaFront(ctx: CanvasRenderingContext2D, g: Game, t: number, now: 
 function drawSlot(ctx: CanvasRenderingContext2D, g: Game, i: number, t: number, now: number) {
   const s = g.slots[i], x = s.x, y = -3;
   const avail = g.slotAvail(i);
+  const dais = costaPiece('hueco');
   // Base de piedra
+  if (dais) {
+    ctx.globalAlpha = s.open ? 1 : 0.8;
+    ctx.drawImage(dais.img, x - dais.ox * dais.k, y + 4 - dais.oy * dais.k, dais.w * dais.k, dais.h * dais.k);
+    ctx.globalAlpha = 1;
+  } else {
   ctx.fillStyle = 'rgba(0,8,20,.3)'; ctx.beginPath(); ctx.ellipse(x + 1, y + 5, 19, 9, 0, 0, TAU); ctx.fill();
   ctx.fillStyle = s.open ? '#6b7280' : '#5d6370'; ctx.beginPath(); ctx.ellipse(x, y + 2, 18, 9.5, 0, 0, TAU); ctx.fill();
   ctx.fillStyle = s.open ? '#a7aebb' : '#7d8492'; ctx.beginPath(); ctx.ellipse(x, y, 15, 7.8, 0, 0, TAU); ctx.fill();
   ctx.strokeStyle = 'rgba(30,36,46,.5)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(x, y, 15, 7.8, 0, 0, TAU); ctx.stroke();
+  }
   if (s.open && s.w) { drawWeapon(ctx, s, x, y, t); return; }
   ctx.textAlign = 'center';
   if (avail) {
@@ -1627,6 +1654,17 @@ function drawSlot(ctx: CanvasRenderingContext2D, g: Game, i: number, t: number, 
 
 function drawWeapon(ctx: CanvasRenderingContext2D, s: Game['slots'][number], x: number, y: number, t: number) {
   const W = WEAPONS.find(w => w.id === s.w)!, k = 1 + 0.07 * (s.lv - 1), rec = s.fire > 0 ? s.fire / 0.22 : 0;
+  const art = weaponArt(s.w!);
+  if (art) {
+    const dir = Math.round((((s.aim % TAU) + TAU) % TAU) / (TAU / art.dirs)) % art.dirs;
+    const frame = s.fire > 0 ? Math.min(art.frames - 1, 1 + Math.floor((1 - s.fire / 0.22) * (art.frames - 1))) : 0;
+    const kk = art.k * k, w = art.px * kk, ox = x - art.ox * kk, oy = y - 3 - art.oy * kk;
+    ctx.fillStyle = 'rgba(0,10,25,.28)'; ctx.beginPath(); ctx.ellipse(x + 1, y + 3, 12 * k, 5 * k, 0, 0, TAU); ctx.fill();
+    ctx.drawImage(art.base, ox, oy, w, w);
+    ctx.drawImage(art.head, frame * art.px, dir * art.px, art.px, art.px, ox, oy, w, w);
+    for (let i = 0; i < s.lv; i++) { ctx.fillStyle = W.col; ctx.strokeStyle = 'rgba(0,10,20,.7)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x + (i - (s.lv - 1) / 2) * 5.4, y + 13, 1.9, 0, TAU); ctx.stroke(); ctx.fill(); }
+    return;
+  }
   ctx.save(); ctx.translate(x, y - 3); ctx.scale(k, k);
   if (s.w === 'canon') {
     ctx.fillStyle = '#3a2a1c'; ctx.beginPath(); ctx.arc(-6, 3, 3.6, 0, TAU); ctx.arc(6, 3, 3.6, 0, TAU); ctx.fill();

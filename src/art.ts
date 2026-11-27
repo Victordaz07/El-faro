@@ -163,3 +163,42 @@ export function decoSheet(k: string): Sheet | null {
   const s = DECO[k];
   return s && ready(s.img) ? s : null;
 }
+
+/* ---------- Modo Costa (modelos costa-*.glb y arma-*.glb, ver tools/glb-sprite/bake-costa.py) ---------- */
+import costaMeta from '../assets/art/costa/meta.json';
+import cMuralla from '../assets/art/costa/costa-muralla.webp';
+import cHueco from '../assets/art/costa/costa-hueco.webp';
+import cAntorcha from '../assets/art/costa/costa-antorcha.webp';
+import wCanonB from '../assets/art/costa/arma-canon-base.webp';
+import wCanon from '../assets/art/costa/arma-canon.webp';
+import wBallestaB from '../assets/art/costa/arma-ballesta-base.webp';
+import wBallesta from '../assets/art/costa/arma-ballesta.webp';
+import wMorteroB from '../assets/art/costa/arma-mortero-base.webp';
+import wMortero from '../assets/art/costa/arma-mortero.webp';
+import wLuzB from '../assets/art/costa/arma-luz-base.webp';
+import wLuz from '../assets/art/costa/arma-luz.webp';
+
+type PieceMeta = { w: number; h: number; ppu: number; o: number[] };
+/** Pieza fija: k = píxeles del juego por unidad del modelo / ppu de la imagen. */
+const piece = (url: string, m: PieceMeta, units: number): Still => ({ img: img(url), w: m.w, h: m.h, ox: m.o[0], oy: m.o[1], k: units / m.ppu });
+const CM = costaMeta as unknown as Record<string, PieceMeta & { px: number; dirs: number; frames: number; ox: number; oy: number; ppu: number }>;
+/** Tamaños en píxeles del juego por unidad del modelo. */
+export const costaArt = {
+  muralla: piece(cMuralla, CM['costa-muralla'], 64),
+  hueco: piece(cHueco, CM['costa-hueco'], 40),
+  antorcha: piece(cAntorcha, CM['costa-antorcha'], 20),
+};
+export function costaPiece(k: keyof typeof costaArt): Still | null { const s = costaArt[k]; return ready(s.img) ? s : null; }
+
+const wep = (b: string, h: string, key: string, len: number): TurretArt => { const m = CM[key]; return { base: img(b), head: img(h), px: m.px, dirs: m.dirs, frames: m.frames, ox: m.ox, oy: m.oy, k: len / m.ppu }; };
+const WEAPON_ART: Record<string, TurretArt> = {
+  canon: wep(wCanonB, wCanon, 'arma-canon', 36),
+  ballesta: wep(wBallestaB, wBallesta, 'arma-ballesta', 38),
+  mortero: wep(wMorteroB, wMortero, 'arma-mortero', 32),
+  luz: wep(wLuzB, wLuz, 'arma-luz', 36),
+};
+/** Arte de un arma del Modo Costa (base fija + cabeza en 16 direcciones × 4 cuadros), o null mientras no cargue. */
+export function weaponArt(id: string): TurretArt | null {
+  const t = WEAPON_ART[id];
+  return t && ready(t.base) && ready(t.head) ? t : null;
+}

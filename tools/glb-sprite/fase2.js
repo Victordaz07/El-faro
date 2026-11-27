@@ -49,6 +49,21 @@ const ANIM = {
     rot(o, 'Jaw', 'x', 0.12 + 0.12 * Math.sin(p * TAU + 1.2));
     for (let i = 2; i <= 5; i++) mov(o, `Body_${i}`, 'y', 0.012 * Math.sin(p * TAU - i * 0.9));
   },
+  // Armas del Modo Costa: cuadro 0 = reposo, 1..3 = disparo y regreso
+  'arma-canon'(o, p) {
+    const k = [0, 1, 0.55, 0.2][Math.round(p * 4) % 4];
+    mov(o, 'Barrel', 'z', -0.09 * k);
+  },
+  'arma-ballesta'(o, p) {
+    const k = [0, 1, 0.55, 0.2][Math.round(p * 4) % 4];
+    scl(o, 'Bow', 1, 1, 1 - 0.1 * k);
+    const b = node(o, 'Bolt'); if (b) b.visible = k < 0.3;
+  },
+  'arma-mortero'(o, p) {
+    const k = [0, 1, 0.55, 0.2][Math.round(p * 4) % 4];
+    mov(o, 'Tube', 'y', -0.035 * k); rot(o, 'Tube', 'x', 0.05 * k);
+  },
+  'arma-luz'(o, p) { /* la lámpara solo gira con el rumbo */ },
   // Torretas: cuadro 0 = en reposo, 1..3 = disparo y regreso
   'torreta-arponero'(o, p) {
     const k = [0, 1, 0.55, 0.2][Math.round(p * 4) % 4];
