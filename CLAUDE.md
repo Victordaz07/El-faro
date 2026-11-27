@@ -21,6 +21,7 @@ Idioma de la interfaz y de los comentarios: **español**.
 - `src/leaderboard.ts` — ranking: Claude DB (artifact) → Firebase (`src/firebase.config.ts`) → local.
 - `src/main.ts` — interfaz, pantallas, tutorial y bucle.
 - `src/icons.ts` — íconos SVG propios de mejoras y pestañas.
+- Interfaz: tema náutico (variables CSS en index.html: latón `--brass`, marino `--navy`, marfil `--ivory`), tipografías incrustadas Lilita One (títulos, botones, números) y Nunito (texto). El mar ocupa toda la pantalla; HUD y dock flotan encima. Las mejoras viven en un cajón (`#sheet`) que se abre/cierra tocando la pestaña activa; `view.offY` en render.ts sube la cámara para que el faro quede en la zona visible.
 - `assets/` — `icon.png` (ícono de la app) y `thumb.png` (portada). `assets/art/`: arte en WebP que se incrusta en el build (fondo del menú, retratos de jefes por zona, sprite del faro renderizado desde `assets/models/faro-isla.glb`); originales en `assets/art/originales/`.
 - `src/art.ts` — carga ese arte; si una imagen no carga, se usa el dibujo por código.
 - `tools/glb-sprite/` — convierte modelos 3D (.glb) en sprites. `bake-enemies.py` genera las hojas de enemigos (16 direcciones × 4 cuadros, cámara a 32°) desde `assets/models/enemigo-*.glb`; las animaciones por pieza están en `sheet.js` (`ANIM`). Resultado en `assets/art/enemigos/` (+ `meta.json`).

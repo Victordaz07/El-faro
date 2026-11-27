@@ -8,6 +8,8 @@ let water: Water | null | undefined;
 
 /** Foco de cámara para cinemáticas: punto del mundo y acercamiento (1 = normal). */
 export const camFocus = { x: 0, y: 0, z: 1 };
+/** Desplazamiento vertical del centro de la vista (px), para que el faro quede en la zona visible entre el HUD y el dock. */
+export const view = { offY: 0 };
 
 /* Calidad automática: si el dispositivo no alcanza ~25 FPS se baja la resolución
    del mar y de la luz; si aún así no alcanza, se usa el mar 2D. */
@@ -86,7 +88,7 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
   if (g && g.shake > 0) { const k = g.shake * 22; sx = (Math.random() - 0.5) * k; sy = (Math.random() - 0.5) * k; }
   const z = camFocus.z, fx = camFocus.x, fy = camFocus.y;
   const cam = g
-    ? { x: vw / 2 + sx - fx * sc * z, y: vh / 2 + sy - fy * sc * z, s: sc * z }
+    ? { x: vw / 2 + sx - fx * sc * z, y: vh / 2 + view.offY + sy - fy * sc * z, s: sc * z }
     : { x: vw / 2, y: vh * 0.3, s: sc * 1.45 };
   const lampA = g ? g.lamp : now * 0.6;
 

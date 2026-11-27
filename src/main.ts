@@ -5,7 +5,11 @@ import {
   researchTotal, zonesOpen, challengeZone, challengeSeed, today,
 } from './save';
 import { Game, GEvent, AIMS } from './game';
-import { draw, camFocus } from './render';
+import '@fontsource/lilita-one/latin-400.css';
+import '@fontsource/nunito/latin-700.css';
+import '@fontsource/nunito/latin-800.css';
+import '@fontsource/nunito/latin-900.css';
+import { draw, camFocus, view } from './render';
 import { ICONS, TAB_ICONS } from './icons';
 import { menuArt, bossArt } from './art';
 import { initAudio, setMuted, sfx } from './audio';
@@ -110,6 +114,7 @@ function start(daily = false) {
   $('frostw').style.display = 'none';
   $('aim').querySelector('span')!.textContent = AIMS[0].name;
   tab = 0;
+  $('dock').classList.remove('closed');
   setMusicLevel(1);
   introT = 0; introWave = -1; camFocus.x = camFocus.y = 0; camFocus.z = 1; stage.classList.remove('cine');
   updatePanel(); updateHud();
@@ -168,7 +173,7 @@ function endRun() {
 
 /* ---------- Tutorial ---------- */
 const TUT: { title: string; text: string; target: string; at: number }[] = [
-  { at: 0, title: 'Las perlas ● compran mejoras', text: 'Tu faro dispara solo. Toca una mejora para comprarla; mantén presionado para comprar varias.', target: '#grid' },
+  { at: 0, title: 'Las perlas ● compran mejoras', text: 'Tu faro dispara solo. Toca una mejora para comprarla; mantén presionado para comprar varias.', target: '#sheet' },
   { at: 2, title: 'El Destello ⚡', text: 'Aturde y daña a todo lo que esté cerca. Guárdalo para cuando te rodeen o para el jefe.', target: '#flash' },
   { at: 3, title: 'Elige a quién disparar', text: 'Toca OBJETIVO para cambiar. PELIGRO prioriza peces globo, anguilas, élites y jefes.', target: '#aim' },
   { at: 4, title: 'Torretas en la isla', text: 'En la pestaña ISLA construyes un Arponero, un Lanzarredes y un Ancla que disparan solos.', target: '#tabs' },
@@ -277,7 +282,7 @@ function buildPanel() {
   for (const d of DEFS) {
     const el = document.createElement('button');
     el.className = 'up t' + d.tab;
-    el.innerHTML = '<div class="n"><span></span><span></span></div><div class="v"></div><div class="k"></div><div class="ic">' + (ICONS[d.id] || '') + '</div>';
+    el.innerHTML = '<div class="ic">' + (ICONS[d.id] || '') + '<em class="lv"></em></div><div class="tx"><div class="n"></div><div class="v"></div></div><div class="k"></div>';
     holdToBuy(el, () => {
       $('hint').innerHTML = '<b>' + d.name + ':</b> ' + (HINTS[d.id] || 'mejora de ' + TABS[d.tab].toLowerCase());
     }, () => {
@@ -288,13 +293,20 @@ function buildPanel() {
     });
     el.style.display = d.tab === 0 ? '' : 'none';
     grid.appendChild(el);
-    const n = el.children[0] as HTMLElement;
-    btns.push({ id: d.id, tab: d.tab, el, n: n.children[0] as HTMLElement, lv: n.children[1] as HTMLElement, v: el.children[1] as HTMLElement, k: el.children[2] as HTMLElement });
+    const q = (sel: string) => el.querySelector(sel) as HTMLElement;
+    btns.push({ id: d.id, tab: d.tab, el, n: q('.n'), lv: q('.lv'), v: q('.v'), k: q('.k') });
   }
   TABS.forEach((t, i) => {
     const b = document.createElement('button');
     b.className = 'tab'; b.innerHTML = TAB_ICONS[i] + '<span>' + t + '</span><span class="dot"></span>';
-    b.addEventListener('click', () => { stopHold(); tab = i; sfx.click(); updatePanel(); });
+    b.addEventListener('click', () => {
+      stopHold();
+      sfx.click();
+      const dock = $('dock');
+      if (tab === i && !dock.classList.contains('closed')) dock.classList.add('closed');
+      else { tab = i; dock.classList.remove('closed'); }
+      updatePanel();
+    });
     $('tabs').appendChild(b);
   });
 }
@@ -309,7 +321,7 @@ function updatePanel() {
     const key = d.id as keyof typeof g.st;
     const c = g.cost(d.id);
     o.n.textContent = d.name;
-    o.lv.textContent = d.tab === 3 && !g.lv[d.id] ? '' : 'Nv ' + g.lv[d.id];
+    o.lv.textContent = g.lv[d.id] ? String(g.lv[d.id]) : '';
     o.v.innerHTML = d.fmt(g.st[key]) + '<i>→ ' + d.fmt(g.preview(d.id)[key]) + '</i>';
     o.k.textContent = '● ' + c;
     o.el.classList.toggle('off', g.pearls < c);
@@ -330,6 +342,7 @@ function updateHud() {
   $('coral').textContent = String(Math.floor(g.coral));
   const st = g.st, p = Math.max(0, g.hp) / st.hp;
   $('hpfill').style.width = p * 100 + '%';
+  $('hpfill').className = p > 0.6 ? 'ok' : p > 0.3 ? 'mid' : '';
   $('hpt').textContent = 'Faro ' + Math.ceil(Math.max(0, g.hp)) + ' / ' + Math.round(st.hp);
   $('sht').textContent = st.bar > 0 ? 'Barrera ' + Math.ceil(g.shield) + ' / ' + Math.round(st.bar) : '';
   $('shfill').style.width = st.bar > 0 ? (g.shield / st.bar) * 100 + '%' : '0';
@@ -361,8 +374,7 @@ function showMenu() {
   const z = zone();
   $('menuinfo').innerHTML = `Zona: <b>${z.name}</b> · Récord: <b>${save.zoneBest[z.id] || 0}</b> · Coral: <b style="color:#ffb35c">${Math.floor(save.coral)} ◆</b>`;
   $('mute').textContent = save.muted ? '🔇' : '🔊';
-  $('mus').textContent = save.music ? '🎵' : '🎵̸';
-  $('mus').style.opacity = save.music ? '1' : '.5';
+    $('mus').style.opacity = save.music ? '1' : '.5';
   const cz = challengeZone(), done = save.challenge?.date === today();
   const dbtn = $<HTMLButtonElement>('daily');
   dbtn.disabled = done;
@@ -631,6 +643,11 @@ function loop(nowMs: number) {
     hudT -= dt;
     if (hudT <= 0) { hudT = 0.1; updateHud(); updatePanel(); }
   }
+  if (g) {
+    const hudH = $('hud').getBoundingClientRect().height, dockH = $('dock').getBoundingClientRect().height + 70;
+    const target = Math.max(-140, Math.min(60, (hudH - dockH) / 2));
+    view.offY += (target - view.offY) * Math.min(1, dt * 8);
+  } else view.offY = 0;
   draw(ctx, g, g ? runZone : zone(), vw, vh, dpr, now);
   requestAnimationFrame(loop);
 }
