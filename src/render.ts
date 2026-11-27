@@ -186,6 +186,12 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
       ctx.beginPath(); ctx.ellipse(f.x, f.y, r, r * 0.85, 0, 0, TAU); ctx.stroke();
       ctx.strokeStyle = `rgba(230,245,255,${k * 0.6})`; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.ellipse(f.x, f.y, r * 0.8, r * 0.68, 0, 0, TAU); ctx.stroke();
+    } else if (f.kind === 'spout') {
+      // Columna de agua: sube y cae en gotas
+      const up = Math.sin((1 - k) * Math.PI), hgt = (f.r || 7) * 4 * up;
+      ctx.fillStyle = `rgba(225,242,255,${0.75 * k})`;
+      ctx.beginPath(); ctx.moveTo(f.x - 4, f.y); ctx.quadraticCurveTo(f.x - 2, f.y - hgt * 0.6, f.x, f.y - hgt); ctx.quadraticCurveTo(f.x + 2, f.y - hgt * 0.6, f.x + 4, f.y); ctx.closePath(); ctx.fill();
+      for (let j = 0; j < 6; j++) { const a = -Math.PI / 2 + (j - 2.5) * 0.45, d = (1 - k) * 16; ctx.beginPath(); ctx.arc(f.x + Math.cos(a) * d, f.y - hgt * 0.7 + Math.sin(a) * d + (1 - k) * (1 - k) * 22, 1.5 * k + 0.5, 0, TAU); ctx.fill(); }
     } else if (f.kind === 'splash') {
       ctx.strokeStyle = `rgba(220,240,255,${k * 0.7})`; ctx.lineWidth = 2;
       const r = (f.r || 8) * (1 + (1 - k) * 2.2);
@@ -224,6 +230,7 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
   if (costa) drawCostaBase(ctx, g!, t, now);
   else if (!g || g.mode !== 'travesia') drawIsland(ctx, t);
   if (g) for (const p of g.pickups) drawPickup(ctx, p, t);
+  if (g) drawWake(ctx, g, now);
 
   // Profundidad: lo que está "detrás" del faro se dibuja antes
   const layers: { y: number; draw: () => void }[] = costa ? [] : [{ y: 2, draw: () => drawTower(ctx, t, g) }];
@@ -277,8 +284,11 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
     if (g.mod?.id === 'niebla') {
       ctx.fillStyle = radial(ctx, 0, 0, g.range * 1.5, [[0, 'rgba(150,170,190,0)'], [0.6, 'rgba(150,170,190,0)'], [1, 'rgba(120,140,160,.8)']]);
       ctx.fillRect(-600, -600, 1200, 1200);
+      // El buque se distingue entre la niebla: se vuelve a dibujar encima, con su propia luz
+      if (g.fleet) { ctx.globalAlpha = 0.85; drawWarship(ctx, g.fleet, t); ctx.globalAlpha = 1; }
     }
     ctx.globalCompositeOperation = 'lighter';
+    if (g.fleet) drawWarshipLights(ctx, g.fleet, now, g.mod?.id === 'niebla');
     // Haz del faro (en la costa, los haces salen de las luces de la muralla)
     if (costa) drawCostaBeams(ctx, g);
     else {
@@ -353,6 +363,15 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
         for (let i = 0; i < 6; i++) { const aa = i * 1.05 + f.x, px = f.x + Math.cos(aa) * rr * 0.6, py = f.y + Math.sin(aa) * rr * 0.5 - (1 - k) * 12; ctx.fillRect(px - 2.5, py - 0.6, 5, 1.2); ctx.fillRect(px - 0.6, py - 2.5, 1.2, 5); }
       } else if (f.kind === 'cannon') {
         const h = f.h || 0, mx = f.x + Math.cos(h) * (f.r || 12), my = f.y + Math.sin(h) * (f.r || 12);
+        if (f.c === 'big') {
+          // Fogonazo en cono hacia donde sale la bala
+          const L = 26 * (0.4 + k), W = 9 * k;
+          ctx.save(); ctx.translate(mx, my); ctx.rotate(h);
+          const gr = ctx.createLinearGradient(0, 0, L, 0); gr.addColorStop(0, `rgba(255,250,220,${k})`); gr.addColorStop(0.4, `rgba(255,180,80,${0.9 * k})`); gr.addColorStop(1, 'rgba(255,90,30,0)');
+          ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(0, -2); ctx.quadraticCurveTo(L * 0.5, -W, L, 0); ctx.quadraticCurveTo(L * 0.5, W, 0, 2); ctx.closePath(); ctx.fill();
+          ctx.restore();
+          ctx.fillStyle = radial(ctx, mx, my, 16 * k + 4, [[0, `rgba(255,240,200,${k})`], [1, 'rgba(255,150,60,0)']]); ctx.beginPath(); ctx.arc(mx, my, 16 * k + 4, 0, TAU); ctx.fill();
+        }
         ctx.fillStyle = `rgba(255,200,120,${k})`; ctx.beginPath(); ctx.arc(mx, my, 4 * k + 1, 0, TAU); ctx.fill();
         ctx.fillStyle = `rgba(200,205,215,${0.4 * k})`;
         for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(mx + Math.cos(h + i) * (1 - k) * 12, my + Math.sin(h + i) * (1 - k) * 12 - (1 - k) * 8, 3 + (1 - k) * 6, 0, TAU); ctx.fill(); }
@@ -393,16 +412,32 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
       ctx.strokeStyle = `rgba(${col},1)`; ctx.lineWidth = b.crit ? 3.5 : 2.2;
       ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(b.x, b.y); ctx.stroke();
     }
-    // Modo Costa: balas de cañón, virotes y bombas de mortero (se dibujan normal, no aditivas)
+    // Balas de cañón (Costa y buque de guerra): estela de fuego aditiva y luego la bala de hierro encima
+    for (const b of g.bolts) {
+      if (b.kind !== 'cball') continue;
+      const vx = b.vx ?? (b.x - b.px), vy = b.vy ?? (b.y - b.py), n = Math.hypot(vx, vy) || 1, ux = vx / n, uy = vy / n, L = 34;
+      const tr = ctx.createLinearGradient(b.x, b.y, b.x - ux * L, b.y - uy * L);
+      tr.addColorStop(0, 'rgba(255,210,120,.85)'); tr.addColorStop(0.35, 'rgba(255,120,40,.45)'); tr.addColorStop(1, 'rgba(255,80,20,0)');
+      ctx.strokeStyle = tr; ctx.lineCap = 'round';
+      ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x - ux * L, b.y - uy * L); ctx.stroke();
+      ctx.lineWidth = 2.4; ctx.strokeStyle = 'rgba(255,245,210,.9)'; ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x - ux * L * 0.4, b.y - uy * L * 0.4); ctx.stroke();
+      ctx.fillStyle = radial(ctx, b.x, b.y, 12, [[0, 'rgba(255,200,110,.55)'], [1, 'rgba(255,120,40,0)']]); ctx.beginPath(); ctx.arc(b.x, b.y, 12, 0, TAU); ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    for (const b of g.bolts) {
+      if (b.kind !== 'cball') continue;
+      const vx = b.vx ?? (b.x - b.px), vy = b.vy ?? (b.y - b.py), n = Math.hypot(vx, vy) || 1, ux = vx / n, uy = vy / n;
+      for (let i = 1; i <= 4; i++) { ctx.fillStyle = `rgba(185,190,200,${0.3 - i * 0.06})`; ctx.beginPath(); ctx.arc(b.x - ux * (8 + i * 8), b.y - uy * (8 + i * 8) - i, 2.4 + i * 1.1, 0, TAU); ctx.fill(); }
+      ctx.fillStyle = radial(ctx, b.x - 1.3, b.y - 1.3, 5.5, [[0, '#a7b0bf'], [0.6, '#3a3f4a'], [1, '#14171d']]);
+      ctx.beginPath(); ctx.arc(b.x, b.y, 4.3, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,170,80,.8)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(b.x, b.y, 4.3, Math.atan2(-uy, -ux) - 1, Math.atan2(-uy, -ux) + 1); ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'lighter';
+    // Modo Costa: virotes y bombas de mortero (se dibujan normal, no aditivas)
     if (costa) {
       ctx.globalCompositeOperation = 'source-over';
       for (const b of g.bolts) {
-        if (b.kind === 'cball') {
-          const dx = b.x - b.px, dy = b.y - b.py;
-          for (let i = 1; i <= 4; i++) { ctx.fillStyle = `rgba(190,195,205,${0.32 - i * 0.06})`; ctx.beginPath(); ctx.arc(b.x - dx * i * 1.6, b.y - dy * i * 1.6, 3.4 - i * 0.4, 0, TAU); ctx.fill(); }
-          ctx.fillStyle = radial(ctx, b.x - 1.2, b.y - 1.2, 5.5, [[0, '#9aa3b2'], [1, '#1d2129']]);
-          ctx.beginPath(); ctx.arc(b.x, b.y, 4.2, 0, TAU); ctx.fill();
-        } else if (b.kind === 'quarrel') {
+        if (b.kind === 'quarrel') {
           const a = Math.atan2(b.y - b.py, b.x - b.px);
           ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(a);
           ctx.strokeStyle = '#8a6a3c'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(2, 0); ctx.stroke();
@@ -2032,13 +2067,10 @@ function drawCostaArrows(ctx: CanvasRenderingContext2D, g: Game, cam: { x: numbe
 /** Buque de guerra aliado: barco con estela, banderín turquesa y fogonazos al disparar. */
 function drawWarship(ctx: CanvasRenderingContext2D, f: NonNullable<Game['fleet']>, t: number) {
   ctx.save(); ctx.translate(f.x, f.y);
-  // Estela detrás del barco
-  const bx = -Math.cos(f.hd), by = -Math.sin(f.hd), px = -by, py = bx;
-  ctx.strokeStyle = 'rgba(225,242,255,.4)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
-  for (const sg of [-1, 1]) {
-    ctx.beginPath(); ctx.moveTo(bx * 14 + px * sg * 6, by * 14 + py * sg * 6);
-    ctx.quadraticCurveTo(bx * 40 + px * sg * 14, by * 40 + py * sg * 14, bx * 72 + px * sg * 26, by * 72 + py * sg * 26); ctx.stroke();
-  }
+  // Espuma en la proa
+  const fx = Math.cos(f.hd), fy = Math.sin(f.hd), wob = Math.sin(t * 9) * 1.2;
+  ctx.fillStyle = 'rgba(235,247,255,.75)';
+  for (const sg of [-1, 1]) { ctx.beginPath(); ctx.ellipse(fx * 16 - fy * sg * 6, fy * 16 + fx * sg * 6 + 3, 5 + wob, 2.2, f.hd + sg * 0.5, 0, TAU); ctx.fill(); }
   ctx.fillStyle = 'rgba(0,10,25,.35)'; ctx.beginPath(); ctx.ellipse(3, 6, 24, 15, 0, 0, TAU); ctx.fill();
   const sp = boatSheet('jugador');
   if (sp) blitSheet(ctx, sp, f.hd, Math.floor(t * sp.fps), (sp.len / sp.ppu) * 1.4, 5);
@@ -2054,4 +2086,67 @@ function drawWarship(ctx: CanvasRenderingContext2D, f: NonNullable<Game['fleet']
   ctx.strokeStyle = '#2a2520'; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(0, my + 12); ctx.lineTo(0, my); ctx.stroke();
   ctx.fillStyle = '#3fd7c4'; ctx.beginPath(); ctx.moveTo(0, my); ctx.lineTo(-13, my + 2.5 + wv); ctx.lineTo(0, my + 5); ctx.closePath(); ctx.fill();
   ctx.restore();
+}
+
+
+/* ---------- Estela del buque de guerra ---------- */
+let wakePts: { x: number; y: number; hd: number; t: number }[] = [];
+/** Estela en V que se abre y se desvanece por donde pasó el buque (se guarda en el render, no en la partida). */
+function drawWake(ctx: CanvasRenderingContext2D, g: Game, now: number) {
+  const f = g.fleet, LIFE = 3.2;
+  if (f) {
+    const last = wakePts[wakePts.length - 1];
+    if (!last || Math.hypot(f.x - last.x, f.y - last.y) > 5) wakePts.push({ x: f.x, y: f.y, hd: f.hd, t: now });
+  }
+  wakePts = wakePts.filter(p => now - p.t < LIFE && now >= p.t);
+  if (wakePts.length < 2) return;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  // Agua revuelta al centro
+  for (let i = 1; i < wakePts.length; i++) {
+    const a = wakePts[i - 1], b = wakePts[i], k = 1 - (now - b.t) / LIFE;
+    ctx.strokeStyle = `rgba(200,232,250,${0.22 * k})`; ctx.lineWidth = 10 + (1 - k) * 10;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y + 4); ctx.lineTo(b.x, b.y + 4); ctx.stroke();
+  }
+  // Dos brazos de espuma que se abren
+  for (const sg of [-1, 1]) {
+    for (let i = 1; i < wakePts.length; i++) {
+      const a = wakePts[i - 1], b = wakePts[i];
+      const ka = 1 - (now - a.t) / LIFE, kb = 1 - (now - b.t) / LIFE;
+      const oa = 7 + (1 - ka) * 26, ob = 7 + (1 - kb) * 26;
+      const ax = a.x - Math.sin(a.hd) * sg * oa, ay = a.y + Math.cos(a.hd) * sg * oa + 4;
+      const bx = b.x - Math.sin(b.hd) * sg * ob, by = b.y + Math.cos(b.hd) * sg * ob + 4;
+      ctx.strokeStyle = `rgba(238,248,255,${0.65 * kb})`; ctx.lineWidth = 1.2 + kb * 1.6;
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    }
+  }
+  // Burbujas de espuma sueltas
+  for (let i = 0; i < wakePts.length; i += 2) {
+    const p = wakePts[i], k = 1 - (now - p.t) / LIFE, h = Math.sin(i * 12.9898) * 43758.5453;
+    const r = (h - Math.floor(h)) * 2 - 1;
+    ctx.fillStyle = `rgba(240,250,255,${0.5 * k})`;
+    ctx.beginPath(); ctx.arc(p.x - Math.sin(p.hd) * r * 12 * (1.4 - k), p.y + Math.cos(p.hd) * r * 12 * (1.4 - k) + 4, 1 + k, 0, TAU); ctx.fill();
+  }
+}
+
+/** Luces del buque (pasada aditiva): farol de popa, luces de navegación y un reflector que alumbra hacia adelante. En niebla, más fuertes. */
+function drawWarshipLights(ctx: CanvasRenderingContext2D, f: NonNullable<Game['fleet']>, now: number, fog: boolean) {
+  const k = fog ? 1 : 0.55, ux = Math.cos(f.hd), uy = Math.sin(f.hd);
+  // Reflector: cono de luz cálida hacia donde navega
+  ctx.save(); ctx.translate(f.x + ux * 10, f.y + uy * 10 - 6); ctx.rotate(f.hd);
+  const L = fog ? 150 : 90, gr = ctx.createLinearGradient(0, 0, L, 0);
+  gr.addColorStop(0, `rgba(255,236,180,${0.32 * k})`); gr.addColorStop(1, 'rgba(255,236,180,0)');
+  ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(0, -2); ctx.lineTo(L, -L * 0.32); ctx.lineTo(L, L * 0.32); ctx.lineTo(0, 2); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  // Halo y farol
+  const pulse = 0.85 + 0.15 * Math.sin(now * 4);
+  ctx.fillStyle = radial(ctx, f.x, f.y - 8, fog ? 70 : 40, [[0, `rgba(255,214,150,${0.45 * k * pulse})`], [1, 'rgba(255,214,150,0)']]);
+  ctx.beginPath(); ctx.arc(f.x, f.y - 8, fog ? 70 : 40, 0, TAU); ctx.fill();
+  ctx.fillStyle = `rgba(255,236,170,${pulse})`; ctx.beginPath(); ctx.arc(f.x - ux * 12, f.y - uy * 12 - 10, 2.6, 0, TAU); ctx.fill();
+  // Luces de navegación: babor roja y estribor turquesa, parpadean suave
+  const blink = 0.6 + 0.4 * Math.sin(now * 6);
+  for (const [sg, col] of [[-1, '255,90,90'], [1, '63,215,196']] as const) {
+    const lx = f.x - uy * sg * 9, ly = f.y + ux * sg * 9 - 6;
+    ctx.fillStyle = radial(ctx, lx, ly, 10 * (fog ? 1.6 : 1), [[0, `rgba(${col},${blink})`], [1, `rgba(${col},0)`]]);
+    ctx.beginPath(); ctx.arc(lx, ly, 10 * (fog ? 1.6 : 1), 0, TAU); ctx.fill();
+  }
 }

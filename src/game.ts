@@ -65,7 +65,7 @@ export interface Shell { sx: number; sy: number; tx: number; ty: number; t: numb
 export interface EShot { x: number; y: number; d: number; c: string; gone?: boolean; }
 export interface Fx {
   kind: 'p' | 'ring' | 'nova' | 'wake' | 'splash' | 'boom' | 'net' | 'slam' | 'warn' | 'strike' | 'sink'
-    | 'zap' | 'bite' | 'sting' | 'bash' | 'netfly' | 'spray' | 'tap' | 'heal' | 'crack' | 'cannon' | 'smoke' | 'chip';
+    | 'zap' | 'bite' | 'sting' | 'bash' | 'netfly' | 'spray' | 'tap' | 'heal' | 'crack' | 'cannon' | 'smoke' | 'chip' | 'spout';
   /** Para 'zap' y 'netfly': punto de destino. */
   tx?: number; ty?: number;
   x: number; y: number; vx: number; vy: number; t: number; max: number; c: string; r?: number;
@@ -1180,7 +1180,8 @@ export class Game {
       f.side = Math.sin(a - f.hd) >= 0 ? 1 : -1;
       const ox = f.x + Math.cos(f.hd + f.side * Math.PI / 2) * 8, oy = f.y + Math.sin(f.hd + f.side * Math.PI / 2) * 8;
       this.bolts.push({ x: ox, y: oy, px: ox, py: oy, t: e, d: this.st.dmg * FLEET.dmg, crit: false, bounce: false, kind: 'cball', speed: 380, straight: true });
-      this.fx.push({ kind: 'cannon', x: ox, y: oy, vx: 0, vy: 0, t: 0.35, max: 0.35, c: '', r: 12, h: a });
+      this.fx.push({ kind: 'cannon', x: ox, y: oy, vx: 0, vy: 0, t: 0.4, max: 0.4, c: 'big', r: 6, h: a });
+      this.fx.push({ kind: 'smoke', x: ox + Math.cos(a) * 14, y: oy + Math.sin(a) * 14, vx: Math.cos(a) * 22, vy: Math.sin(a) * 22 - 6, t: 1.2, max: 1.2, c: '', r: 8 });
       this.fx.push({ kind: 'smoke', x: ox + Math.cos(a) * 8, y: oy + Math.sin(a) * 8, vx: Math.cos(a) * 12, vy: Math.sin(a) * 12 - 4, t: 0.9, max: 0.9, c: '', r: 6 });
     }
     this.emit('cannon');
@@ -1220,6 +1221,7 @@ export class Game {
         this.burst(e.x, e.y, '#9aa3b2', 7, 90);
         this.fx.push({ kind: 'boom', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.3, max: 0.3, c: '#ffcf8a', r: br === 1 ? 26 : 14 });
         this.fx.push({ kind: 'splash', x: e.x, y: e.y + 4, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '#bfe8ff', r: 10 });
+        this.fx.push({ kind: 'spout', x: e.x, y: e.y + 2, vx: 0, vy: 0, t: 0.6, max: 0.6, c: '', r: 6 });
         if (br === 1) for (const o of this.enemies) if (o !== e && !o.dead && (o.x - e.x) ** 2 + (o.y - e.y) ** 2 < (26 + o.r) ** 2) this.hitW(o, b.d * 0.5, 'canon', 1, false, false);
       } else this.burst(e.x, e.y, '#e6c58f', 3, 60);
       return;
@@ -1228,6 +1230,7 @@ export class Game {
     if (b.left! <= 0) {
       b.gone = true;
       this.fx.push({ kind: 'splash', x: b.x, y: b.y, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '#bfe8ff', r: b.kind === 'cball' ? 9 : 5 });
+      if (b.kind === 'cball') this.fx.push({ kind: 'spout', x: b.x, y: b.y, vx: 0, vy: 0, t: 0.7, max: 0.7, c: '', r: 7 });
     }
   }
 
