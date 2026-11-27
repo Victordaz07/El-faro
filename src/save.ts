@@ -37,6 +37,8 @@ export interface Save {
   chestFrom?: number;
   /** Campaña: estrellas por nivel ('mundo-nivel', ej. '0-3'). */
   camp?: Record<string, number>;
+  /** Récords de los modos: mejor resultado y estrellas. */
+  modes?: Record<string, { best: number; stars: number }>;
 }
 
 const KEY = 'faro_tormenta_v2';

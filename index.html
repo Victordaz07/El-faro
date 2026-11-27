@@ -250,6 +250,9 @@ html[lang=en] .up.new::after{content:'NEW'}
 #ready{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:none;padding:11px 26px;border-radius:14px;border:0;background:var(--acc);color:#04221e;font-family:var(--fd);font-size:17px;letter-spacing:.04em;box-shadow:0 6px 20px rgba(63,215,196,.35);animation:breath 1.4s ease-in-out infinite}
 #ready.on{display:block}
 #endbtn.lock{opacity:.5}
+.card.mode{align-items:center;gap:10px}
+.card.mode>em{font-style:normal;font-size:28px;flex:none}
+.card.mode b small{margin-left:6px;font-size:11px}
 </style>
 </head>
 <body>
@@ -306,7 +309,7 @@ html[lang=en] .up.new::after{content:'NEW'}
       <button class="big sec" id="misbtn">MISIONES<span class="badge" id="misbadge"></span></button>
     </div>
     <div class="row3">
-      <button class="big sec" id="endbtn">INFINITO</button>
+      <button class="big sec" id="endbtn">MODOS</button>
       <button class="big sec" id="achbtn">LOGROS</button>
       <button class="big sec" id="collbtn">COLECCIÓN<span class="badge" id="collbadge"></span></button>
     </div>
@@ -351,6 +354,12 @@ html[lang=en] .up.new::after{content:'NEW'}
     <div class="seg" id="wtabs"></div>
     <p id="worlddesc" class="tiny"></p>
     <div class="lvgrid" id="lvgrid"></div>
+    <button class="big sec back">VOLVER</button>
+  </div>
+  <div class="ov" id="modes">
+    <h2>MODOS DE JUEGO</h2>
+    <p>Aventuras distintas que se abren a medida que avanzas en la campaña.</p>
+    <div class="list" id="modelist"></div>
     <button class="big sec back">VOLVER</button>
   </div>
   <div class="ov" id="endless">

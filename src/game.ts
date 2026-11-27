@@ -1,5 +1,5 @@
 // Lógica pura de una partida (sin DOM): se puede simular en Node.
-import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing, ZONES, CREATURES, LEVEL_WAVES, LEVEL_START, levelPearls } from './data';
+import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing, ZONES, CREATURES, LEVEL_WAVES, LEVEL_START, levelPearls, levelOf, MODE_RULES } from './data';
 import { localize, t, L } from './i18n';
 import type { Save } from './save';
 
@@ -12,7 +12,8 @@ export interface Stats {
   tap: number; tapCd: number;
 }
 export type EType = 'crab' | 'jelly' | 'mini' | 'sardine' | 'eel' | 'puffer' | 'turtle' | 'hermit' | 'boss'
-  | 'seahorse' | 'star' | 'starlet' | 'lobster' | 'lionfish' | 'narwhal' | 'seal' | 'firefish' | 'volturtle' | 'lavacrab' | 'angler' | 'ghost';
+  | 'seahorse' | 'star' | 'starlet' | 'lobster' | 'lionfish' | 'narwhal' | 'seal' | 'firefish' | 'volturtle' | 'lavacrab' | 'angler' | 'ghost'
+  | 'pirate' | 'raider' | 'captain';
 export type Aim = 'cerca' | 'peligro' | 'fuerte' | 'debil';
 export const AIMS: { id: Aim; name: string }[] = [
   { id: 'cerca', name: 'CERCANO' }, { id: 'peligro', name: 'PELIGRO' },
@@ -36,9 +37,17 @@ export interface Enemy {
   under: boolean;
   /** Narval: 0 se acerca, 1 apunta, 2 embiste, 3 ya embistió. */
   mode: number;
+  /** Rumbo hacia su objetivo (para dibujarla) y si ataca al barco de suministros. */
+  hd: number; toShip: boolean;
 }
 /** Bola de fuego del pez ígneo: vuela en arco hacia el faro y se puede apagar tocándola. */
-export interface Fireball { sx: number; sy: number; t: number; max: number; d: number; gone?: boolean; }
+export interface Fireball { sx: number; sy: number; tx: number; ty: number; t: number; max: number; d: number; ball?: boolean; toShip?: boolean; gone?: boolean; }
+/** Modos de juego. */
+export type Mode = 'campaign' | 'endless' | 'aguante' | 'escolta' | 'travesia' | 'asedio';
+/** Barco de suministros (Escolta) o barco propio (Travesía). */
+export interface Ship { x: number; y: number; hp: number; max: number; phase: 'gap' | 'in' | 'dock' | 'out'; t: number; ang: number; n: number; hitT: number; }
+/** Objetos a la deriva en la Travesía. */
+export interface Pickup { x: number; y: number; kind: 'barril' | 'restos' | 'cofre'; id: number; }
 export interface Bolt {
   x: number; y: number; px: number; py: number; t: Enemy | null; d: number; crit: boolean; bounce: boolean;
   kind: 'light' | 'harpoon'; speed: number; gone?: boolean;
@@ -46,7 +55,7 @@ export interface Bolt {
 export interface EShot { x: number; y: number; d: number; c: string; gone?: boolean; }
 export interface Fx {
   kind: 'p' | 'ring' | 'nova' | 'wake' | 'splash' | 'boom' | 'net' | 'slam' | 'warn' | 'strike' | 'sink'
-    | 'zap' | 'bite' | 'sting' | 'bash' | 'netfly' | 'spray' | 'tap' | 'heal' | 'crack';
+    | 'zap' | 'bite' | 'sting' | 'bash' | 'netfly' | 'spray' | 'tap' | 'heal' | 'crack' | 'cannon';
   /** Para 'zap' y 'netfly': punto de destino. */
   tx?: number; ty?: number;
   x: number; y: number; vx: number; vy: number; t: number; max: number; c: string; r?: number;
@@ -57,7 +66,7 @@ export interface Txt { x: number; y: number; s: string; c: string; t: number; ma
 export interface Hazard { x: number; y: number; t: number; r: number; }
 export type GEvent = 'shot' | 'crit' | 'kill' | 'hurt' | 'wave' | 'boss' | 'bossdown' | 'over' | 'flash' | 'buy'
   | 'thunder' | 'boom' | 'enrage' | 'elite' | 'cards' | 'revive' | 'frostwarn' | 'frost' | 'erupt' | 'harpoon' | 'net' | 'slam'
-  | 'zap' | 'charge' | 'bite' | 'combo' | 'reveal' | 'win' | 'tap' | 'tapmiss' | 'heal' | 'crack' | 'fire' | 'poison' | 'newtype';
+  | 'zap' | 'charge' | 'bite' | 'combo' | 'reveal' | 'win' | 'delivery' | 'sunk' | 'pickup' | 'cannon' | 'tap' | 'tapmiss' | 'heal' | 'crack' | 'fire' | 'poison' | 'newtype';
 
 interface Proto { hp: number; spd: number; r: number; dmg: number; rew: number; stop: number; atk: number; armor: number; }
 const P: Record<EType, Proto> = {
@@ -83,6 +92,10 @@ const P: Record<EType, Proto> = {
   lavacrab: { hp: 6, spd: 55, r: 6, dmg: 2, rew: 1, stop: 32, atk: 0.8, armor: 0 },
   angler: { hp: 34, spd: 26, r: 11, dmg: 6, rew: 7, stop: 36, atk: 1.2, armor: 0 },
   ghost: { hp: 23, spd: 38, r: 9, dmg: 5, rew: 5, stop: 34, atk: 0.9, armor: 0 },
+  // Piratas (Asedio)
+  pirate: { hp: 60, spd: 20, r: 16, dmg: 11, rew: 8, stop: 180, atk: 3.4, armor: 0 },
+  raider: { hp: 13, spd: 58, r: 8, dmg: 4, rew: 3, stop: 34, atk: 0.9, armor: 0 },
+  captain: { hp: 150, spd: 13, r: 26, dmg: 16, rew: 60, stop: 190, atk: 2.4, armor: 0 },
 };
 // [tipo, oleada mínima, peso, mundo donde aparece]. En su mundo salen a partir de esa oleada;
 // en los mundos siguientes salen antes (3 oleadas antes, mínimo la 2) y con algo menos de peso.
@@ -102,7 +115,7 @@ export const COLORS: Record<EType, string> = {
   puffer: '#ffd166', turtle: '#9be15d', hermit: '#e8c39e', boss: '#ffd27a',
   seahorse: '#7ef0c0', star: '#ff9f6b', starlet: '#ffbe8f', lobster: '#e0442e', lionfish: '#ff8c6b',
   narwhal: '#cfe6f5', seal: '#9fb3c4', firefish: '#ff8a3d', volturtle: '#6b5a4e', lavacrab: '#ff7a2e',
-  angler: '#5ee7ff', ghost: '#e8e6ff',
+  angler: '#5ee7ff', ghost: '#e8e6ff', pirate: '#6b4a2c', raider: '#a0764a', captain: '#3b2a20',
 };
 export const LAMP_Y = -48;
 /** Posición de cada torreta sobre la isla. */
@@ -124,7 +137,7 @@ export function mulberry(seed: number) {
 }
 
 /** Nivel de la campaña: mundo (0-4) y número (1-10). Sin nivel = modo infinito. */
-export interface GameOpts { seed?: number; daily?: boolean; level?: { zi: number; n: number }; }
+export interface GameOpts { seed?: number; daily?: boolean; level?: { zi: number; n: number }; mode?: Mode; }
 export interface LevelInfo { zi: number; n: number; start: number; waves: number; boss: boolean; g: number; }
 
 export class Game {
@@ -187,8 +200,17 @@ export class Game {
   daily: boolean;
   /** Nivel de la campaña que se juega (null = modo infinito). */
   level: LevelInfo | null = null;
-  /** Se ganó el nivel. */
+  /** Se ganó el nivel o la misión del modo. */
   won = false;
+  mode: Mode = 'endless';
+  /** Escolta: barco de suministros y entregas. Travesía: distancia recorrida. */
+  ship: Ship | null = null;
+  deliveries = 0;
+  voyage = 0;
+  pickups: Pickup[] = [];
+  pickT = 3;
+  /** Mejoras conseguidas en la Travesía (para la pantalla final). */
+  found = 0;
   private nid = 1;
   private wr: () => number = Math.random; // azar de la oleada (sembrado)
 
@@ -209,6 +231,20 @@ export class Game {
     this.st = this.stats();
     this.hp = this.st.hp;
     this.pearls = 20 + 25 * (this.perm.start || 0);
+    this.mode = opts.level ? 'campaign' : opts.mode || 'endless';
+    const R0 = MODE_RULES[this.mode as keyof typeof MODE_RULES];
+    if (this.mode === 'aguante') {
+      // Juegas con lo que ya tienes: mejoras según tu nivel de farero, sin comprar
+      const L = levelOf(save.xp || 0).lv, base = Math.min(12, 2 + Math.floor(L * 0.7));
+      for (const k of ['dmg', 'spd', 'hp', 'rep', 'cc', 'rng', 'arm', 'bar']) this.lv[k] = base;
+      for (const k of ['cf', 'chain', 'vamp', 'thorn', 'fcd']) this.lv[k] = Math.floor(base / 2);
+      if (L >= 3) this.lv.tA = 1 + Math.floor(L / 5);
+      if (L >= 6) this.lv.tN = 1 + Math.floor(L / 8);
+      this.st = this.stats(); this.hp = this.st.hp;
+    }
+    if (this.mode === 'travesia') { this.lv.dmg = this.lv.spd = this.lv.hp = 2; this.st = this.stats(); this.hp = this.st.hp; }
+    if (this.mode === 'escolta') this.ship = { x: 0, y: 0, hp: 0, max: 0, phase: 'gap', t: 4, ang: 0, n: 0, hitT: 0 };
+    void R0;
     if (opts.level) {
       const { zi, n } = opts.level;
       this.level = { zi, n, start: LEVEL_START[n - 1], waves: LEVEL_WAVES[n - 1], boss: n === LEVEL_WAVES.length, g: zi * 10 + n };
@@ -274,12 +310,16 @@ export class Game {
   isOpen(id: string) {
     const d = DEFS.find(x => x.id === id);
     if (!d) return false;
-    // En la campaña aparecen más mejoras a medida que se pasan niveles; en el infinito están todas
+    // En la campaña aparecen más mejoras a medida que se pasan niveles; en Aguante y Travesía no se compra
+    if (this.mode === 'aguante' || this.mode === 'travesia') return false;
+    if (this.mode === 'escolta' || this.mode === 'asedio') return true;
     return !this.level || d.at <= this.level.g || this.lv[id] > 0;
   }
   /** Oleada dentro del nivel (1..waves) o la oleada normal en el modo infinito. */
   get shownWave() { return this.level ? Math.max(1, this.wave - this.level.start + 1) : this.wave; }
-  get lastWave() { return this.level ? this.level.start + this.level.waves - 1 : Infinity; }
+  get lastWave() { return this.level ? this.level.start + this.level.waves - 1 : this.mode === 'asedio' ? MODE_RULES.asedio.waves : Infinity; }
+  /** Total de oleadas mostrado en la barra (0 = sin final). */
+  get totalWaves() { return this.level ? this.level.waves : this.mode === 'asedio' ? MODE_RULES.asedio.waves : 0; }
   /** Empieza ya la primera oleada (botón LISTO en la preparación). */
   skipPrep() { if (this.state === 'pause' && this.pauseT > 0.3) this.pauseT = 0.3; }
 
@@ -364,18 +404,21 @@ export class Game {
   /** Posición de una bola de fuego (en el aire describe un arco). */
   fireballPos(f: Fireball) {
     const k = f.t / f.max;
-    return { x: f.sx * (1 - k), y: f.sy * (1 - k) - 10 * k, h: Math.sin(k * Math.PI) * 55 };
+    return { x: f.sx + (f.tx - f.sx) * k, y: f.sy + (f.ty - f.sy) * k, h: Math.sin(k * Math.PI) * 55 };
   }
 
   /** El jugador toca el mar en (x, y): apaga bolas de fuego o golpea a la criatura más cercana. */
-  tapAt(x: number, y: number): 'hit' | 'ball' | 'miss' | 'empty' {
+  tapAt(x: number, y: number): 'hit' | 'ball' | 'miss' | 'empty' | 'pickup' {
     if (this.over || this.state === 'cards') return 'miss';
+    for (const p of this.pickups) {
+      if ((p.x - x) ** 2 + (p.y - y) ** 2 < 26 * 26) { this.collect(p); return 'pickup'; }
+    }
     for (const f of this.fireballs) {
       const p = this.fireballPos(f);
       if ((p.x - x) ** 2 + (p.y - p.h - y) ** 2 < 22 * 22) {
         f.gone = true;
         this.burst(p.x, p.y - p.h, '#ffb35c', 10, 90);
-        this.text(p.x, p.y - p.h - 8, t('¡APAGADA!'), '#ffd2a0', false, 0.7);
+        this.text(p.x, p.y - p.h - 8, f.ball ? t('¡DESVIADO!') : t('¡APAGADA!'), '#ffd2a0', false, 0.7);
         this.emit('tap');
         return 'ball';
       }
@@ -422,7 +465,7 @@ export class Game {
 
   /* ---------- Oleadas ---------- */
   private startWave() {
-    const w = this.wave, boss = this.level ? this.level.boss && w === this.lastWave : w % 10 === 0;
+    const w = this.wave, boss = this.level ? this.level.boss && w === this.lastWave : this.mode === 'asedio' ? w === this.lastWave : this.mode === 'endless' ? w % 10 === 0 : w % 10 === 0 && this.mode !== 'travesia';
     this.wr = mulberry(this.seed + w * 7919);
     const R = this.wr;
     this.mod = null;
@@ -434,7 +477,7 @@ export class Game {
     let n = Math.floor((5 + w * 1.5) * (1 + 0.1 * this.zoneIndex));
     if (this.mod?.id === 'marea') n = Math.floor(n * 1.4);
     const q: EType[] = [];
-    if (boss) { q.push('boss'); for (let i = 0; i < Math.floor(n / 3); i++) q.push(this.pick()); }
+    if (boss) { q.push(this.mode === 'asedio' ? 'captain' : 'boss'); for (let i = 0; i < Math.floor(n / 3); i++) q.push(this.pick()); }
     else for (let i = 0; i < n; i++) q.push(this.pick());
     this.current = R() * Math.PI * 2;
     this.queue = q;
@@ -449,6 +492,8 @@ export class Game {
   get zoneIndex() { return Math.max(0, ZONES.findIndex(z => z.id === this.zone.id)); }
 
   private pick(): EType {
+    // Asedio: mitad piratas, mitad monstruos
+    if (this.mode === 'asedio' && this.wr() < 0.5) return this.wave >= 2 && this.wr() < 0.4 ? 'pirate' : 'raider';
     const zi = this.zoneIndex;
     const opts: [EType, number][] = [];
     for (const [type, minW, wt, home] of TABLE) {
@@ -470,6 +515,13 @@ export class Game {
     return { hs, ds: Math.pow(1.05, w - 1) * this.zone.dmg };
   }
 
+  /** Hacia dónde va una criatura: al faro, o al barco de suministros si lo eligió y sigue cerca. */
+  goal(e: Enemy) {
+    const s = this.ship;
+    if (e.toShip && s && this.mode === 'escolta' && (s.phase === 'in' || s.phase === 'dock')) return { x: s.x, y: s.y, ship: true };
+    return { x: 0, y: 0, ship: false };
+  }
+
   private make(type: EType, x: number, y: number, elite = false): Enemy {
     const p = P[type], { hs, ds } = this.scale(), w = this.wave;
     const hpMul = type === 'boss' ? Math.pow(1.15, w) * this.zone.hp : hs;
@@ -482,8 +534,10 @@ export class Game {
       dead: false, wob: Math.random() * 6, stun: 0, hitT: 0, elite, age: 0, summonT: 5, enraged: false, wakeT: 0,
       slowT: 0, burn: 0, burnT: 0, chargeT: 0, lungeT: 0,
       shell: 0, shellMax: 0, phase: Math.random() * 3, under: false, mode: 0,
+      hd: Math.atan2(-y, -x), toShip: this.mode === 'escolta' && type !== 'boss' && Math.random() < MODE_RULES.escolta.aggro,
     };
     if (type === 'lobster') e.shell = e.shellMax = e.max * 0.7;
+    if (type === 'captain') { e.hp = e.max = p.hp * Math.pow(1.15, w) * this.zone.hp; }
     this.enemies.push(e);
     this.fx.push({ kind: 'splash', x, y, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '#bfe8ff', r: e.r * 0.8 });
     return e;
@@ -491,7 +545,8 @@ export class Game {
 
   private spawn(type: EType) {
     const R = this.spawnR();
-    const a = this.mod?.id === 'corriente' ? this.current + (this.wr() - 0.5) * 1.4 : this.wr() * Math.PI * 2;
+    const a = this.mode === 'travesia' ? -Math.PI / 2 + (this.wr() - 0.5) * 2.4
+      : this.mod?.id === 'corriente' ? this.current + (this.wr() - 0.5) * 1.4 : this.wr() * Math.PI * 2;
     const x = Math.cos(a) * R, y = Math.sin(a) * R;
     if (type === 'sardine') {
       for (let i = 0; i < 4; i++) this.make('sardine', x + (Math.random() - 0.5) * 30, y + (Math.random() - 0.5) * 30);
@@ -595,6 +650,25 @@ export class Game {
     } else this.emit('kill');
   }
 
+  /** Golpe a lo que la criatura ataca: el faro o el barco. */
+  private strike(tg: { ship: boolean }, d: number, attacker?: Enemy) {
+    if (tg.ship) this.hurtShip(d); else this.hurt(d, attacker);
+  }
+  /** Daño al barco de suministros; si se hunde, se pierde la partida. */
+  hurtShip(d: number) {
+    const s = this.ship;
+    if (!s || this.over) return;
+    s.hp -= d; s.hitT = 0.15;
+    if (s.hp <= 0) {
+      s.hp = 0;
+      this.fx.push({ kind: 'boom', x: s.x, y: s.y, vx: 0, vy: 0, t: 0.8, max: 0.8, c: '#ff8a3d', r: 50 });
+      this.burst(s.x, s.y, '#8a5530', 30, 150);
+      this.text(s.x, s.y - 30, t('¡BARCO HUNDIDO!'), '#ff6b6b', true, 1.6);
+      this.emit('sunk');
+      this.gameOver();
+    }
+  }
+
   private hurt(d: number, attacker?: Enemy, quiet = false) {
     d *= 1 - this.st.arm;
     if (!quiet && this.shield > 0) { const a = Math.min(this.shield, d); this.shield -= a; d -= a; }
@@ -623,13 +697,13 @@ export class Game {
   }
 
   /** Descarga eléctrica de la anguila: golpea al instante. */
-  private zap(e: Enemy) {
-    const d = Math.hypot(e.x, e.y) || 1;
-    const tx = (e.x / d) * 28, ty = (e.y / d) * 28 - 14;
+  private zap(e: Enemy, tg = this.goal(e)) {
+    const rx = e.x - tg.x, ry = e.y - tg.y, d = Math.hypot(rx, ry) || 1, R = tg.ship ? 12 : 28;
+    const tx = tg.x + (rx / d) * R, ty = tg.y + (ry / d) * R - 14;
     this.fx.push({ kind: 'zap', x: e.x, y: e.y, tx, ty, vx: 0, vy: 0, t: 0.28, max: 0.28, c: '#b8ffe0' });
     this.burst(tx, ty, '#b8ffe0', 8, 80);
     this.emit('zap');
-    this.hurt(e.dmg);
+    this.strike(tg, e.dmg);
   }
 
   private landNets(dt: number) {
@@ -654,17 +728,102 @@ export class Game {
     this.emit('over');
   }
 
-  private winLevel() {
+  /** Gana la misión (también lo usan Escolta y Travesía). */
+  winLevel() {
     this.won = true;
     this.over = true;
-    this.earned = Math.floor(this.coral + this.shownWave * 1.5 * this.zone.reward);
+    this.earned = Math.floor(this.coral + this.shownWave * 1.5 * this.zone.reward) + (this.mode !== 'campaign' ? 20 : 0);
     this.emit('win');
+  }
+
+  /* ---------- Escolta: el barco de suministros llega, descarga y se va ---------- */
+  private updateShip(dt: number) {
+    const s = this.ship!, M = MODE_RULES.escolta;
+    s.hitT = Math.max(0, s.hitT - dt);
+    if (s.phase === 'gap') {
+      s.t -= dt;
+      if (s.t <= 0) {
+        s.ang = this.wr() * Math.PI * 2;
+        s.x = Math.cos(s.ang) * 340; s.y = Math.sin(s.ang) * 340;
+        s.max = s.hp = M.shipHp * (1 + 0.3 * s.n) * Math.pow(1.04, this.wave);
+        s.phase = 'in';
+        this.emit('delivery', -1);
+      }
+      return;
+    }
+    const dx = Math.cos(s.ang) * M.dock, dy = Math.sin(s.ang) * M.dock * 0.8;
+    if (s.phase === 'in') {
+      const ex = dx - s.x, ey = dy - s.y, d = Math.hypot(ex, ey), v = M.speed * dt;
+      if (d <= v) { s.x = dx; s.y = dy; s.phase = 'dock'; s.t = M.unload; }
+      else { s.x += (ex / d) * v; s.y += (ey / d) * v; }
+      if (Math.random() < dt * 3) this.fx.push({ kind: 'wake', x: s.x, y: s.y, vx: 0, vy: 0, t: 1, max: 1, c: '', r: 14 });
+    } else if (s.phase === 'dock') {
+      s.t -= dt;
+      if (s.t <= 0) {
+        // Entrega: perlas, comida (vida) y suministros
+        const pr = Math.round(30 + 12 * s.n + this.wave * 3);
+        this.gain(pr);
+        this.hp = Math.min(this.st.hp, this.hp + this.st.hp * 0.25);
+        this.deliveries++;
+        this.text(s.x, s.y - 28, L(`¡Entrega! +${pr} perlas`, `Delivered! +${pr} pearls`), '#8fe9ff', true, 1.6);
+        this.fx.push({ kind: 'heal', x: 0, y: 0, vx: 0, vy: 0, t: 0.9, max: 0.9, c: '#7ef0c0', r: 70 });
+        this.emit('delivery', this.deliveries);
+        if (this.deliveries >= M.total) { this.winLevel(); return; }
+        s.phase = 'out';
+      }
+    } else if (s.phase === 'out') {
+      const v = M.speed * 1.3 * dt;
+      s.x += Math.cos(s.ang) * v; s.y += Math.sin(s.ang) * v;
+      if (Math.hypot(s.x, s.y) > 340) { s.phase = 'gap'; s.t = M.gap; s.n++; }
+    }
+  }
+
+  /* ---------- Travesía: el barco avanza, el mar trae objetos a la deriva ---------- */
+  private updateVoyage(dt: number) {
+    const M = MODE_RULES.travesia;
+    if (this.state === 'cards') return;
+    this.voyage += M.speed * dt;
+    for (const p of this.pickups) p.y += M.speed * dt;
+    this.pickups = this.pickups.filter(p => p.y < 330);
+    for (const h of this.hazards) h.y += M.speed * dt;
+    this.pickT -= dt;
+    if (this.pickT <= 0) {
+      this.pickT = 2.4 + this.wr() * 2.4;
+      const r = this.wr();
+      this.pickups.push({ x: (this.wr() - 0.5) * 300, y: -320, kind: r < 0.6 ? 'barril' : r < 0.85 ? 'restos' : 'cofre', id: this.nid++ });
+    }
+    if (this.voyage >= M.total) this.winLevel();
+  }
+
+  /** Recoge un objeto a la deriva: mejora el barco gratis. */
+  private collect(p: Pickup) {
+    this.pickups = this.pickups.filter(x => x !== p);
+    const pool = ['dmg', 'spd', 'cc', 'rng', 'hp', 'rep', 'arm', 'bar', 'chain', 'cf'];
+    const n = p.kind === 'restos' ? 2 : 1;
+    const got: string[] = [];
+    for (let i = 0; i < n; i++) { const id = pool[Math.floor(Math.random() * pool.length)]; this.lv[id]++; got.push(DEFS.find(d => d.id === id)!.name); }
+    if (p.kind === 'cofre') { this.lv.dmg++; got.push(DEFS.find(d => d.id === 'dmg')!.name); }
+    this.refresh();
+    if (p.kind === 'cofre') this.hp = Math.min(this.st.hp, this.hp + this.st.hp * 0.35);
+    this.found += got.length;
+    this.text(p.x, p.y - 16, '+ ' + got.join(' · '), '#ffe9a8', true, 1.3);
+    this.burst(p.x, p.y, '#ffd27a', 12, 90);
+    this.fx.push({ kind: 'splash', x: p.x, y: p.y, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#bfe8ff', r: 14 });
+    this.emit('pickup');
+  }
+
+  /** Progreso de la misión (0-1) en Escolta y Travesía. */
+  get missionProgress() {
+    if (this.mode === 'escolta') return this.deliveries / MODE_RULES.escolta.total;
+    if (this.mode === 'travesia') return Math.min(1, this.voyage / MODE_RULES.travesia.total);
+    return 0;
   }
 
   get score() { return this.wave * 1000 + this.kills; }
 
   private threat(e: Enemy) {
-    const T: Partial<Record<EType, number>> = { puffer: 60, seahorse: 55, boss: 45, angler: 42, eel: 35, firefish: 35, narwhal: 30 };
+    const T: Partial<Record<EType, number>> = { puffer: 60, seahorse: 55, boss: 45, captain: 45, pirate: 40, angler: 42, eel: 35, firefish: 35, narwhal: 30 };
+    if (e.toShip && this.ship) return 50 + (T[e.type] || 0);
     return (T[e.type] || 0) + (e.elite ? 25 : 0);
   }
 
@@ -866,7 +1025,8 @@ export class Game {
         this.text(0, -95, '+' + pw + L(' perlas', ' pearls') + (it > 0 ? ' (+' + it + L(' interés)', ' interest)') : ''), '#8fe9ff', true, 1.4);
         this.coral += st.cw * this.zone.reward;
         if (this.bl.marea) this.hp = Math.min(st.hp, this.hp + st.hp * 0.2 * this.bl.marea);
-        if (this.level && this.wave >= this.lastWave) { this.winLevel(); return; }
+        if ((this.level || this.mode === 'asedio') && this.wave >= this.lastWave) { this.winLevel(); return; }
+        if (this.mode === 'aguante' || this.mode === 'travesia') this.pauseT = 0.5;
         if ((this.level ? this.shownWave : this.wave) % 5 === 0) {
           this.dealCards();
           if (this.cardOpts.length) { this.state = 'cards'; this.emit('cards'); return; }
@@ -935,15 +1095,21 @@ export class Game {
     }
     this.eshots = this.eshots.filter(s => !s.gone);
 
+    if (this.mode === 'escolta') { this.updateShip(dt); if (this.over) return; }
+    if (this.mode === 'travesia') { this.updateVoyage(dt); if (this.over) return; }
+
     // Bolas de fuego del pez ígneo
     for (const f of this.fireballs) {
       if (f.gone) continue;
       f.t += dt;
       if (f.t >= f.max) {
         f.gone = true;
-        this.fx.push({ kind: 'boom', x: 0, y: -10, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '#ff8a3d', r: 30 });
-        this.burst(0, -10, '#ff8a3d', 10, 110);
-        this.hurt(f.d);
+        this.fx.push({ kind: 'boom', x: f.tx, y: f.ty, vx: 0, vy: 0, t: 0.45, max: 0.45, c: f.ball ? '#ffcf8a' : '#ff8a3d', r: f.ball ? 26 : 30 });
+        this.burst(f.tx, f.ty, f.ball ? '#555b66' : '#ff8a3d', 10, 110);
+        if (f.ball) this.shake = Math.max(this.shake, 0.15);
+        const s = this.ship;
+        if (f.toShip) { if (s && Math.hypot(s.x - f.tx, s.y - f.ty) < 34) this.hurtShip(f.d); }
+        else this.hurt(f.d);
         if (this.over) return;
       }
     }
@@ -993,31 +1159,38 @@ export class Game {
           this.emit('enrage');
         }
       }
-      const d = Math.hypot(e.x, e.y);
+      const tg = this.goal(e);
+      const rx = e.x - tg.x, ry = e.y - tg.y, d = Math.hypot(rx, ry) || 1;
+      // Contra el barco, las cuerpo a cuerpo se pegan al casco y las de distancia se quedan algo más cerca
+      const stop = tg.ship ? (e.stop > 100 ? e.stop * 0.7 : e.r + 16) : e.stop;
+      const R = tg.ship ? 14 : 30;
+      const hitX = tg.x + (rx / d) * R, hitY = tg.y + (ry / d) * R - 6;
+      e.hd = Math.atan2(-ry, -rx);
+      // Travesía: el mar (y lo que nada en él) se desplaza hacia atrás mientras el barco avanza
+      if (this.mode === 'travesia' && d > stop + 20) e.y += MODE_RULES.travesia.speed * dt;
       e.wakeT -= dt;
       // Foca: bucea 2.2 s y sale 1.6 s mientras se acerca; ya en la orilla, se queda arriba
-      if (e.type === 'seal') e.under = d > e.stop + 4 && e.phase % 3.8 < 2.2;
+      if (e.type === 'seal') e.under = d > stop + 4 && e.phase % 3.8 < 2.2;
       // Narval: a 140 se detiene a apuntar 1 s y luego embiste a toda velocidad
       if (e.type === 'narwhal') {
-        if (e.mode === 0 && d < 140 && d > e.stop + 10) { e.mode = 1; e.chargeT = 1.0; this.emit('charge'); }
+        if (e.mode === 0 && d < 140 && d > stop + 10) { e.mode = 1; e.chargeT = 1.0; this.emit('charge'); }
         if (e.mode === 1) { e.chargeT -= dt; if (e.chargeT <= 0) e.mode = 2; continue; }
-        if (e.mode === 2 && d <= e.stop) {
+        if (e.mode === 2 && d <= stop) {
           e.mode = 3;
-          const hx = (e.x / d) * 30, hy = (e.y / d) * 30 - 6;
-          this.fx.push({ kind: 'bash', x: hx, y: hy, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '', r: e.r * 2 });
-          this.fx.push({ kind: 'splash', x: hx, y: hy, vx: 0, vy: 0, t: 0.6, max: 0.6, c: '#bfe8ff', r: 24 });
+          this.fx.push({ kind: 'bash', x: hitX, y: hitY, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '', r: e.r * 2 });
+          this.fx.push({ kind: 'splash', x: hitX, y: hitY, vx: 0, vy: 0, t: 0.6, max: 0.6, c: '#bfe8ff', r: 24 });
           this.shake = Math.max(this.shake, 0.25);
           this.emit('bite');
-          this.hurt(e.dmg, e);
+          this.strike(tg, e.dmg, e);
           e.dmg *= 0.3; e.atk = e.atkRate;
           if (this.over) return;
         }
       }
-      if (d > e.stop) {
+      if (d > stop) {
         const s = e.spd * dt * (e.slowT > 0 ? 0.5 : 1) * (e.type === 'sardine' ? 1 + 0.25 * Math.sin(e.age * 6 + e.wob) : 1)
           * (e.type === 'narwhal' && e.mode === 2 ? 8 : 1);
-        e.x -= (e.x / d) * s;
-        e.y -= (e.y / d) * s;
+        e.x -= (rx / d) * s;
+        e.y -= (ry / d) * s;
         if (e.wakeT <= 0) {
           e.wakeT = e.type === 'sardine' || e.type === 'mini' ? 0.6 : 0.35;
           this.fx.push({ kind: 'wake', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.9, max: 0.9, c: '', r: e.r });
@@ -1033,24 +1206,31 @@ export class Game {
         this.burst(e.x, e.y, '#ffd166', 18, 140);
         this.kill(e, false);
         this.emit('boom');
-        this.hurt(e.dmg);
+        this.strike(tg, e.dmg);
         if (this.over) return;
       } else if (e.type === 'seahorse') {
         // se queda a distancia curando
       } else {
         e.atk -= dt * (e.slowT > 0 ? 0.6 : 1);
         e.lungeT = Math.max(0, e.lungeT - dt);
-        if (e.type === 'firefish') {
+        if (e.type === 'firefish' || e.type === 'pirate' || e.type === 'captain') {
           if (e.atk <= 0) {
             e.atk = e.atkRate; e.lungeT = 0.24;
-            this.fireballs.push({ sx: e.x, sy: e.y, t: 0, max: 1.4, d: e.dmg });
-            this.emit('fire');
+            const ball = e.type !== 'firefish';
+            const shots = e.type === 'captain' ? 3 : 1;
+            for (let i = 0; i < shots; i++) {
+              const sp = (i - (shots - 1) / 2) * 16;
+              this.fireballs.push({ sx: e.x, sy: e.y, tx: (tg.ship ? tg.x : 0) + sp, ty: (tg.ship ? tg.y : -10) + Math.abs(sp) * 0.3, t: -i * 0.12, max: ball ? 1.6 : 1.4, d: e.dmg, ball, toShip: tg.ship });
+            }
+            if (ball) this.fx.push({ kind: 'cannon', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '', r: e.r, h: e.hd });
+            this.emit(ball ? 'cannon' : 'fire');
+            if (e.type === 'captain' && Math.random() < 0.5) for (let i = 0; i < 2; i++) { this.make('raider', e.x + (i ? 18 : -18), e.y); this.waveTotal++; }
           }
         } else if (e.type === 'eel') {
           // Se carga brillando y luego lanza una descarga instantánea
           if (e.chargeT > 0) {
             e.chargeT -= dt;
-            if (e.chargeT <= 0) { this.zap(e); if (this.over) return; }
+            if (e.chargeT <= 0) { this.zap(e, tg); if (this.over) return; }
           } else if (e.atk <= 0) {
             e.atk = e.atkRate;
             e.chargeT = 0.5;
@@ -1059,20 +1239,20 @@ export class Game {
         } else if (e.atk <= 0) {
           e.atk = e.atkRate;
           e.lungeT = 0.24;
-          const hx = (e.x / d) * 30, hy = (e.y / d) * 30 - 6;
+          const hx = hitX, hy = hitY;
           if (e.type === 'boss') {
             this.fx.push({ kind: 'ring', x: 0, y: 0, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#ff5ca8' });
             this.fx.push({ kind: 'splash', x: hx, y: hy, vx: 0, vy: 0, t: 0.7, max: 0.7, c: '#bfe8ff', r: 30 });
           } else {
             const kind = e.type === 'jelly' || e.type === 'mini' ? 'sting' : e.type === 'turtle' ? 'bash' : 'bite';
-            this.fx.push({ kind, x: hx, y: hy, vx: 0, vy: 0, t: 0.3, max: 0.3, c: '', r: e.r, h: Math.atan2(-e.y, -e.x) });
+            this.fx.push({ kind, x: hx, y: hy, vx: 0, vy: 0, t: 0.3, max: 0.3, c: '', r: e.r, h: e.hd });
             this.emit('bite');
           }
-          this.hurt(e.dmg, e);
-          if (e.type === 'lionfish') {
+          this.strike(tg, e.dmg, e);
+          if (e.type === 'lionfish' && !tg.ship) {
             this.poisonT = 4;
             this.poisonDps = Math.min(this.st.hp * 0.03, this.poisonDps + e.dmg * 0.45);
-            this.text((e.x / d) * 30, (e.y / d) * 30 - 18, t('VENENO'), '#b6f27a', false, 0.6);
+            this.text(hitX, hitY - 12, t('VENENO'), '#b6f27a', false, 0.6);
             this.emit('poison');
           }
           if (this.over) return;
@@ -1091,6 +1271,6 @@ export class Game {
     this.texts = this.texts.filter(t => t.t > 0);
   }
 
-  get boss() { return this.enemies.find(e => e.type === 'boss') || null; }
+  get boss() { return this.enemies.find(e => e.type === 'boss' || e.type === 'captain') || null; }
   get waveProgress() { return this.state === 'pause' || this.state === 'cards' ? 1 : Math.min(1, this.waveDone / Math.max(1, this.waveTotal)); }
 }

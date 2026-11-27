@@ -1,6 +1,7 @@
 // Dibujo en canvas: agua animada, faro 2.5D, criaturas sombreadas, efectos y clima.
-import { Game, Enemy, EType, LAMP_Y, TURRET_POS } from './game';
+import { Game, Enemy, EType, LAMP_Y, TURRET_POS, Ship, Pickup } from './game';
 import type { Zone, SkinDef } from './data';
+import { MODE_RULES } from './data';
 import { Water } from './water';
 import { ready, sheetFor, Sheet, islaArt, faroArt, redArt, arponArt, turretArt, bossSheet, Still } from './art';
 
@@ -109,7 +110,7 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
   // Fondo y agua: shader en la GPU, o patrón 2D si no hay WebGL
   if (water === undefined) water = Water.create();
   if (water) {
-    const c = water.render(vw, vh, quality === 2 ? Math.min(1, dpr * 0.6) : quality === 1 ? 0.45 : 0.3, zone, now, cam.x, cam.y, cam.s, lampA, 1, g ? g.lightning : 0, quality, BEAM);
+    const c = water.render(vw, vh, quality === 2 ? Math.min(1, dpr * 0.6) : quality === 1 ? 0.45 : 0.3, zone, now, cam.x, cam.y, cam.s, lampA, 1, g ? g.lightning : 0, quality, BEAM, g?.mode === 'travesia' ? g.voyage : 0, g?.mode === 'travesia');
     ctx.drawImage(c, 0, 0, vw, vh);
   } else {
     ctx.fillStyle = radial(ctx, vw / 2, vh / 2, Math.max(vw, vh) * 0.8, [[0, zone.sky0], [1, zone.sky1]]);
@@ -216,10 +217,12 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
   }
 
   if (!g) { drawBoat(ctx, now); drawGulls(ctx, now); }
-  drawIsland(ctx, t);
+  if (!g || g.mode !== 'travesia') drawIsland(ctx, t);
+  if (g) for (const p of g.pickups) drawPickup(ctx, p, t);
 
   // Profundidad: lo que está "detrás" del faro se dibuja antes
   const layers: { y: number; draw: () => void }[] = [{ y: 2, draw: () => drawTower(ctx, t, g) }];
+  if (g?.ship && g.ship.phase !== 'gap') { const sh = g.ship; layers.push({ y: sh.y, draw: () => drawSupplyShip(ctx, sh, t) }); }
   if (g) {
     for (const e of g.enemies) layers.push({ y: e.y, draw: () => drawEnemy(ctx, e, t, zone, g) });
     for (const k of ['tA', 'tR', 'tN'] as const) if (g.lv[k] > 0) layers.push({ y: TURRET_POS[k].y + 0.5, draw: () => drawTurret(ctx, g, k, t) });
@@ -334,6 +337,11 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
         ctx.beginPath(); ctx.ellipse(f.x, f.y, rr, rr * 0.8, 0, 0, TAU); ctx.stroke();
         ctx.fillStyle = `rgba(180,255,220,${k})`;
         for (let i = 0; i < 6; i++) { const aa = i * 1.05 + f.x, px = f.x + Math.cos(aa) * rr * 0.6, py = f.y + Math.sin(aa) * rr * 0.5 - (1 - k) * 12; ctx.fillRect(px - 2.5, py - 0.6, 5, 1.2); ctx.fillRect(px - 0.6, py - 2.5, 1.2, 5); }
+      } else if (f.kind === 'cannon') {
+        const h = f.h || 0, mx = f.x + Math.cos(h) * (f.r || 12), my = f.y + Math.sin(h) * (f.r || 12);
+        ctx.fillStyle = `rgba(255,200,120,${k})`; ctx.beginPath(); ctx.arc(mx, my, 4 * k + 1, 0, TAU); ctx.fill();
+        ctx.fillStyle = `rgba(200,205,215,${0.4 * k})`;
+        for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(mx + Math.cos(h + i) * (1 - k) * 12, my + Math.sin(h + i) * (1 - k) * 12 - (1 - k) * 8, 3 + (1 - k) * 6, 0, TAU); ctx.fill(); }
       } else if (f.kind === 'crack') {
         ctx.strokeStyle = `rgba(255,210,190,${k})`; ctx.lineWidth = 1.6;
         for (let i = 0; i < 7; i++) { const aa = (i / 7) * TAU + f.x, r0 = (f.r || 10) * 0.6, r1 = r0 + (1 - k) * 22; ctx.beginPath(); ctx.moveTo(f.x + Math.cos(aa) * r0, f.y + Math.sin(aa) * r0); ctx.lineTo(f.x + Math.cos(aa) * r1, f.y + Math.sin(aa) * r1); ctx.stroke(); }
@@ -378,7 +386,18 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
     }
     // Bolas de fuego del pez ígneo: sombra en el agua y bola en el aire
     for (const f of g.fireballs) {
+      if (f.t < 0) continue;
       const p = g.fireballPos(f), y = p.y - p.h;
+      if (f.ball) {
+        // Bala de cañón: hierro oscuro con estela de humo (se dibuja normal, no aditiva)
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = 'rgba(0,10,25,.3)'; ctx.beginPath(); ctx.ellipse(p.x, p.y, 5, 2.5, 0, 0, TAU); ctx.fill();
+        for (let i = 1; i <= 4; i++) { const q = g.fireballPos({ ...f, t: Math.max(0, f.t - i * 0.06) }); ctx.fillStyle = `rgba(190,195,205,${0.35 - i * 0.07})`; ctx.beginPath(); ctx.arc(q.x, q.y - q.h, 3 + i, 0, TAU); ctx.fill(); }
+        ctx.fillStyle = radial(ctx, p.x - 1.5, y - 1.5, 6, [[0, '#8a93a3'], [1, '#1d2129']]);
+        ctx.beginPath(); ctx.arc(p.x, y, 4.5, 0, TAU); ctx.fill();
+        ctx.globalCompositeOperation = 'lighter';
+        continue;
+      }
       ctx.fillStyle = radial(ctx, p.x, y, 14, [[0, 'rgba(255,250,220,1)'], [0.3, 'rgba(255,160,60,.95)'], [1, 'rgba(255,70,20,0)']]);
       ctx.beginPath(); ctx.arc(p.x, y, 14, 0, TAU); ctx.fill();
       ctx.fillStyle = 'rgba(255,120,40,.35)';
@@ -523,7 +542,8 @@ function drawTower(ctx: CanvasRenderingContext2D, t: number, g: Game | null) {
     c.beginPath(); c.ellipse(0, LAMP_Y - 4, 7, 6, 0, Math.PI, TAU); c.fill();
     c.fillStyle = '#2a2f3a'; c.beginPath(); c.arc(0, LAMP_Y - 10.5, 1.4, 0, TAU); c.fill();
   });
-  if (ready(faroArt.img)) {
+  if (g?.mode === 'travesia') drawPlayerShip(ctx, t);
+  else if (ready(faroArt.img)) {
     // Faro renderizado desde faro-solo.glb, parado en el claro de la isla (linterna en LAMP_Y)
     ctx.fillStyle = 'rgba(0,0,0,.25)';
     ctx.beginPath(); ctx.ellipse(9, -3, 17, 6, -0.3, 0, TAU); ctx.fill();
@@ -624,7 +644,7 @@ function bossBody(zone: Zone) {
 const BASE_R: Record<EType, number> = {
   crab: 10, jelly: 9, mini: 9, sardine: 5, eel: 9, puffer: 11, turtle: 13, hermit: 11, boss: 32,
   seahorse: 9, star: 10, starlet: 10, lobster: 12, lionfish: 9, narwhal: 12, seal: 10, firefish: 9,
-  volturtle: 14, lavacrab: 10, angler: 11, ghost: 9,
+  volturtle: 14, lavacrab: 10, angler: 11, ghost: 9, pirate: 16, raider: 8, captain: 26,
 };
 /** Criaturas nuevas que, mientras llegan sus modelos, usan la hoja de otra con un tinte propio. */
 const BORROW: Partial<Record<EType, [string, string, number, number]>> = {
@@ -632,7 +652,7 @@ const BORROW: Partial<Record<EType, [string, string, number, number]>> = {
 };
 
 function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, zone: Zone, g: Game) {
-  const a = Math.atan2(-e.y, -e.x), t = time + e.wob, k = e.r / BASE_R[e.type];
+  const a = e.hd, t = time + e.wob, k = e.r / BASE_R[e.type];
   const dist = Math.hypot(e.x, e.y);
   ctx.save();
   const lunge = e.lungeT > 0 ? Math.sin((1 - e.lungeT / 0.24) * Math.PI) * e.r * 0.75 : 0;
@@ -860,6 +880,42 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, zone: 
       ctx.globalCompositeOperation = 'source-over';
       break;
     }
+    case 'pirate': case 'captain': {
+      const big = e.type === 'captain';
+      ctx.rotate(Math.sin(t * 1.3) * 0.04);
+      // casco
+      ctx.fillStyle = big ? '#2a1d14' : '#3b2a1c';
+      ctx.beginPath(); ctx.moveTo(22, 0); ctx.quadraticCurveTo(12, -10, -16, -9); ctx.lineTo(-20, 0); ctx.lineTo(-16, 9); ctx.quadraticCurveTo(12, 10, 22, 0); ctx.fill();
+      ctx.fillStyle = big ? '#5a3c22' : '#6b4a2c';
+      ctx.beginPath(); ctx.moveTo(17, 0); ctx.quadraticCurveTo(9, -7, -13, -6); ctx.lineTo(-15, 0); ctx.lineTo(-13, 6); ctx.quadraticCurveTo(9, 7, 17, 0); ctx.fill();
+      // cañones a los costados
+      ctx.fillStyle = '#15181d';
+      for (const x of big ? [-8, -1, 6] : [-4, 4]) for (const sg of [-1, 1]) ctx.fillRect(x - 1.5, sg * 9.5 - 1, 3, 2);
+      // mástiles y velas oscuras
+      for (const mx of big ? [-8, 2, 11] : [-3, 7]) {
+        ctx.fillStyle = big ? '#1b1b22' : '#26262e';
+        ctx.beginPath(); ctx.ellipse(mx, 0, 3, big ? 11 : 9, 0, 0, TAU); ctx.fill();
+        ctx.strokeStyle = '#2b1a10'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(mx, -11); ctx.lineTo(mx, 11); ctx.stroke();
+      }
+      // emblema: calavera simple en la vela mayor
+      const ex = big ? 2 : 7;
+      ctx.fillStyle = '#e9e4d6'; ctx.beginPath(); ctx.arc(ex, -1, 2.1, 0, TAU); ctx.fill();
+      ctx.fillRect(ex - 1.3, 0.6, 2.6, 1.4);
+      ctx.strokeStyle = '#e9e4d6'; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(ex - 3, 2.5); ctx.lineTo(ex + 3, 5); ctx.moveTo(ex + 3, 2.5); ctx.lineTo(ex - 3, 5); ctx.stroke();
+      if (big) { ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.moveTo(-20, 0); ctx.lineTo(-26, -3); ctx.lineTo(-26, 3); ctx.closePath(); ctx.fill(); }
+      break;
+    }
+    case 'raider': {
+      ctx.rotate(Math.sin(t * 6) * 0.06);
+      ctx.strokeStyle = '#8a6a44'; ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+      const o = Math.sin(t * 9) * 3;
+      for (const sg of [-1, 1]) { ctx.beginPath(); ctx.moveTo(-2, sg * 4); ctx.lineTo(-6 + o, sg * 11); ctx.stroke(); }
+      ctx.fillStyle = '#7a5434'; ctx.beginPath(); ctx.moveTo(11, 0); ctx.quadraticCurveTo(6, -5, -9, -4); ctx.lineTo(-10, 0); ctx.lineTo(-9, 4); ctx.quadraticCurveTo(6, 5, 11, 0); ctx.fill();
+      ctx.fillStyle = '#a0764a'; ctx.beginPath(); ctx.ellipse(0, 0, 8, 2.8, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#2b2b33'; for (const x of [-4, 3]) { ctx.beginPath(); ctx.arc(x, 0, 2, 0, TAU); ctx.fill(); }
+      ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(3, 0, 1.1, 0, TAU); ctx.fill();
+      break;
+    }
     case 'boss': {
       ctx.lineCap = 'round';
       for (let i = 0; i < 8; i++) {
@@ -1026,6 +1082,98 @@ function drawTurretOld(ctx: CanvasRenderingContext2D, g: Game, key: 'tA' | 'tR' 
   }
 }
 
+/** Travesía: tu barco, con el farol en lo alto del mástil (donde estaría la linterna del faro). */
+function drawPlayerShip(ctx: CanvasRenderingContext2D, t: number) {
+  const rock = Math.sin(t * 1.4) * 0.04;
+  ctx.save(); ctx.rotate(rock);
+  // estela
+  ctx.strokeStyle = 'rgba(225,242,255,.35)'; ctx.lineWidth = 2;
+  for (const sg of [-1, 1]) { ctx.beginPath(); ctx.moveTo(sg * 10, 14); ctx.quadraticCurveTo(sg * 20, 40, sg * 34, 80); ctx.stroke(); }
+  ctx.fillStyle = 'rgba(0,10,25,.35)'; ctx.beginPath(); ctx.ellipse(3, 6, 19, 26, 0, 0, TAU); ctx.fill();
+  // casco visto desde atrás y arriba
+  const hull = new Path2D();
+  hull.moveTo(0, -30); hull.quadraticCurveTo(17, -16, 15, 6); hull.quadraticCurveTo(13, 20, 0, 22); hull.quadraticCurveTo(-13, 20, -15, 6); hull.quadraticCurveTo(-17, -16, 0, -30);
+  ctx.fillStyle = '#5a3a22'; ctx.fill(hull);
+  ctx.save(); ctx.clip(hull);
+  ctx.fillStyle = '#8a5a34'; ctx.beginPath(); ctx.ellipse(0, -2, 11, 22, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(60,35,18,.6)'; ctx.lineWidth = 0.8;
+  for (let x = -9; x <= 9; x += 3) { ctx.beginPath(); ctx.moveTo(x, -24); ctx.lineTo(x, 22); ctx.stroke(); }
+  ctx.restore();
+  ctx.strokeStyle = '#2f1d10'; ctx.lineWidth = 1.4; ctx.stroke(hull);
+  // cajas en cubierta
+  ctx.fillStyle = '#b08a52'; ctx.fillRect(-8, 6, 6, 6); ctx.fillRect(3, 8, 5, 5);
+  ctx.strokeStyle = '#6b4a2c'; ctx.lineWidth = 0.7; ctx.strokeRect(-8, 6, 6, 6); ctx.strokeRect(3, 8, 5, 5);
+  // mástil, vela y farol
+  ctx.strokeStyle = '#3b2a1c'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(0, -2); ctx.lineTo(0, LAMP_Y + 6); ctx.stroke();
+  const sw = Math.sin(t * 2) * 1.5;
+  ctx.fillStyle = '#efe6d2'; ctx.beginPath(); ctx.moveTo(-15, -34); ctx.quadraticCurveTo(0, -30 + sw, 15, -34); ctx.lineTo(13, -12); ctx.quadraticCurveTo(0, -8 + sw, -13, -12); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#c9bfa6'; ctx.lineWidth = 0.8; ctx.stroke();
+  ctx.strokeStyle = '#3b2a1c'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-16, -34); ctx.lineTo(16, -34); ctx.stroke();
+  ctx.fillStyle = '#2a2f3a'; ctx.fillRect(-4, LAMP_Y - 3, 8, 8);
+  ctx.fillStyle = '#ffe58a'; ctx.fillRect(-3, LAMP_Y - 2, 6, 6);
+  ctx.restore();
+}
+
+/** Escolta: barco de suministros con su barra de vida y la descarga. */
+function drawSupplyShip(ctx: CanvasRenderingContext2D, s: Ship, t: number) {
+  const h = s.phase === 'out' ? s.ang : s.ang + Math.PI;
+  ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(h + Math.sin(t * 1.5) * 0.03);
+  ctx.fillStyle = 'rgba(0,10,25,.35)'; ctx.beginPath(); ctx.ellipse(2, 3, 26, 11, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#5a3a22'; ctx.beginPath(); ctx.moveTo(26, 0); ctx.quadraticCurveTo(16, -12, -20, -10); ctx.lineTo(-24, 0); ctx.lineTo(-20, 10); ctx.quadraticCurveTo(16, 12, 26, 0); ctx.fill();
+  ctx.fillStyle = '#9a6a3c'; ctx.beginPath(); ctx.moveTo(20, 0); ctx.quadraticCurveTo(12, -8, -17, -7); ctx.lineTo(-19, 0); ctx.lineTo(-17, 7); ctx.quadraticCurveTo(12, 8, 20, 0); ctx.fill();
+  // carga: cajas, barriles y sacos de comida
+  const crates: [number, number, string][] = [[-12, -3, '#c49a5c'], [-6, 2, '#b08a52'], [0, -3, '#c49a5c'], [6, 2, '#a8803e']];
+  for (const [x, y, c] of crates) { ctx.fillStyle = c; ctx.fillRect(x - 2.5, y - 2.5, 5, 5); ctx.strokeStyle = '#6b4a2c'; ctx.lineWidth = 0.6; ctx.strokeRect(x - 2.5, y - 2.5, 5, 5); }
+  ctx.fillStyle = '#7a5434'; for (const [x, y] of [[-12, 4], [10, -3]]) { ctx.beginPath(); ctx.arc(x, y, 2.4, 0, TAU); ctx.fill(); }
+  ctx.fillStyle = '#e9dcc0'; ctx.beginPath(); ctx.ellipse(13, 3, 2.6, 2, 0, 0, TAU); ctx.fill();
+  // vela
+  ctx.fillStyle = '#efe6d2'; ctx.beginPath(); ctx.ellipse(3, 0, 3.5, 13, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#3b2a1c'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(3, -13); ctx.lineTo(3, 13); ctx.stroke();
+  if (s.hitT > 0) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(255,120,100,${s.hitT * 3})`; ctx.beginPath(); ctx.ellipse(0, 0, 24, 11, 0, 0, TAU); ctx.fill(); ctx.globalCompositeOperation = 'source-over'; }
+  ctx.restore();
+  // barra de vida y descarga
+  const w = 46, x0 = s.x - w / 2, y0 = s.y - 30;
+  ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x0 - 1, y0 - 1, w + 2, 6);
+  const k = Math.max(0, s.hp / s.max);
+  ctx.fillStyle = k > 0.5 ? '#35e0b0' : k > 0.25 ? '#ffd166' : '#ff5c7a'; ctx.fillRect(x0, y0, w * k, 4);
+  if (s.phase === 'dock') {
+    const u = 1 - s.t / MODE_RULES.escolta.unload;
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x0 - 1, y0 + 6, w + 2, 4);
+    ctx.fillStyle = '#8fe9ff'; ctx.fillRect(x0, y0 + 7, w * Math.min(1, u), 2);
+    // cajas volando al muelle
+    const p = (t * 1.3) % 1, bx = s.x + (0 - s.x) * p * 0.6, by = s.y + (0 - s.y) * p * 0.6 - Math.sin(p * Math.PI) * 14;
+    ctx.fillStyle = '#c49a5c'; ctx.fillRect(bx - 2, by - 2, 4, 4);
+  }
+}
+
+/** Travesía: barriles, restos de naufragios y cofres a la deriva (se recogen tocándolos). */
+function drawPickup(ctx: CanvasRenderingContext2D, p: Pickup, t: number) {
+  const bob = Math.sin(t * 2.4 + p.id) * 1.5;
+  ctx.save(); ctx.translate(p.x, p.y + bob);
+  ctx.strokeStyle = `rgba(255,226,140,${0.45 + 0.3 * Math.sin(t * 4 + p.id)})`; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.ellipse(0, 3, 15, 8, 0, 0, TAU); ctx.stroke();
+  ctx.strokeStyle = 'rgba(225,242,255,.4)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.ellipse(0, 4, 11, 5, 0, 0.2, Math.PI - 0.2); ctx.stroke();
+  if (p.kind === 'barril') {
+    ctx.rotate(0.5 + Math.sin(t + p.id) * 0.2);
+    ctx.fillStyle = '#8a5a30'; ctx.beginPath(); ctx.ellipse(0, 0, 9, 6, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#3b2a1c'; ctx.lineWidth = 1.4;
+    for (const x of [-5, 5]) { ctx.beginPath(); ctx.moveTo(x, -5.5); ctx.lineTo(x, 5.5); ctx.stroke(); }
+    ctx.fillStyle = '#b07a44'; ctx.beginPath(); ctx.ellipse(-1, -2, 5, 2, 0, 0, TAU); ctx.fill();
+  } else if (p.kind === 'restos') {
+    ctx.rotate(Math.sin(t * 0.7 + p.id) * 0.3);
+    ctx.fillStyle = '#6b4a2c';
+    ctx.fillRect(-11, -3, 22, 4); ctx.save(); ctx.rotate(0.7); ctx.fillRect(-8, -2, 16, 3.5); ctx.restore();
+    ctx.fillStyle = '#d9cdb4'; ctx.beginPath(); ctx.moveTo(-4, -2); ctx.lineTo(6, -9); ctx.lineTo(7, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#b08a52'; ctx.fillRect(2, 1, 5, 5);
+  } else {
+    ctx.fillStyle = '#7a4a22'; ctx.fillRect(-8, -5, 16, 10);
+    ctx.fillStyle = '#9a6430'; ctx.fillRect(-8, -7, 16, 4);
+    ctx.fillStyle = '#ffd27a'; ctx.fillRect(-8, -1, 16, 1.6); ctx.fillRect(-1.5, -3, 3, 4);
+  }
+  ctx.restore();
+}
+
 function drawBoat(ctx: CanvasRenderingContext2D, now: number) {
   const x = ((now * 16) % 760) - 380, y = 58 + Math.sin(now * 1.2) * 2, rock = Math.sin(now * 1.6) * 0.06;
   ctx.strokeStyle = 'rgba(220,240,255,.25)'; ctx.lineWidth = 1.5;
@@ -1115,7 +1263,9 @@ function lighting(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, vw:
   if (g) {
     for (const b of g.bolts) if (b.kind === 'light') light(b.x, b.y, b.crit ? 46 : 30, b.crit ? '255,210,90' : BEAM, 0.55);
     for (const s of g.eshots) light(s.x, s.y, 32, '90,240,150', 0.55);
-    for (const f of g.fireballs) { const p = g.fireballPos(f); light(p.x, p.y - p.h, 40, '255,140,50', 0.6); }
+    for (const f of g.fireballs) { if (f.ball || f.t < 0) continue; const p = g.fireballPos(f); light(p.x, p.y - p.h, 40, '255,140,50', 0.6); }
+    for (const p of g.pickups) light(p.x, p.y, 30, '255,220,140', 0.4);
+    if (g.ship && g.ship.phase !== 'gap') light(g.ship.x, g.ship.y, 46, '255,220,160', 0.45);
     for (const e of g.enemies) {
       if (e.type === 'angler') { const aa = Math.atan2(-e.y, -e.x); light(e.x + Math.cos(aa) * 16, e.y + Math.sin(aa) * 16 - 8, 34, '94,231,255', 0.55); }
       else if (e.type === 'firefish' || e.type === 'lavacrab' || e.type === 'volturtle') light(e.x, e.y, e.type === 'volturtle' ? 34 : 26, '255,120,40', 0.4);

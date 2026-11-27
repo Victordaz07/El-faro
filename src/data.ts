@@ -134,6 +134,24 @@ export const levelClearCoral = (g: number) => 8 + 4 * g;
 /** Estrellas según la vida que quede al ganar. */
 export const starsFor = (hpRatio: number) => (hpRatio >= 0.7 ? 3 : hpRatio >= 0.35 ? 2 : 1);
 
+/* ---------- Modos de juego ---------- */
+/** Reglas de cada modo. unlock = nivel de campaña ('mundo-nivel') que hay que superar para abrirlo. */
+export const MODE_RULES = {
+  aguante: { unlock: '0-2' },
+  escolta: { unlock: '0-4', total: 6, shipHp: 40, speed: 30, dock: 70, unload: 10, gap: 3, aggro: 0.7 },
+  travesia: { unlock: '0-6', speed: 16, total: 2600 },
+  asedio: { unlock: '0-8', waves: 12 },
+  endless: { unlock: '0-10' },
+};
+export interface ModeInfo { id: 'aguante' | 'escolta' | 'travesia' | 'asedio' | 'endless'; icon: string; name: string; desc: string; }
+export const MODES: ModeInfo[] = [
+  { id: 'aguante', icon: '⏳', name: 'Aguante', desc: 'Sin comprar nada: juegas con tu investigación y tu nivel de farero. ¿Cuántas oleadas aguantas?' },
+  { id: 'escolta', icon: '⚓', name: 'Escolta', desc: 'Llegan barcos con comida y suministros. Protégelos hasta que descarguen: si hunden uno, pierdes. Gana con 6 entregas.' },
+  { id: 'travesia', icon: '⛵', name: 'Travesía', desc: 'Navega hasta una isla lejana. No hay tienda: mejora tu barco tocando barriles, restos y cofres a la deriva.' },
+  { id: 'asedio', icon: '🏴', name: 'Asedio pirata', desc: 'Barcos piratas cañonean la bahía y sus botes intentan abordar, junto con monstruos. Resiste 12 oleadas y al capitán.' },
+  { id: 'endless', icon: '♾️', name: 'Infinito', desc: 'Oleadas sin fin, con todas las mejoras desde el principio. Llega lo más lejos que puedas.' },
+];
+
 /* ---------- Progresión del farero, colección y premios diarios ---------- */
 /** Experiencia que pide el nivel lv para pasar al siguiente. */
 export const xpNeed = (lv: number) => 80 + 55 * (lv - 1);
@@ -189,6 +207,8 @@ export const CREATURES: CreatureInfo[] = [
   { id: 'volturtle', zone: 3, name: 'Tortuga volcánica', desc: 'Muy resistente. Al hundirse suelta cuatro cangrejitos de lava.' },
   { id: 'angler', zone: 4, name: 'Rape abisal', desc: 'Su farolillo debilita tu luz: el faro dispara más lento mientras esté cerca.' },
   { id: 'ghost', zone: 4, name: 'Medusa fantasma', desc: 'A ratos se vuelve intangible y la luz la atraviesa. Tus toques sí la alcanzan.' },
+  { id: 'pirate', zone: 0, name: 'Barco pirata', desc: 'Se queda lejos y dispara cañonazos en arco. Toca las balas en el aire para desviarlas.' },
+  { id: 'raider', zone: 0, name: 'Bote de abordaje', desc: 'Rápido y frágil: rema directo a tu isla. Que no se junten muchos.' },
 ];
 
 /* ---------- Zonas ---------- */
@@ -304,6 +324,7 @@ localize(ACHIEVEMENTS, ['name', 'desc']);
 localize(CREATURES, ['name', 'desc']);
 localize(SKINS, ['name']);
 localize(BEAMS, ['name']);
+localize(MODES, ['name', 'desc']);
 for (const k of Object.keys(HINTS)) { const es = HINTS[k]; Object.defineProperty(HINTS, k, { get: () => t(es), enumerable: true }); }
 /** Nombre de pestaña / rama en el idioma activo. */
 export const tabName = (i: number) => t(TABS[i]);

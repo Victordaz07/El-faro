@@ -1,11 +1,11 @@
 // Controlador de interfaz: pantallas, panel de mejoras, HUD, tutorial y bucle principal.
-import { LEVELS_PER_WORLD, LEVEL_WAVES, levelClearCoral, starsFor, levelOf, runXp, levelCoral, SKINS, BEAMS, STREAK, CHEST_HOURS, CREATURES, DEFS, tabName, branchName, BLESSINGS, PERM, BRANCHES, TABS, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone } from './data';
+import { MODES, MODE_RULES, LEVELS_PER_WORLD, LEVEL_WAVES, levelClearCoral, starsFor, levelOf, runXp, levelCoral, SKINS, BEAMS, STREAK, CHEST_HOURS, CREATURES, DEFS, tabName, branchName, BLESSINGS, PERM, BRANCHES, TABS, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone } from './data';
 import {
   load, persist, ensureDaily, track, zoneUnlocked, readyMissions, checkAchievements,
   researchTotal, zonesOpen, challengeZone, challengeSeed, today, chestState,
   starsOf, levelUnlocked, nextLevel, endlessUnlocked, totalStars,
 } from './save';
-import { Game, GEvent, AIMS, TAP_MAX } from './game';
+import { Game, GEvent, AIMS, TAP_MAX, Mode } from './game';
 import '@fontsource/lilita-one/latin-400.css';
 import '@fontsource/nunito/latin-700.css';
 import '@fontsource/nunito/latin-800.css';
@@ -105,7 +105,14 @@ function onEvent(e: GEvent, d?: number) {
     case 'buy': sfx.buy(); break;
     case 'thunder': sfx.thunder(); break;
     case 'boom': sfx.boom(); vibrate(90); break;
-    case 'enrage': sfx.enrage(); banner(L('¡' + runZone.boss + ' FURIOSO!', runZone.boss + ' ENRAGED!')); vibrate(200); break;
+    case 'enrage': sfx.enrage(); banner(L('¡' + bossName() + ' FURIOSO!', bossName() + ' ENRAGED!')); vibrate(200); break;
+    case 'delivery':
+      if ((d || 0) < 0) { toast('⚓ ' + t('Se acerca un barco'), t('Protégelo hasta que descargue')); sfx.wave(); }
+      else { toast('📦 ' + L(`Entrega ${d}/${MODE_RULES.escolta.total}`, `Delivery ${d}/${MODE_RULES.escolta.total}`), t('Comida y suministros para el faro')); sfx.coin(); vibrate(40); }
+      break;
+    case 'sunk': sfx.boom(); vibrate(250); break;
+    case 'pickup': sfx.card(); vibrate(20); break;
+    case 'cannon': sfx.slam(); break;
     case 'elite': sfx.elite(); break;
     case 'harpoon': sfx.harpoon(); break;
     case 'net': sfx.net(); break;
@@ -143,13 +150,18 @@ function onEvent(e: GEvent, d?: number) {
 }
 
 /* ---------- Partida ---------- */
-/** Nivel de la campaña que se juega (null = infinito o desafío). */
+/** Nivel de la campaña que se juega (null = infinito o desafío) y modo de juego. */
 let runLevel: { zi: number; n: number } | null = null;
+let runMode: Mode = 'campaign';
+const bossName = () => (g?.boss?.type === 'captain' ? t('CAPITÁN PIRATA') : runZone.boss);
+/** Un modo está abierto si se superó su nivel de campaña. */
+const modeOpen = (id: keyof typeof MODE_RULES) => { const [zi, n] = MODE_RULES[id].unlock.split('-').map(Number); return starsOf(save, zi, n) > 0; };
 const lvName = (zi: number, n: number) => `${zi + 1}-${n}`;
 
-function start(daily = false, level: { zi: number; n: number } | null = null) {
+function start(daily = false, level: { zi: number; n: number } | null = null, mode: Mode = level ? 'campaign' : 'endless') {
   stopHold();
   runLevel = daily ? null : level;
+  runMode = daily ? 'endless' : mode;
   audio();
   hideAll();
   paused = false; $('pause').textContent = 'II';
@@ -174,11 +186,19 @@ function start(daily = false, level: { zi: number; n: number } | null = null) {
       banner(t('NIVEL') + ' ' + lvName(level.zi, level.n) + '\n' + (level.n === LEVELS_PER_WORLD ? t('¡JEFE!') : L(`${g?.level?.waves} oleadas`, `${g?.level?.waves} waves`)));
       if (ups.length) { toast('🆕 ' + (ups.length > 1 ? t('NUEVAS MEJORAS') : t('NUEVA MEJORA')), ups.map(x => x.name).join(' · ')); sfx.card(); }
     }, 300);
+  } else if (mode !== 'endless' && mode !== 'campaign') {
+    recordFrom = 0;
+    runZone = ZONES[0];
+    g = new Game(save, runZone, onEvent, spawnR, { mode });
+    const info = MODES.find(m => m.id === mode)!;
+    setTimeout(() => banner(info.icon + ' ' + info.name.toUpperCase() + '\n' + (mode === 'aguante' ? t('Sin tienda: aguanta todo lo que puedas') : mode === 'travesia' ? t('Toca lo que flota para mejorar el barco') : mode === 'escolta' ? t('Protege los barcos de suministros') : t('Resiste 12 oleadas')), 2.4), 300);
   } else {
     recordFrom = save.zoneBest[zone().id] || 0;
     runZone = zone();
     g = new Game(save, runZone, onEvent, spawnR);
   }
+  // En Aguante y Travesía no hay tienda
+  $('bar').style.display = g.mode === 'aguante' || g.mode === 'travesia' ? 'none' : '';
   for (const id of ['flash', 'aim', 'taps']) $(id).style.display = '';
   $('frostw').style.display = 'none';
   $('aim').querySelector('span')!.textContent = AIMS[0].name;
@@ -202,7 +222,6 @@ function endRun() {
   if (endless) save.zoneBest[z.id] = Math.max(prevBest, g.wave);
   // Campaña: estrellas y coral por superar el nivel
   let lvBonus = 0, stars = 0, prevStars = 0, firstClear = false;
-  const endlessWasOpen = endlessUnlocked(save);
   if (g.level) {
     const key = g.level.zi + '-' + g.level.n;
     prevStars = save.camp![key] || 0;
@@ -237,7 +256,26 @@ function endRun() {
   let html: string;
   $('next').style.display = 'none';
   $('again').textContent = t('OTRA VEZ');
-  if (g.level) {
+  if (g.mode !== 'campaign' && g.mode !== 'endless') {
+    const m = g.mode, info = MODES.find(x => x.id === m)!;
+    save.modes = save.modes || {};
+    const rec = save.modes[m] || { best: 0, stars: 0 };
+    const val = m === 'aguante' ? g.wave : m === 'escolta' ? g.deliveries : m === 'travesia' ? Math.floor(g.missionProgress * 100) : g.wave;
+    let stars2 = 0;
+    if (g.won) stars2 = starsFor(Math.max(0, g.hp) / g.st.hp);
+    const better = val > rec.best || stars2 > rec.stars;
+    save.modes[m] = { best: Math.max(rec.best, val), stars: Math.max(rec.stars, stars2) };
+    if (g.won && !rec.stars) { lvBonus = 40; save.coral += lvBonus; }
+    $('overtitle').textContent = g.won ? t('¡MISIÓN CUMPLIDA!') : m === 'escolta' && g.ship && g.ship.hp <= 0 ? t('¡HUNDIERON EL BARCO!') : t('EL FARO SE APAGÓ');
+    html = (g.won ? `<div class="stars">${'★'.repeat(stars2)}<i>${'★'.repeat(3 - stars2)}</i></div>` : '') + info.icon + ' ' + info.name + ' · ' + (
+      m === 'aguante' ? L(`aguantaste <b>${g.wave} oleadas</b>`, `you held <b>${g.wave} waves</b>`)
+      : m === 'escolta' ? L(`entregas <b>${g.deliveries}/${MODE_RULES.escolta.total}</b>`, `deliveries <b>${g.deliveries}/${MODE_RULES.escolta.total}</b>`)
+      : m === 'travesia' ? L(`recorriste <b>${val}%</b> · ${g.found} mejoras recogidas`, `you sailed <b>${val}%</b> · ${g.found} upgrades found`)
+      : L(`oleada <b>${g.wave}/${MODE_RULES.asedio.waves}</b>`, `wave <b>${g.wave}/${MODE_RULES.asedio.waves}</b>`)) +
+      (better && !g.won && rec.best ? L(' <b style="color:#35e0b0">¡nuevo récord!</b>', ' <b style="color:#35e0b0">new best!</b>') : '') +
+      (lvBonus ? L(`<br>Premio de la misión: <b style="color:#ffb35c">+${lvBonus} ◆</b>`, `<br>Mission reward: <b style="color:#ffb35c">+${lvBonus} ◆</b>`) : '');
+    $('again').textContent = g.won ? t('REPETIR') : t('REINTENTAR');
+  } else if (g.level) {
     const nm = t('NIVEL') + ' ' + lvName(g.level.zi, g.level.n);
     if (g.won) {
       $('overtitle').textContent = t('¡NIVEL SUPERADO!');
@@ -253,7 +291,7 @@ function endRun() {
         L('<br><b style="color:#7ff0e0">Usa tu coral en INVESTIGAR para volver más fuerte</b>', '<br><b style="color:#7ff0e0">Spend your coral in RESEARCH to come back stronger</b>');
       $('again').textContent = t('REINTENTAR');
     }
-    if (!endlessWasOpen && endlessUnlocked(save)) html += L('<br><b style="color:#ffe27a">♾️ ¡Desbloqueaste el MODO INFINITO!</b>', '<br><b style="color:#ffe27a">♾️ You unlocked ENDLESS MODE!</b>');
+    for (const mi of MODES) { const [mz, mn] = MODE_RULES[mi.id].unlock.split('-').map(Number); if (mz === g.level.zi && mn === g.level.n && firstClear) html += L(`<br><b style="color:#ffe27a">${mi.icon} ¡Nuevo modo: ${esc(mi.name)}!</b>`, `<br><b style="color:#ffe27a">${mi.icon} New mode: ${esc(mi.name)}!</b>`); }
   } else if (g.daily) {
     $('overtitle').textContent = t('DESAFÍO TERMINADO');
     html = L(`${z.name} · oleada <b>${g.wave}</b> · ${g.kills} criaturas<br>Puntuación: <b style="color:#ffd166">${num(g.score)}</b><br>Mañana hay un desafío nuevo.`,
@@ -650,7 +688,18 @@ function updatePanel() {
 
 function updateHud() {
   if (!g) return;
-  if (g.level) {
+  if (g.mode === 'escolta' || g.mode === 'travesia' || g.mode === 'aguante' || g.mode === 'asedio') {
+    const tw = g.totalWaves;
+    $('wave').firstChild!.nodeValue = t('OLEADA') + ' ' + Math.max(1, g.wave) + (tw ? '/' + tw : '');
+    const info = MODES.find(m => m.id === g!.mode)!;
+    const rec = save.modes?.[g.mode]?.best || 0;
+    $('best').textContent = info.icon + ' ' + info.name + ' · ' + (
+      g.mode === 'escolta' ? L(`Entregas ${g.deliveries}/${MODE_RULES.escolta.total}`, `Deliveries ${g.deliveries}/${MODE_RULES.escolta.total}`) + (g.ship && g.ship.phase !== 'gap' ? L(' · Barco ', ' · Ship ') + Math.ceil(g.ship.hp) : '')
+      : g.mode === 'travesia' ? L(`${Math.floor(g.missionProgress * 100)}% del viaje · mejoras ${g.found}`, `${Math.floor(g.missionProgress * 100)}% sailed · upgrades ${g.found}`)
+      : g.mode === 'aguante' ? L(' Récord ', ' Best ') + rec
+      : L('Defiende la bahía', 'Defend the bay'));
+    if (g.mode === 'travesia' || g.mode === 'escolta') $('wprog').style.width = g.missionProgress * 100 + '%';
+  } else if (g.level) {
     $('wave').firstChild!.nodeValue = t('OLEADA') + ' ' + g.shownWave + '/' + g.level.waves;
     $('best').textContent = runZone.name + ' · ' + t('NIVEL') + ' ' + lvName(g.level.zi, g.level.n);
   } else {
@@ -673,13 +722,13 @@ function updateHud() {
   $('hpt').textContent = L('Faro ', 'Lighthouse ') + Math.ceil(Math.max(0, g.hp)) + ' / ' + Math.round(st.hp);
   $('sht').textContent = st.bar > 0 ? t('Barrera') + ' ' + Math.ceil(g.shield) + ' / ' + Math.round(st.bar) : '';
   $('shfill').style.width = st.bar > 0 ? (g.shield / st.bar) * 100 + '%' : '0';
-  $('wprog').style.width = g.waveProgress * 100 + '%';
+  if (g.mode !== 'travesia' && g.mode !== 'escolta') $('wprog').style.width = g.waveProgress * 100 + '%';
   const md = $('mod');
   if (g.mod) { md.style.display = 'block'; md.className = g.mod.good ? 'good' : ''; md.innerHTML = g.mod.name + ' <i>· ' + g.mod.desc + '</i>'; } else md.style.display = 'none';
   const boss = g.boss;
   $('boss').style.display = boss ? 'block' : 'none';
   $('boss').classList.toggle('on', !!boss);
-  if (boss) { $('bossname').textContent = runZone.boss + (boss.enraged ? L(' · FURIOSO', ' · ENRAGED') : ''); $('bossfill').style.width = Math.max(0, (boss.hp / boss.max) * 100) + '%'; }
+  if (boss) { $('bossname').textContent = bossName() + (boss.enraged ? L(' · FURIOSO', ' · ENRAGED') : ''); $('bossfill').style.width = Math.max(0, (boss.hp / boss.max) * 100) + '%'; }
   setMusicLevel(boss ? 2 : 1);
   const fb = $('flash');
   fb.style.setProperty('--p', String(1 - g.flashCd / g.flashMax));
@@ -688,7 +737,7 @@ function updateHud() {
 }
 
 /* ---------- Pantallas ---------- */
-const OVS = ['menu', 'over', 'shop', 'map', 'missions', 'pauseov', 'cards', 'achs', 'rank', 'coll', 'dailyrw', 'endless'];
+const OVS = ['menu', 'over', 'shop', 'map', 'missions', 'pauseov', 'cards', 'achs', 'rank', 'coll', 'dailyrw', 'endless', 'modes'];
 let backTo = 'menu';
 function hideAll() { OVS.forEach(i => $(i).classList.remove('on')); }
 function open(id: string, from = 'menu') { audio(); sfx.click(); hideAll(); backTo = from; $(id).classList.add('on'); }
@@ -703,8 +752,9 @@ function showMenu() {
   const nl = nextLevel(save);
   $('menuinfo').innerHTML = `${ZONES[nl.zi].name} · <b>${t('NIVEL')} ${lvName(nl.zi, nl.n)}</b> · <span style="color:#ffd166">★ ${totalStars(save)}</span> · Coral: <b style="color:#ffb35c">${Math.floor(save.coral)} ◆</b>`;
   $('play').textContent = t('JUGAR') + ' · ' + t('NIVEL') + ' ' + lvName(nl.zi, nl.n);
-  $('endbtn').classList.toggle('lock', !endlessUnlocked(save));
-  $('endbtn').textContent = (endlessUnlocked(save) ? '' : '🔒 ') + t('INFINITO');
+  const anyMode = modeOpen('aguante');
+  $('endbtn').classList.toggle('lock', !anyMode);
+  $('endbtn').textContent = (anyMode ? '' : '🔒 ') + t('MODOS');
   $('mute').textContent = save.muted ? '🔇' : '🔊';
     $('mus').style.opacity = save.music ? '1' : '.5';
   const cz = challengeZone(), done = save.challenge?.date === today();
@@ -948,12 +998,28 @@ $('langbtn').addEventListener('click', () => {
   location.reload();
 });
 $('daily').addEventListener('click', () => start(true));
-$('again').addEventListener('click', () => start(false, runLevel));
+$('again').addEventListener('click', () => start(false, runLevel, runMode));
 $('next').addEventListener('click', () => start(false, nextLevel(save)));
 $('endbtn').addEventListener('click', () => {
-  if (!endlessUnlocked(save)) { sfx.click(); toast('♾️ ' + t('INFINITO'), L('Se desbloquea al superar el nivel 1-10', 'Unlocks after beating level 1-10')); return; }
-  buildEndless(); open('endless');
+  if (!modeOpen('aguante')) { sfx.click(); toast('🎮 ' + t('MODOS'), L('Se abren al superar el nivel 1-2', 'Unlock after beating level 1-2')); return; }
+  buildModes(); open('modes');
 });
+/** Pantalla de modos: aventuras distintas que se abren con la campaña. */
+function buildModes() {
+  const list = $('modelist'); list.innerHTML = '';
+  for (const m of MODES) {
+    const open = modeOpen(m.id), rec = save.modes?.[m.id];
+    const row = document.createElement('div');
+    row.className = 'card mode' + (open ? '' : ' lock');
+    const recTxt = m.id === 'endless' ? '' : rec ? (rec.stars ? ' · ' + '★'.repeat(rec.stars) : '') + (m.id === 'aguante' ? L(' · Récord ', ' · Best ') + rec.best : '') : '';
+    row.innerHTML = `<em>${m.icon}</em><div><b>${open ? '' : '🔒 '}${esc(m.name)}<small style="color:#ffd166">${recTxt}</small></b><span>${open ? esc(m.desc) : L('Supera el nivel ', 'Beat level ') + MODE_RULES[m.id].unlock.split('-').map((v, i) => (i ? v : String(+v + 1))).join('-') + L(' para abrirlo', ' to unlock it')}</span></div>`;
+    const b = document.createElement('button'); b.className = 'g';
+    b.textContent = t('JUGAR'); b.disabled = !open;
+    b.addEventListener('click', () => { if (m.id === 'endless') { buildEndless(); open2('endless'); } else start(false, null, m.id); });
+    row.appendChild(b); list.appendChild(row);
+  }
+}
+function open2(id: string) { hideAll(); $(id).classList.add('on'); }
 $('tomenu').addEventListener('click', () => { sfx.click(); showMenu(); });
 $('mapbtn').addEventListener('click', () => { mapWorld = -1; buildMap(); open('map'); });
 $('ready').addEventListener('click', () => { if (g) { g.skipPrep(); sfx.click(); } });
@@ -1000,10 +1066,11 @@ function loop(nowMs: number) {
     if (boss && introWave !== g.wave) {
       introWave = g.wave; introT = 2.6;
       stage.classList.add('cine');
-      const art = bossArt[runZone.id];
+      const captain = boss.type === 'captain';
+      const art = captain ? null : bossArt[runZone.id];
       stage.classList.toggle('art', !!art);
       if (art) { $<HTMLImageElement>('bossart').querySelector('img')!.src = art; $('bossart').classList.add('on'); }
-      banner(runZone.boss + '\n' + runZone.bossTitle, 2.6);
+      banner(bossName() + '\n' + (captain ? t('Terror de la bahía') : runZone.bossTitle), 2.6);
     }
     let slow = 1;
     if (introT > 0) {

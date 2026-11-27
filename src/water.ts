@@ -20,6 +20,7 @@ uniform float uS;       // píxeles por unidad de mundo
 uniform vec3 uDeep, uShal, uTint;
 uniform float uLamp, uLampOn, uFlash, uIce, uLava, uQ;
 uniform vec3 uBeam;     // color de la luz del faro
+uniform float uScroll, uShipMode; // Travesía: el mar avanza y no hay isla
 
 // Hash sin seno: en GPUs de celular el seno con números grandes se ve en bloques
 float h(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
@@ -43,8 +44,10 @@ void main(){
   float px = 1.5 / uS;                       // un píxel y medio en unidades del juego
   float t = uT;
 
-  // Distancia a la orilla: la isla se ve como elipse achatada por la cámara
-  float re = length(vec2(w.x, (w.y - 3.0) / 0.62));
+  // Distancia a la orilla: la isla se ve como elipse achatada por la cámara (en la Travesía no hay isla)
+  float re = uShipMode > 0.5 ? 400.0 : length(vec2(w.x, (w.y - 3.0) / 0.62));
+  vec2 w0 = w;
+  w = w - vec2(0.0, uScroll); // el mar se desplaza mientras el barco avanza
   float a = atan(w.y - 3.0, w.x);
   float wob = (fbm(vec2(a * 3.0, t * 0.15)) - 0.5) * 14.0 + (fbm(w * 0.012 + t * 0.02) - 0.5) * 22.0;
 
@@ -73,7 +76,7 @@ void main(){
   col = mix(col, vec3(0.8, 0.9, 1.0), drift * 0.45);
 
   // Brillo del haz del faro sobre el agua (plano, sin destellos)
-  vec2 dl = w - vec2(0.0, -48.0);
+  vec2 dl = w0 - vec2(0.0, -48.0);
   float ang = atan(dl.y, dl.x);
   float da = abs(mod(ang - uLamp + 3.14159, 6.28318) - 3.14159);
   float cone = smoothstep(0.22, 0.0, da) * smoothstep(340.0, 30.0, length(dl)) * uLampOn;
@@ -95,6 +98,8 @@ void main(){
     col += vec3(1.0, 0.35, 0.06) * crack * (0.35 + 0.3 * sin(t * 2.0 + v * 20.0)) * uLava;
   }
 
+  // Travesía: franja clara alrededor del barco
+  if (uShipMode > 0.5) col = mix(col, c1, (1.0 - smoothstep(30.0, 90.0, length(vec2(w0.x, w0.y * 0.8)))) * 0.6);
   // 2) Líneas de espuma de la orilla: una fija pegada a la roca y dos que se alejan y se apagan
   float shore = 1.0 - edge(abs(re - 44.0 - (fbm(vec2(a * 5.0, t * 0.5)) - 0.5) * 5.0) - 2.6, px);
   float foam = shore * (0.55 + 0.45 * step(0.35, fbm(vec2(a * 7.0, t * 0.3))));
@@ -105,6 +110,7 @@ void main(){
     float dash = step(0.42, fbm(vec2(a * 9.0 + float(k) * 7.0, ph * 2.0)));
     foam = max(foam, ring * dash * (1.0 - ph));
   }
+  if (uShipMode > 0.5) foam = 0.0;
   col = mix(col, vec3(0.9, 0.96, 1.0), clamp(foam, 0.0, 1.0) * 0.85);
 
   col += uFlash * vec3(0.45, 0.5, 0.62);
@@ -126,7 +132,7 @@ export class Water {
   private constructor(canvas: HTMLCanvasElement, gl: WebGLRenderingContext, prog: WebGLProgram) {
     this.canvas = canvas;
     this.gl = gl;
-    for (const k of ['uRes', 'uT', 'uC', 'uS', 'uDeep', 'uShal', 'uTint', 'uLamp', 'uLampOn', 'uFlash', 'uIce', 'uLava', 'uQ', 'uBeam'])
+    for (const k of ['uRes', 'uT', 'uC', 'uS', 'uDeep', 'uShal', 'uTint', 'uLamp', 'uLampOn', 'uFlash', 'uIce', 'uLava', 'uQ', 'uBeam', 'uScroll', 'uShipMode'])
       this.u[k] = gl.getUniformLocation(prog, k);
   }
 
@@ -176,7 +182,7 @@ export class Water {
   }
 
   /** Dibuja el mar; cx, cy y s describen la cámara en píxeles CSS. */
-  render(w: number, h: number, res: number, z: Zone, t: number, cx: number, cy: number, s: number, lamp: number, lampOn: number, flash: number, q = 2, beam = '255,236,160') {
+  render(w: number, h: number, res: number, z: Zone, t: number, cx: number, cy: number, s: number, lamp: number, lampOn: number, flash: number, q = 2, beam = '255,236,160', scroll = 0, shipMode = false) {
     const gl = this.gl, W = Math.max(1, Math.round(w * res)), H = Math.max(1, Math.round(h * res));
     if (this.canvas.width !== W || this.canvas.height !== H) { this.canvas.width = W; this.canvas.height = H; }
     gl.viewport(0, 0, W, H);
@@ -194,6 +200,8 @@ export class Water {
     gl.uniform1f(this.u.uIce, z.mech === 'ice' ? 1 : 0);
     gl.uniform1f(this.u.uLava, z.mech === 'lava' ? 1 : 0);
     gl.uniform1f(this.u.uQ, q);
+    gl.uniform1f(this.u.uScroll, scroll % 10000);
+    gl.uniform1f(this.u.uShipMode, shipMode ? 1 : 0);
     const bc = beam.split(',').map(v => +v / 255);
     gl.uniform3f(this.u.uBeam, bc[0], bc[1] * 0.95, bc[2] * 0.85);
     gl.drawArrays(gl.TRIANGLES, 0, 3);

@@ -126,6 +126,18 @@ const EN: Record<string, string> = {
   NIVEL: 'LEVEL', '¡JEFE!': 'BOSS!', '¡NIVEL SUPERADO!': 'LEVEL CLEARED!', REPETIR: 'REPLAY', REINTENTAR: 'RETRY',
   'SIGUIENTE NIVEL': 'NEXT LEVEL', NIVELES: 'LEVELS', INFINITO: 'ENDLESS', 'MODO INFINITO': 'ENDLESS MODE', '¡LISTO!': 'READY!',
   'Oleadas sin fin, con todas las mejoras desde el principio. Llega lo más lejos que puedas.': 'Endless waves, with every upgrade from the start. Get as far as you can.',
+  MODOS: 'MODES', 'MODOS DE JUEGO': 'GAME MODES', 'Aventuras distintas que se abren a medida que avanzas en la campaña.': 'Different adventures that open up as you progress through the campaign.',
+  Aguante: 'Endurance', 'Sin comprar nada: juegas con tu investigación y tu nivel de farero. ¿Cuántas oleadas aguantas?': 'No shopping: you play with your research and keeper level. How many waves can you hold?',
+  Escolta: 'Escort', 'Llegan barcos con comida y suministros. Protégelos hasta que descarguen: si hunden uno, pierdes. Gana con 6 entregas.': 'Ships bring food and supplies. Protect them until they unload: if one sinks, you lose. Win with 6 deliveries.',
+  'Travesía': 'Voyage', 'Navega hasta una isla lejana. No hay tienda: mejora tu barco tocando barriles, restos y cofres a la deriva.': 'Sail to a distant island. No shop: upgrade your ship by tapping drifting barrels, wreckage and chests.',
+  'Asedio pirata': 'Pirate siege', 'Barcos piratas cañonean la bahía y sus botes intentan abordar, junto con monstruos. Resiste 12 oleadas y al capitán.': 'Pirate ships shell the bay and their boats try to board, alongside monsters. Hold 12 waves and the captain.',
+  Infinito: 'Endless', 'CAPITÁN PIRATA': 'PIRATE CAPTAIN', 'Terror de la bahía': 'Terror of the bay', '¡BARCO HUNDIDO!': 'SHIP SUNK!',
+  '¡DESVIADO!': 'DEFLECTED!', 'Se acerca un barco': 'A ship is coming', 'Protégelo hasta que descargue': 'Protect it until it unloads',
+  'Comida y suministros para el faro': 'Food and supplies for the lighthouse', '¡MISIÓN CUMPLIDA!': 'MISSION COMPLETE!', '¡HUNDIERON EL BARCO!': 'THEY SANK THE SHIP!',
+  'Sin tienda: aguanta todo lo que puedas': 'No shop: hold out as long as you can', 'Toca lo que flota para mejorar el barco': 'Tap what floats to upgrade the ship',
+  'Protege los barcos de suministros': 'Protect the supply ships', 'Resiste 12 oleadas': 'Hold out for 12 waves',
+  'Barco pirata': 'Pirate ship', 'Se queda lejos y dispara cañonazos en arco. Toca las balas en el aire para desviarlas.': 'Stays back and lobs cannonballs. Tap the balls in the air to deflect them.',
+  'Bote de abordaje': 'Boarding boat', 'Rápido y frágil: rema directo a tu isla. Que no se junten muchos.': 'Fast and fragile: rows straight at your island. Don\'t let them pile up.',
   /* ----- Objetivo ----- */
   CERCANO: 'NEAREST', PELIGRO: 'DANGER', FUERTE: 'STRONG', 'DÉBIL': 'WEAK',
   /* ----- Textos flotantes ----- */
