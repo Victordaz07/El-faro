@@ -23,7 +23,9 @@ Idioma de la interfaz y de los comentarios: **español**.
 - `src/icons.ts` — íconos SVG propios de mejoras y pestañas.
 - `assets/` — `icon.png` (ícono de la app) y `thumb.png` (portada). `assets/art/`: arte en WebP que se incrusta en el build (fondo del menú, retratos de jefes por zona, sprite del faro renderizado desde `assets/models/faro-isla.glb`); originales en `assets/art/originales/`.
 - `src/art.ts` — carga ese arte; si una imagen no carga, se usa el dibujo por código.
-- `tools/glb-sprite/` — convierte modelos 3D (.glb) en sprites alineados al juego.
+- `tools/glb-sprite/` — convierte modelos 3D (.glb) en sprites. `bake-enemies.py` genera las hojas de enemigos (16 direcciones × 4 cuadros, cámara a 32°) desde `assets/models/enemigo-*.glb`; las animaciones por pieza están en `sheet.js` (`ANIM`). Resultado en `assets/art/enemigos/` (+ `meta.json`).
+- Enemigos: si hay hoja de sprites se usa `drawFromSheet` en render.ts; si no, el dibujo por código. Los jefes siguen dibujados por código.
+- Guía para pedir modelos a ChatGPT: https://claude.ai/artifact/AGMa1dhbwEqj1UVswy85cL (prompt maestro + prompt por criatura).
 
 ## Reglas
 - Las perlas solo entran por `gain()` y solo salen por `buy()` en game.ts; nunca modificar `pearls` directamente.

@@ -8,3 +8,5 @@ node_modules
 tests/.sim.cjs
 android/app/src/main/assets/public
 tests/.*.cjs
+tools/glb-sprite/tmp
+tools/glb-sprite/*.bundle.js

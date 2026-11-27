@@ -1,0 +1,465 @@
+[
+  {
+    "file": "enemigo-cangrejo.glb",
+    "triangles": 5780,
+    "bounds": [
+      [
+        -0.5000000110990438,
+        1.5351256377194034e-10,
+        -0.38535989403939486
+      ],
+      [
+        0.5000000120892781,
+        0.39717693994092185,
+        0.3853598963808959
+      ]
+    ],
+    "max_horizontal": 1.000000023188322,
+    "nodes": [
+      "Body",
+      "Legs_L",
+      "Legs_R",
+      "Claw_L",
+      "Claw_R",
+      "Eye_L",
+      "Eye_R"
+    ],
+    "materials": [
+      {
+        "name": "Painted Coral Chitin",
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.72,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Wet Eye and Stalk",
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.45,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      }
+    ],
+    "normal_attributes": true,
+    "closed_outward_meshes": true,
+    "passed": true,
+    "bytes": 137828
+  },
+  {
+    "file": "enemigo-medusa.glb",
+    "triangles": 3800,
+    "bounds": [
+      [
+        -0.31574131024796476,
+        -5.3794643184446045e-09,
+        -0.4999999722419219
+      ],
+      [
+        0.3157413207201291,
+        0.48051387598153844,
+        0.4999999866057465
+      ]
+    ],
+    "max_horizontal": 0.9999999588476685,
+    "nodes": [
+      "Bell",
+      "Core",
+      "Tentacles_Front",
+      "Tentacles_Back"
+    ],
+    "materials": [
+      {
+        "name": "Painted violet skin",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.65,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Wet rim and tendrils",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.45,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Bioluminescent core",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.45,
+        "emissiveFactor": [
+          0.8784313725490196,
+          0.5450980392156862,
+          1.0
+        ],
+        "alphaMode": "OPAQUE"
+      }
+    ],
+    "normal_attributes": true,
+    "closed_outward_meshes": true,
+    "passed": true,
+    "bytes": 106436
+  },
+  {
+    "file": "enemigo-anguila.glb",
+    "triangles": 5136,
+    "bounds": [
+      [
+        -0.12873720099777286,
+        3.5861845715245977e-09,
+        -0.49999999695495617
+      ],
+      [
+        0.12873719910531933,
+        0.2321251294115897,
+        0.4999999948393179
+      ]
+    ],
+    "max_horizontal": 0.9999999917942741,
+    "nodes": [
+      "Head",
+      "Seg_1",
+      "Seg_2",
+      "Seg_3",
+      "Seg_4",
+      "Seg_5"
+    ],
+    "materials": [
+      {
+        "name": "Painted emerald skin",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.65,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Glossy eyes and mouth",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.45,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Electric green glow",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.45,
+        "emissiveFactor": [
+          0.2901960784313726,
+          0.8705882352941177,
+          0.5019607843137255
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Dorsal fin",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.8,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      }
+    ],
+    "normal_attributes": true,
+    "closed_outward_meshes": true,
+    "passed": true,
+    "bytes": 153360
+  },
+  {
+    "file": "enemigo-pez-globo.glb",
+    "triangles": 4732,
+    "bounds": [
+      [
+        -0.5000000014199677,
+        -1.4782151724901382e-08,
+        -0.44636571526762464
+      ],
+      [
+        0.5000000014199677,
+        0.8851784915922074,
+        0.4463657142987055
+      ]
+    ],
+    "max_horizontal": 1.0000000028399354,
+    "nodes": [
+      "Body",
+      "Spikes",
+      "Fin_L",
+      "Fin_R",
+      "Tail"
+    ],
+    "materials": [
+      {
+        "name": "Painted golden skin",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.78,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Glossy pupils",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.45,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Ochre spines",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.8,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      }
+    ],
+    "normal_attributes": true,
+    "closed_outward_meshes": true,
+    "passed": true,
+    "bytes": 132492
+  },
+  {
+    "file": "enemigo-tortuga.glb",
+    "triangles": 4564,
+    "bounds": [
+      [
+        -0.5000000089605954,
+        -6.496145593670732e-09,
+        -0.4709856472770432
+      ],
+      [
+        0.5000000089605954,
+        0.4273974234469391,
+        0.4709856375606285
+      ]
+    ],
+    "max_horizontal": 1.0000000179211908,
+    "nodes": [
+      "Shell",
+      "Body",
+      "Flipper_FL",
+      "Flipper_BL",
+      "Flipper_FR",
+      "Flipper_BR"
+    ],
+    "materials": [
+      {
+        "name": "Painted green shell",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.85,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Wet black eyes",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.45,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Barnacles and shell seams",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.85,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Painted olive skin",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.75,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      }
+    ],
+    "normal_attributes": true,
+    "closed_outward_meshes": true,
+    "passed": true,
+    "bytes": 129416
+  },
+  {
+    "file": "enemigo-ermitano.glb",
+    "triangles": 5088,
+    "bounds": [
+      [
+        -0.36037283505620915,
+        -9.163447084459264e-10,
+        -0.49999999540986007
+      ],
+      [
+        0.360372831385316,
+        0.5094894135254737,
+        0.49999999118413296
+      ]
+    ],
+    "max_horizontal": 0.999999986593993,
+    "nodes": [
+      "Shell",
+      "Body",
+      "Claw_L",
+      "Claw_R",
+      "Legs"
+    ],
+    "materials": [
+      {
+        "name": "Painted cream spiral shell",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.85,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Wet black eyes",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.45,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Pearlescent aperture",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.45,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Painted crimson crab",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.78,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      }
+    ],
+    "normal_attributes": true,
+    "closed_outward_meshes": true,
+    "passed": true,
+    "bytes": 140784
+  },
+  {
+    "file": "enemigo-sardina.glb",
+    "triangles": 916,
+    "bounds": [
+      [
+        -0.20508304238319397,
+        -5.447736373120904e-09,
+        -0.49999999887840724
+      ],
+      [
+        0.20508304238319397,
+        0.4301075191907985,
+        0.5000000070500117
+      ]
+    ],
+    "max_horizontal": 1.0000000059284189,
+    "nodes": [
+      "Body",
+      "Tail"
+    ],
+    "materials": [
+      {
+        "name": "Painted silver-blue scales",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.45,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Glossy black eye",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.45,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      },
+      {
+        "name": "Blue fins",
+        "metallicFactor": 0,
+        "roughnessFactor": 0.68,
+        "emissiveFactor": [
+          0,
+          0,
+          0
+        ],
+        "alphaMode": "OPAQUE"
+      }
+    ],
+    "normal_attributes": true,
+    "closed_outward_meshes": true,
+    "passed": true,
+    "bytes": 28916
+  }
+]

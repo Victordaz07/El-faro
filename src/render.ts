@@ -2,7 +2,7 @@
 import { Game, Enemy, LAMP_Y, TURRET_POS } from './game';
 import type { Zone } from './data';
 import { Water } from './water';
-import { faroSprite, ready } from './art';
+import { faroSprite, ready, sheetFor, Sheet } from './art';
 
 let water: Water | null | undefined;
 
@@ -506,6 +506,9 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, zone: 
     ctx.fillStyle = `rgba(255,60,90,${0.25 + 0.2 * Math.sin(t * 10)})`;
     ctx.beginPath(); ctx.arc(0, 0, e.r + 22, 0, TAU); ctx.fill();
   }
+  const sheet = e.type === 'boss' ? null : sheetFor(e.type);
+  if (sheet) drawFromSheet(ctx, e, sheet, t, dist, a);
+  else {
   ctx.rotate(a);
   ctx.scale(k, k);
 
@@ -586,7 +589,8 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, zone: 
       break;
     }
   }
-  if (e.hitT > 0) {
+  }
+  if (e.hitT > 0 && !sheet) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = Math.min(1, e.hitT * 6);
     ctx.fillStyle = '#ffffff';
@@ -837,5 +841,23 @@ function drawGulls(ctx: CanvasRenderingContext2D, now: number) {
     ctx.moveTo(x - 7 * s, y - flap * s); ctx.quadraticCurveTo(x - 3 * s, y - 3 * s, x, y);
     ctx.quadraticCurveTo(x + 3 * s, y - 3 * s, x + 7 * s, y - flap * s);
     ctx.stroke();
+  }
+}
+
+/** Dibuja una criatura desde su hoja de sprites: fila = dirección (16), columna = cuadro de animación. */
+function drawFromSheet(ctx: CanvasRenderingContext2D, e: Enemy, sh: Sheet, t: number, dist: number, heading: number) {
+  const dir = Math.round((((heading % TAU) + TAU) % TAU) / (TAU / sh.dirs)) % sh.dirs;
+  const moving = e.stun <= 0;
+  const frame = moving ? Math.floor(t * sh.fps * (e.slowT > 0 ? 0.5 : 1)) % sh.frames : 0;
+  let k = (e.r * sh.len * 1.18) / sh.ppu; // unidades del mundo por píxel de la hoja
+  if (e.type === 'puffer' && dist < 95) k *= 1 + ((95 - dist) / 95) * 0.45 + 0.04 * Math.sin(t * 20);
+  const sx = frame * sh.px, sy = dir * sh.px, w = sh.px * k;
+  ctx.drawImage(sh.img, sx, sy, sh.px, sh.px, -sh.ox * k, -sh.oy * k, w, w);
+  if (e.hitT > 0) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = Math.min(1, e.hitT * 6);
+    ctx.drawImage(sh.img, sx, sy, sh.px, sh.px, -sh.ox * k, -sh.oy * k, w, w);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
   }
 }
