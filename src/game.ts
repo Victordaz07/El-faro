@@ -57,7 +57,7 @@ export interface Txt { x: number; y: number; s: string; c: string; t: number; ma
 export interface Hazard { x: number; y: number; t: number; r: number; }
 export type GEvent = 'shot' | 'crit' | 'kill' | 'hurt' | 'wave' | 'boss' | 'bossdown' | 'over' | 'flash' | 'buy'
   | 'thunder' | 'boom' | 'enrage' | 'elite' | 'cards' | 'revive' | 'frostwarn' | 'frost' | 'erupt' | 'harpoon' | 'net' | 'slam'
-  | 'zap' | 'charge' | 'bite' | 'combo' | 'tap' | 'tapmiss' | 'heal' | 'crack' | 'fire' | 'poison' | 'newtype';
+  | 'zap' | 'charge' | 'bite' | 'combo' | 'reveal' | 'tap' | 'tapmiss' | 'heal' | 'crack' | 'fire' | 'poison' | 'newtype';
 
 interface Proto { hp: number; spd: number; r: number; dmg: number; rew: number; stop: number; atk: number; armor: number; }
 const P: Record<EType, Proto> = {
@@ -257,8 +257,14 @@ export class Game {
 
   preview(id: string) { return this.stats({ ...this.lv, [id]: this.lv[id] + 1 }); }
 
+  /** La mejora ya apareció en el panel (por oleada, o porque ya tiene nivel). */
+  isOpen(id: string) {
+    const d = DEFS.find(x => x.id === id);
+    return !!d && (Math.max(1, this.wave) >= d.at || this.lv[id] > 0);
+  }
+
   buy(id: string) {
-    if (this.over || this.state === 'cards') return false;
+    if (this.over || this.state === 'cards' || !this.isOpen(id)) return false;
     const c = this.cost(id);
     if (this.pearls < c) return false;
     this.pearls -= c;
@@ -418,6 +424,7 @@ export class Game {
     this.state = 'spawn';
     this.shield = this.st.bar;
     this.emit(boss ? 'boss' : 'wave', w);
+    if (w > 1 && DEFS.some(d => d.at === w && !this.lv[d.id])) this.emit('reveal', w);
   }
 
   get zoneIndex() { return Math.max(0, ZONES.findIndex(z => z.id === this.zone.id)); }

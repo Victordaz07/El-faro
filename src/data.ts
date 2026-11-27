@@ -8,33 +8,35 @@ export interface UpDef {
   name: string;
   base: number;
   fmt: (v: number) => string;
+  /** Oleada en la que aparece en el panel (al principio solo hay unas pocas mejoras). */
+  at: number;
 }
 
 export const TABS = ['LUZ', 'MURALLA', 'MAREAS', 'ISLA'];
 
 export const DEFS: UpDef[] = [
-  { id: 'dmg', tab: 0, name: 'Daño', base: 10, fmt: v => v.toFixed(1) },
-  { id: 'spd', tab: 0, name: 'Cadencia', base: 8, fmt: v => v.toFixed(2) + '/s' },
-  { id: 'cc', tab: 0, name: 'Crítico', base: 7, fmt: v => (v * 100).toFixed(0) + '%' },
-  { id: 'cf', tab: 0, name: 'Mult. crítico', base: 10, fmt: v => '×' + v.toFixed(2) },
-  { id: 'rng', tab: 0, name: 'Alcance', base: 14, fmt: v => Math.round(v) + '' },
-  { id: 'chain', tab: 0, name: 'Rebote', base: 16, fmt: v => (v * 100).toFixed(0) + '%' },
-  { id: 'tap', tab: 0, name: 'Toque', base: 9, fmt: v => v.toFixed(1) },
-  { id: 'hp', tab: 1, name: 'Integridad', base: 8, fmt: v => Math.round(v) + '' },
-  { id: 'rep', tab: 1, name: 'Reparación', base: 9, fmt: v => v.toFixed(1) + '/s' },
-  { id: 'arm', tab: 1, name: 'Armadura', base: 10, fmt: v => (v * 100).toFixed(0) + '%' },
-  { id: 'bar', tab: 1, name: 'Barrera', base: 8, fmt: v => Math.round(v) + '' },
-  { id: 'thorn', tab: 1, name: 'Espinas', base: 12, fmt: v => (v * 100).toFixed(0) + '%' },
-  { id: 'vamp', tab: 1, name: 'Vida/baja', base: 14, fmt: v => '+' + v.toFixed(1) },
-  { id: 'pk', tab: 2, name: 'Perlas/baja', base: 10, fmt: v => '×' + v.toFixed(2) },
-  { id: 'pw', tab: 2, name: 'Perlas/oleada', base: 12, fmt: v => '+' + Math.round(v) },
-  { id: 'int', tab: 2, name: 'Interés', base: 15, fmt: v => (v * 100).toFixed(0) + '%' },
-  { id: 'ck', tab: 2, name: 'Coral/baja', base: 12, fmt: v => '×' + v.toFixed(2) },
-  { id: 'cw', tab: 2, name: 'Coral/oleada', base: 14, fmt: v => '+' + v.toFixed(1) },
-  { id: 'fcd', tab: 2, name: 'Destello', base: 12, fmt: v => Math.round(v) + 's' },
-  { id: 'tA', tab: 3, name: 'Arponero', base: 60, fmt: v => (v ? Math.round(v) + L(' daño', ' dmg') : L('Construir', 'Build')) },
-  { id: 'tR', tab: 3, name: 'Lanzarredes', base: 70, fmt: v => (v ? Math.round(v) + L(' daño', ' dmg') : L('Construir', 'Build')) },
-  { id: 'tN', tab: 3, name: 'Ancla', base: 90, fmt: v => (v ? Math.round(v) + L(' daño', ' dmg') : L('Construir', 'Build')) },
+  { id: 'dmg', tab: 0, name: 'Daño', base: 10, at: 1, fmt: v => v.toFixed(1) },
+  { id: 'spd', tab: 0, name: 'Cadencia', base: 8, at: 1, fmt: v => v.toFixed(2) + '/s' },
+  { id: 'cc', tab: 0, name: 'Crítico', base: 7, at: 3, fmt: v => (v * 100).toFixed(0) + '%' },
+  { id: 'cf', tab: 0, name: 'Mult. crítico', base: 10, at: 7, fmt: v => '×' + v.toFixed(2) },
+  { id: 'rng', tab: 0, name: 'Alcance', base: 14, at: 4, fmt: v => Math.round(v) + '' },
+  { id: 'chain', tab: 0, name: 'Rebote', base: 16, at: 9, fmt: v => (v * 100).toFixed(0) + '%' },
+  { id: 'tap', tab: 0, name: 'Toque', base: 9, at: 2, fmt: v => v.toFixed(1) },
+  { id: 'hp', tab: 1, name: 'Integridad', base: 8, at: 1, fmt: v => Math.round(v) + '' },
+  { id: 'rep', tab: 1, name: 'Reparación', base: 9, at: 2, fmt: v => v.toFixed(1) + '/s' },
+  { id: 'arm', tab: 1, name: 'Armadura', base: 10, at: 5, fmt: v => (v * 100).toFixed(0) + '%' },
+  { id: 'bar', tab: 1, name: 'Barrera', base: 8, at: 4, fmt: v => Math.round(v) + '' },
+  { id: 'thorn', tab: 1, name: 'Espinas', base: 12, at: 10, fmt: v => (v * 100).toFixed(0) + '%' },
+  { id: 'vamp', tab: 1, name: 'Vida/baja', base: 14, at: 8, fmt: v => '+' + v.toFixed(1) },
+  { id: 'pk', tab: 2, name: 'Perlas/baja', base: 10, at: 3, fmt: v => '×' + v.toFixed(2) },
+  { id: 'pw', tab: 2, name: 'Perlas/oleada', base: 12, at: 3, fmt: v => '+' + Math.round(v) },
+  { id: 'int', tab: 2, name: 'Interés', base: 15, at: 11, fmt: v => (v * 100).toFixed(0) + '%' },
+  { id: 'ck', tab: 2, name: 'Coral/baja', base: 12, at: 6, fmt: v => '×' + v.toFixed(2) },
+  { id: 'cw', tab: 2, name: 'Coral/oleada', base: 14, at: 9, fmt: v => '+' + v.toFixed(1) },
+  { id: 'fcd', tab: 2, name: 'Destello', base: 12, at: 5, fmt: v => Math.round(v) + 's' },
+  { id: 'tA', tab: 3, name: 'Arponero', base: 60, at: 6, fmt: v => (v ? Math.round(v) + L(' daño', ' dmg') : L('Construir', 'Build')) },
+  { id: 'tR', tab: 3, name: 'Lanzarredes', base: 70, at: 9, fmt: v => (v ? Math.round(v) + L(' daño', ' dmg') : L('Construir', 'Build')) },
+  { id: 'tN', tab: 3, name: 'Ancla', base: 90, at: 12, fmt: v => (v ? Math.round(v) + L(' daño', ' dmg') : L('Construir', 'Build')) },
 ];
 
 /** Descripción corta que se muestra al mantener presionada la mejora. */

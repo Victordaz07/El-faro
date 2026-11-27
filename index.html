@@ -96,6 +96,12 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #dock.closed .tab.on{background:rgba(255,255,255,.05);border-color:transparent}
 .tab .dot{position:absolute;top:2px;right:2px;width:7px;height:7px;border-radius:50%;background:var(--acc);box-shadow:0 0 6px var(--acc);visibility:hidden}
 .tab .dot.on{visibility:visible}
+.tab.hid{visibility:hidden}
+.tab:not(.hid){animation:tabin .35s}
+@keyframes tabin{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
+.up.new{box-shadow:0 0 0 1.5px var(--acc),0 0 14px rgba(63,215,196,.45)}
+.up.new::after{content:'NUEVO';position:absolute;top:4px;right:5px;padding:1px 5px;border-radius:6px;background:var(--acc);color:#04221e;font-family:var(--ff);font-weight:900;font-size:8px;letter-spacing:.06em}
+html[lang=en] .up.new::after{content:'NEW'}
 #sheet{flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 #sheet::-webkit-scrollbar{display:none}
 #dock.closed #sheet{display:none}

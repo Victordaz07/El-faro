@@ -113,6 +113,18 @@ function onEvent(e: GEvent, d?: number) {
     case 'bite': sfx.bite(); break;
     case 'tap': sfx.tap(); vibrate(8); break;
     case 'combo': sfx.coin(); vibrate(20); break;
+    case 'reveal': {
+      const ups = DEFS.filter(x => x.at === d && g && !g.lv[x.id]);
+      ups.forEach(x => freshUps.add(x.id));
+      const newTab = ups.some(x => DEFS.filter(y => y.tab === x.tab).every(y => y.at >= (d || 0)));
+      setTimeout(() => {
+        toast('🆕 ' + (ups.length > 1 ? t('NUEVAS MEJORAS') : t('NUEVA MEJORA')), ups.map(x => x.name).join(' · '));
+        sfx.card();
+        if (newTab) $('dock').classList.remove('closed');
+        updatePanel();
+      }, 1500);
+      break;
+    }
     case 'tapmiss': sfx.tapmiss(); break;
     case 'heal': sfx.heal(); break;
     case 'crack': sfx.crack(); vibrate(30); break;
@@ -136,6 +148,7 @@ function start(daily = false) {
   paused = false; $('pause').textContent = 'II';
   resize();
   comboShown = 0; $('combo').classList.remove('on');
+  freshUps.clear(); tab = 0;
   if (daily) {
     if (save.challenge?.date === today()) return showMenu();
     runZone = challengeZone();
@@ -384,8 +397,8 @@ const TUT: { title: string; text: string; target: string; at: number }[] = [
   { at: 1, title: '¡Toca a las criaturas!', text: 'Tú también puedes golpear: toca una criatura. Los puntos sobre OBJETIVO son tus toques; se recargan solos.', target: '#aim' },
   { at: 2, title: 'El Destello ⚡', text: 'Aturde y daña a todo lo que esté cerca. Guárdalo para cuando te rodeen o para el jefe.', target: '#flash' },
   { at: 3, title: 'Elige a quién disparar', text: 'Toca OBJETIVO para cambiar. PELIGRO prioriza peces globo, anguilas, élites y jefes.', target: '#aim' },
-  { at: 4, title: 'Torretas en la isla', text: 'En la pestaña ISLA construyes un Arponero, un Lanzarredes y un Ancla que disparan solos.', target: '#tabs' },
   { at: 5, title: 'Bendiciones', text: 'Cada 5 oleadas eliges una carta que dura toda la partida. Combínalas con tus mejoras.', target: '' },
+  { at: 6, title: 'Torretas en la isla', text: 'En la pestaña ISLA construyes un Arponero, un Lanzarredes y un Ancla que disparan solos.', target: '#tabs' },
 ];
 function tutorialFor(wave: number) {
   if (!g || g.daily) return;
@@ -446,7 +459,7 @@ function showCards() {
       g.pickCard(b.id); sfx.buy();
       $('cards').classList.remove('on');
       toast(b.icon + ' ' + b.name, t('Bendición activa'));
-      if (save.tut === 4) { save.tut = 5; persist(save); }
+      if (TUT[save.tut]?.at === 5) { save.tut++; persist(save); }
       updatePanel(); updateHud();
     });
     list.appendChild(el);
@@ -526,7 +539,7 @@ function buildPanel() {
     }, () => {
       if (!g || paused || g.over) return false;
       const ok = g.buy(d.id);
-      if (ok) { updatePanel(); updateHud(); }
+      if (ok) { freshUps.delete(d.id); updatePanel(); updateHud(); }
       return ok;
     });
     el.style.display = d.tab === 0 ? '' : 'none';
@@ -541,6 +554,8 @@ function buildPanel() {
       stopHold();
       sfx.click();
       const dock = $('dock');
+      if (!tabOpen(i)) return;
+      for (const d of DEFS) if (d.tab === tab && tab !== i) freshUps.delete(d.id);
       if (tab === i && !dock.classList.contains('closed')) dock.classList.add('closed');
       else { tab = i; dock.classList.remove('closed'); }
       updatePanel();
@@ -549,10 +564,16 @@ function buildPanel() {
   });
 }
 
+/** Mejoras que acaban de aparecer (llevan la etiqueta NUEVO hasta que se compran o se mira su pestaña). */
+const freshUps = new Set<string>();
+const tabOpen = (i: number) => !!g && DEFS.some(d => d.tab === i && g!.isOpen(d.id));
+
 function updatePanel() {
   if (!g) return;
+  if (!tabOpen(tab)) tab = 0;
   for (const o of btns) {
-    const show = o.tab === tab;
+    const show = o.tab === tab && g.isOpen(o.id);
+    o.el.classList.toggle('new', freshUps.has(o.id));
     o.el.style.display = show ? '' : 'none';
     if (!show) continue;
     const d = DEFS.find(x => x.id === o.id)!;
@@ -567,8 +588,11 @@ function updatePanel() {
   }
   [...$('tabs').children].forEach((el, i) => {
     el.classList.toggle('on', i === tab);
-    const can = !!g && DEFS.some(d => d.tab === i && g!.pearls >= g!.cost(d.id));
-    el.querySelector('.dot')!.classList.toggle('on', can && i !== tab);
+    const open = tabOpen(i);
+    el.classList.toggle('hid', !open);
+    const can = open && DEFS.some(d => d.tab === i && g!.isOpen(d.id) && g!.pearls >= g!.cost(d.id));
+    const isNew = DEFS.some(d => d.tab === i && freshUps.has(d.id));
+    el.querySelector('.dot')!.classList.toggle('on', (can || isNew) && i !== tab);
   });
 }
 

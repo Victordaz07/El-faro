@@ -29,7 +29,7 @@ function play(zoneIdx: number, permLv: number, smart: boolean, tapper = false) {
     if (steps % 30 === 0) {
       if (smart) g.useFlash();
       for (let k = 0; k < 8; k++) {
-        const ids = Object.keys(g.lv).filter(id => g.cost(id) <= g.pearls);
+        const ids = Object.keys(g.lv).filter(id => g.isOpen(id) && g.cost(id) <= g.pearls);
         if (!ids.length) break;
         const w = (k: string) => (k === 'tap' ? (tapper ? 0.4 : 0) : W[k]);
         const id = smart ? ids.sort((a, b) => g.cost(a) / w(a) - g.cost(b) / w(b))[0] : ids[Math.floor(Math.random() * ids.length)];

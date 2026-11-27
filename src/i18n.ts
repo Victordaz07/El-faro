@@ -122,6 +122,7 @@ const EN: Record<string, string> = {
   'Faro coral': 'Coral', 'Faro aurora': 'Aurora', 'Faro solar': 'Sunburst',
   'Luz cálida': 'Warm light', 'Luz turquesa': 'Turquoise light', 'Luz de coral': 'Coral light', 'Luz de bengala': 'Flare light',
   'Luz violeta': 'Violet light', 'Luz helada': 'Ice light',
+  'NUEVA MEJORA': 'NEW UPGRADE', 'NUEVAS MEJORAS': 'NEW UPGRADES',
   /* ----- Objetivo ----- */
   CERCANO: 'NEAREST', PELIGRO: 'DANGER', FUERTE: 'STRONG', 'DÉBIL': 'WEAK',
   /* ----- Textos flotantes ----- */
