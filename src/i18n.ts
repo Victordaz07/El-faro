@@ -115,6 +115,13 @@ const EN: Record<string, string> = {
   'NUEVA CRIATURA': 'NEW CREATURE', '¡CAPARAZÓN ROTO!': 'SHELL CRACKED!', 'VENENO': 'POISON', '¡ATURDIDO!': 'STUNNED!', '¡APAGADA!': 'PUT OUT!',
   '¡Toca a las criaturas!': 'Tap the creatures!',
   'Tú también puedes golpear: toca una criatura. Los puntos sobre OBJETIVO son tus toques; se recargan solos.': 'You can strike too: tap a creature. The dots above TARGET are your taps; they recharge on their own.',
+  /* ----- Progresión, colección y premios ----- */
+  '¡NUEVO RÉCORD!': 'NEW BEST!', 'Cofre del faro': 'Lighthouse chest', FARERO: 'KEEPER', 'COLECCIÓN': 'COLLECTION',
+  FAROS: 'LIGHTHOUSES', 'LUZ DEL FARO': 'LIGHT COLOR', 'PREMIO DIARIO': 'DAILY REWARD', RECLAMAR: 'CLAIM',
+  'Faro clásico': 'Classic', 'Faro marino': 'Navy', 'Faro esmeralda': 'Emerald', 'Faro nocturno': 'Midnight',
+  'Faro coral': 'Coral', 'Faro aurora': 'Aurora', 'Faro solar': 'Sunburst',
+  'Luz cálida': 'Warm light', 'Luz turquesa': 'Turquoise light', 'Luz de coral': 'Coral light', 'Luz de bengala': 'Flare light',
+  'Luz violeta': 'Violet light', 'Luz helada': 'Ice light',
   /* ----- Objetivo ----- */
   CERCANO: 'NEAREST', PELIGRO: 'DANGER', FUERTE: 'STRONG', 'DÉBIL': 'WEAK',
   /* ----- Textos flotantes ----- */

@@ -1,15 +1,15 @@
 // Controlador de interfaz: pantallas, panel de mejoras, HUD, tutorial y bucle principal.
-import { CREATURES, DEFS, tabName, branchName, BLESSINGS, PERM, BRANCHES, TABS, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone } from './data';
+import { levelOf, runXp, levelCoral, SKINS, BEAMS, STREAK, CHEST_HOURS, CREATURES, DEFS, tabName, branchName, BLESSINGS, PERM, BRANCHES, TABS, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone } from './data';
 import {
   load, persist, ensureDaily, track, zoneUnlocked, readyMissions, checkAchievements,
-  researchTotal, zonesOpen, challengeZone, challengeSeed, today,
+  researchTotal, zonesOpen, challengeZone, challengeSeed, today, chestState,
 } from './save';
 import { Game, GEvent, AIMS, TAP_MAX } from './game';
 import '@fontsource/lilita-one/latin-400.css';
 import '@fontsource/nunito/latin-700.css';
 import '@fontsource/nunito/latin-800.css';
 import '@fontsource/nunito/latin-900.css';
-import { draw, camFocus, view, lastCam } from './render';
+import { draw, camFocus, view, lastCam, setBeam, setSkin, skinnedFaro } from './render';
 import { ICONS, TAB_ICONS } from './icons';
 import { menuArt, bossArt } from './art';
 import { initAudio, setMuted, sfx } from './audio';
@@ -25,11 +25,15 @@ const save = load();
 setLang(detectLang(/lang=(es|en)/.exec(location.hash)?.[1] || save.lang));
 document.documentElement.lang = lang;
 translateDom();
+applyCosmetics();
 setMuted(save.muted);
 setMusicEnabled(save.music);
 let g: Game | null = null;
 let runZone: Zone = ZONES[0];
 let introT = 0, introWave = -1;
+/** Récord de la zona al empezar la partida (para avisar cuando se supera). */
+let recordFrom = 0;
+let comboShown = 0;
 let tab = 0, rtab = 0, speed = 1, paused = false, last = 0, hudT = 0, bannerT = 0;
 const cv = $<HTMLCanvasElement>('c'), ctx = cv.getContext('2d')!, stage = $('stage');
 let vw = 360, vh = 400, dpr = 1;
@@ -91,7 +95,8 @@ function onEvent(e: GEvent, d?: number) {
     case 'crit': sfx.crit(); break;
     case 'kill': sfx.kill(); break;
     case 'hurt': sfx.hurt(); vibrate(15); break;
-    case 'wave': banner(t('OLEADA') + ' ' + d + (g?.mod ? '\n' + g.mod.name : '')); sfx.wave(); tutorialFor(d || 0); break;
+    case 'wave': if (g && !g.daily && d && recordFrom > 0 && d === recordFrom + 1) { setTimeout(() => { banner(t('¡NUEVO RÉCORD!')); sfx.ach(); vibrate(60); }, 1300); }
+      banner(t('OLEADA') + ' ' + d + (g?.mod ? '\n' + g.mod.name : '')); sfx.wave(); tutorialFor(d || 0); break;
     case 'boss': sfx.boss(); vibrate(150); break;
     case 'bossdown': banner(t('¡JEFE DERROTADO!')); sfx.bossdown(); vibrate(80); break;
     case 'flash': sfx.flash(); vibrate(40); break;
@@ -107,6 +112,7 @@ function onEvent(e: GEvent, d?: number) {
     case 'charge': sfx.charge(); break;
     case 'bite': sfx.bite(); break;
     case 'tap': sfx.tap(); vibrate(8); break;
+    case 'combo': sfx.coin(); vibrate(20); break;
     case 'tapmiss': sfx.tapmiss(); break;
     case 'heal': sfx.heal(); break;
     case 'crack': sfx.crack(); vibrate(30); break;
@@ -129,13 +135,16 @@ function start(daily = false) {
   hideAll();
   paused = false; $('pause').textContent = 'II';
   resize();
+  comboShown = 0; $('combo').classList.remove('on');
   if (daily) {
     if (save.challenge?.date === today()) return showMenu();
     runZone = challengeZone();
     save.challenge = { date: today(), score: 0, wave: 0, zone: runZone.id };
     persist(save);
     g = new Game(save, runZone, onEvent, spawnR, { daily: true, seed: challengeSeed() });
+    recordFrom = 0;
   } else {
+    recordFrom = save.zoneBest[zone().id] || 0;
     runZone = zone();
     g = new Game(save, runZone, onEvent, spawnR);
   }
@@ -189,19 +198,159 @@ function endRun() {
     html = L(`${z.name} · llegaste a la <b>oleada ${g.wave}</b>`, `${z.name} · you reached <b>wave ${g.wave}</b>`) +
       (g.wave > prevBest ? L(' <b style="color:#35e0b0">¡nuevo récord!</b>', ' <b style="color:#35e0b0">new best!</b>') : L(`<br>Récord: ${prevBest}`, `<br>Best: ${prevBest}`));
   }
-  html += L(`<br>${g.kills} criaturas · ${g.bosses} jefes · ${g.elites} élites · ${g.cards} ${g.cards === 1 ? 'bendición' : 'bendiciones'}` +
-    `<br>Coral ganado: <b style="color:#ffb35c">+${g.earned} ◆</b>`,
-    `<br>${g.kills} creatures · ${g.bosses} bosses · ${g.elites} elites · ${g.cards} ${g.cards === 1 ? 'blessing' : 'blessings'}` +
-    `<br>Coral earned: <b style="color:#ffb35c">+${g.earned} ◆</b>`);
+  if (!g.daily && g.wave <= prevBest && prevBest - g.wave <= 3)
+    html += L(`<br><b style="color:#7ff0e0">¡Te faltaron ${prevBest - g.wave + 1} oleada${prevBest - g.wave ? 's' : ''} para tu récord!</b>`, `<br><b style="color:#7ff0e0">Just ${prevBest - g.wave + 1} more wave${prevBest - g.wave ? 's' : ''} to beat your best!</b>`);
+  html += L(`<br>${g.kills} criaturas · ${g.bosses} jefes · ${g.elites} élites · combo máximo ×${g.bestCombo}` +
+    `<br>Coral ganado: <b style="color:#ffb35c">+<span id="overcoral">0</span> ◆</b>`,
+    `<br>${g.kills} creatures · ${g.bosses} bosses · ${g.elites} elites · best combo ×${g.bestCombo}` +
+    `<br>Coral earned: <b style="color:#ffb35c">+<span id="overcoral">0</span> ◆</b>`);
+  // Experiencia del farero y desbloqueos
+  const before = levelOf(save.xp || 0), gained = runXp(g.wave, g.kills, g.bosses);
+  save.xp = (save.xp || 0) + gained;
+  const after = levelOf(save.xp);
+  let lvCoral = 0;
+  const unlocked: string[] = [];
+  for (let lv = before.lv + 1; lv <= after.lv; lv++) {
+    lvCoral += levelCoral(lv);
+    for (const k of [...SKINS, ...BEAMS]) if (k.lv === lv) unlocked.push(k.name);
+  }
+  save.coral += lvCoral;
+  persist(save);
+  html += `<div class="xpbox" style="margin:10px auto 0">${L('Farero', 'Keeper')} · <b>${L('Nivel', 'Level')} ${after.lv}</b> · +${gained} XP` +
+    `<div class="prog"><div id="overxp" style="width:${after.lv > before.lv ? 0 : (before.rest / before.need) * 100}%"></div></div>` +
+    (after.lv > before.lv ? `<div class="unl">⬆ ${L('¡Subiste al nivel', 'Level up!')} ${after.lv}${L('!', '')} +${lvCoral} ◆` +
+      (unlocked.length ? `<br>🔓 ${L('Desbloqueaste', 'Unlocked')}: ${unlocked.map(esc).join(', ')}` : '') + '</div>'
+    : `<div style="margin-top:6px">${L('Siguiente nivel en', 'Next level in')} ${after.need - after.rest} XP</div>`) + '</div>';
   if (!g.daily && !nextWasOpen && zi + 1 < ZONES.length && zoneUnlocked(save, zi + 1))
     html += L(`<br><br><b style="color:#ffe27a">🗺️ ¡Desbloqueaste ${ZONES[zi + 1].name}!</b>`, `<br><br><b style="color:#ffe27a">🗺️ You unlocked ${ZONES[zi + 1].name}!</b>`);
   const ready = readyMissions(save);
   if (ready) html += L(`<br><br>🎯 ${ready} misión${ready > 1 ? 'es' : ''} lista${ready > 1 ? 's' : ''} para reclamar`, `<br><br>🎯 ${ready} mission${ready > 1 ? 's' : ''} ready to claim`);
   $('overinfo').innerHTML = html;
+  setTimeout(() => {
+    const oc = document.getElementById('overcoral'); if (oc) countUp(oc, g ? g.earned : 0);
+    const ox = document.getElementById('overxp'); if (ox) ox.style.width = (after.rest / after.need) * 100 + '%';
+    if (after.lv > before.lv) { sfx.ach(); vibrate(60); }
+  }, 800);
   updateBadges();
   achievements();
   submitScore();
   setTimeout(() => $('over').classList.add('on'), 700);
+}
+
+/* ---------- Progresión: nivel de farero, colección, premio diario y cofre ---------- */
+function applyCosmetics() {
+  setSkin(SKINS.find(k => k.id === save.skin) || SKINS[0]);
+  setBeam((BEAMS.find(b => b.id === save.beam) || BEAMS[0]).rgb);
+}
+const unlockedCount = (lv: number) => SKINS.filter(k => k.lv <= lv).length + BEAMS.filter(b => b.lv <= lv).length;
+function levelUI() {
+  const L0 = levelOf(save.xp || 0);
+  $('lvlnum').textContent = String(L0.lv);
+  $('lvltxt').textContent = L('FARERO · NIVEL ', 'KEEPER · LEVEL ') + L0.lv;
+  $('lvlbar').style.width = (L0.rest / L0.need) * 100 + '%';
+  const seenC = (save.seen || []).filter(x => x.startsWith('c:')).length;
+  const b = $('collbadge'), n = unlockedCount(L0.lv) - Math.max(2, seenC);
+  b.textContent = n > 0 ? String(n) : ''; b.classList.toggle('on', n > 0);
+}
+function chestUI() {
+  const c = chestState(save), btn = $('chest');
+  btn.classList.toggle('ready', c.coral >= 5);
+  $('chesttxt').textContent = L('Cofre del faro: ', 'Lighthouse chest: ') + c.coral + ' / ' + c.max + ' ◆';
+  const h = Math.floor(c.left), m = Math.floor((c.left - h) * 60);
+  $('chestsub').textContent = c.full ? L('¡Lleno! Tócalo para abrirlo', 'Full! Tap to open it')
+    : c.coral >= 5 ? L(`Tócalo para abrirlo · se llena en ${h}h ${m}m`, `Tap to open it · full in ${h}h ${m}m`)
+    : L(`Junta coral mientras no juegas · se llena en ${h}h ${m}m`, `Fills up while you're away · full in ${h}h ${m}m`);
+  $('chestbar').style.width = Math.min(100, (c.coral / Math.max(1, c.max)) * 100) + '%';
+}
+setInterval(() => { if ($('menu').classList.contains('on')) chestUI(); }, 5000);
+$('chest').addEventListener('click', () => {
+  audio();
+  const c = chestState(save);
+  if (c.coral < 5) { sfx.click(); toast('🎁 ' + t('Cofre del faro'), L('Todavía está casi vacío. Vuelve en un rato.', 'Still almost empty. Come back later.')); return; }
+  save.coral += c.coral; save.chestFrom = Date.now(); persist(save);
+  sfx.coin(); vibrate(30);
+  toast('🎁 +' + c.coral + ' ◆', L('El faro juntó coral mientras no estabas', 'The lighthouse gathered coral while you were away'));
+  showMenu();
+});
+
+/** Premio diario: 7 días que se repiten. Se muestra una vez al día al abrir el menú. */
+function dailyPending() { return (save.streak?.last || '') !== today(); }
+function showDaily() {
+  const st = save.streak || { day: 0, last: '' };
+  const box = $('days'); box.innerHTML = '';
+  STREAK.forEach((v, i) => {
+    const d = document.createElement('div');
+    d.className = (i < st.day ? 'done' : i === st.day ? 'now' : '') + (i === 6 ? ' big7' : '');
+    d.innerHTML = `${L('DÍA', 'DAY')} ${i + 1}<b>${i === 6 ? '🎁 ' : ''}${v} ◆</b>`;
+    box.appendChild(d);
+  });
+  $('dailyrwinfo').textContent = L('Vuelve cada día: el premio crece hasta el día 7. Si faltas un día no pierdes tu avance.', 'Come back every day: the reward grows until day 7. Missing a day does not reset your progress.');
+  hideAll(); $('dailyrw').classList.add('on');
+}
+$('dailyclaim').addEventListener('click', () => {
+  audio();
+  const st = save.streak || { day: 0, last: '' };
+  if (st.last !== today()) {
+    const v = STREAK[st.day];
+    save.coral += v;
+    save.streak = { day: (st.day + 1) % STREAK.length, last: today() };
+    persist(save);
+    sfx.ach(); vibrate(40);
+    toast('🎁 +' + v + ' ◆', L(`Premio del día ${st.day + 1}`, `Day ${st.day + 1} reward`));
+  }
+  showMenu();
+});
+
+/** Colección: faros y colores de luz que se desbloquean por nivel. */
+function buildColl() {
+  const lv = levelOf(save.xp || 0).lv;
+  $('collinfo').innerHTML = L(`Sube de nivel jugando para desbloquear más. Nivel actual: <b>${lv}</b>`, `Level up by playing to unlock more. Current level: <b>${lv}</b>`);
+  save.seen = save.seen || [];
+  const mark = (id: string) => { if (!save.seen!.includes('c:' + id)) save.seen!.push('c:' + id); };
+  const sg = $('skingrid'); sg.innerHTML = '';
+  for (const k of SKINS) {
+    const open = k.lv <= lv, on = (save.skin || 'clasico') === k.id;
+    if (open) mark(k.id);
+    const b = document.createElement('button');
+    b.className = (on ? 'on' : '') + (open ? '' : ' lock');
+    const cv2 = document.createElement('canvas'); cv2.width = 104; cv2.height = 128;
+    b.appendChild(cv2);
+    const draw2 = () => {
+      const x = cv2.getContext('2d')!, img = skinnedFaro(k) as HTMLImageElement | HTMLCanvasElement;
+      const w = (img as HTMLImageElement).naturalWidth || (img as HTMLCanvasElement).width, h = (img as HTMLImageElement).naturalHeight || (img as HTMLCanvasElement).height;
+      if (!w) return;
+      const sc = Math.min(100 / w, 124 / h);
+      x.clearRect(0, 0, 104, 128); x.drawImage(img, (104 - w * sc) / 2, 128 - h * sc, w * sc, h * sc);
+    };
+    draw2(); setTimeout(draw2, 300);
+    b.insertAdjacentHTML('beforeend', `${esc(k.name)}<small>${open ? (on ? L('En uso', 'In use') : L('Elegir', 'Choose')) : '🔒 ' + L('Nivel ', 'Level ') + k.lv}</small>`);
+    b.addEventListener('click', () => { if (!open) { sfx.click(); return; } save.skin = k.id; persist(save); applyCosmetics(); sfx.card(); buildColl(); });
+    sg.appendChild(b);
+  }
+  const bg = $('beamgrid'); bg.innerHTML = '';
+  for (const k of BEAMS) {
+    const open = k.lv <= lv, on = (save.beam || 'calida') === k.id;
+    if (open) mark(k.id);
+    const b = document.createElement('button');
+    b.className = (on ? 'on' : '') + (open ? '' : ' lock');
+    b.innerHTML = `<i class="sw" style="background:radial-gradient(circle,rgb(${k.rgb}) 0%,rgba(${k.rgb},.55) 35%,rgba(${k.rgb},0) 70%)"></i>${esc(k.name)}<small>${open ? (on ? L('En uso', 'In use') : L('Elegir', 'Choose')) : '🔒 ' + L('Nivel ', 'Level ') + k.lv}</small>`;
+    b.addEventListener('click', () => { if (!open) { sfx.click(); return; } save.beam = k.id; persist(save); applyCosmetics(); sfx.card(); buildColl(); });
+    bg.appendChild(b);
+  }
+  persist(save);
+  levelUI();
+}
+$('collbtn').addEventListener('click', () => { buildColl(); open('coll'); });
+
+/** Cuenta un número hacia arriba en un elemento (pantalla final). */
+function countUp(el: HTMLElement, to: number, ms = 900) {
+  const t0 = performance.now();
+  const step = (now: number) => {
+    const k = Math.min(1, (now - t0) / ms);
+    el.textContent = String(Math.round(to * (1 - Math.pow(1 - k, 3))));
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 /* ---------- Criaturas nuevas: ficha la primera vez que aparecen ---------- */
@@ -429,6 +578,11 @@ function updateHud() {
   $('best').textContent = (g.daily ? L('⭐ Desafío · ', '⭐ Challenge · ') : '') + runZone.name + (g.daily ? ' · ' + num(g.score) + ' pts' : L(' · Récord ', ' · Best ') + best());
   $('pearls').textContent = String(g.pearls);
   tapDots.forEach((d, i) => d.classList.toggle('off', i >= Math.floor(g!.taps)));
+  const cb = $('combo');
+  if (g.combo >= 3) {
+    if (g.combo !== comboShown) { cb.textContent = 'COMBO ×' + g.combo; cb.classList.remove('pop'); void cb.offsetWidth; cb.classList.add('pop'); comboShown = g.combo; }
+    cb.classList.add('on');
+  } else { cb.classList.remove('on'); comboShown = 0; }
   $('coral').textContent = String(Math.floor(g.coral));
   const st = g.st, p = Math.max(0, g.hp) / st.hp;
   $('hpfill').style.width = p * 100 + '%';
@@ -451,7 +605,7 @@ function updateHud() {
 }
 
 /* ---------- Pantallas ---------- */
-const OVS = ['menu', 'over', 'shop', 'map', 'missions', 'pauseov', 'cards', 'achs', 'rank'];
+const OVS = ['menu', 'over', 'shop', 'map', 'missions', 'pauseov', 'cards', 'achs', 'rank', 'coll', 'dailyrw'];
 let backTo = 'menu';
 function hideAll() { OVS.forEach(i => $(i).classList.remove('on')); }
 function open(id: string, from = 'menu') { audio(); sfx.click(); hideAll(); backTo = from; $(id).classList.add('on'); }
@@ -472,8 +626,11 @@ function showMenu() {
     ? L(`Hoy: oleada ${save.challenge!.wave} · ${num(save.challenge!.score)} pts · vuelve mañana`, `Today: wave ${save.challenge!.wave} · ${num(save.challenge!.score)} pts · come back tomorrow`)
     : L(`${cz.name} · un solo intento · igual para todos`, `${cz.name} · one try · same for everyone`);
   updateBadges();
+  levelUI();
+  chestUI();
   hideAll();
   $('menu').classList.add('on');
+  if (dailyPending() && save.runs > 0) setTimeout(() => { if ($('menu').classList.contains('on')) showDaily(); }, 500);
 }
 
 function updateBadges() {

@@ -57,7 +57,7 @@ export interface Txt { x: number; y: number; s: string; c: string; t: number; ma
 export interface Hazard { x: number; y: number; t: number; r: number; }
 export type GEvent = 'shot' | 'crit' | 'kill' | 'hurt' | 'wave' | 'boss' | 'bossdown' | 'over' | 'flash' | 'buy'
   | 'thunder' | 'boom' | 'enrage' | 'elite' | 'cards' | 'revive' | 'frostwarn' | 'frost' | 'erupt' | 'harpoon' | 'net' | 'slam'
-  | 'zap' | 'charge' | 'bite' | 'tap' | 'tapmiss' | 'heal' | 'crack' | 'fire' | 'poison' | 'newtype';
+  | 'zap' | 'charge' | 'bite' | 'combo' | 'tap' | 'tapmiss' | 'heal' | 'crack' | 'fire' | 'poison' | 'newtype';
 
 interface Proto { hp: number; spd: number; r: number; dmg: number; rew: number; stop: number; atk: number; armor: number; }
 const P: Record<EType, Proto> = {
@@ -174,6 +174,8 @@ export class Game {
   tFire = { tA: 0, tR: 0 };
   // estadísticas de la partida
   tapsUsed = 0;
+  /** Combo: bajas seguidas con menos de 1.3 s entre una y otra. */
+  combo = 0; comboT = 0; bestCombo = 0;
   kills = 0; crits = 0; buys = 0; bosses = 0; flashes = 0; earned = 0; elites = 0; puffers = 0; cards = 0;
   hpLost10 = 0;
   pearlsEarned = 0;
@@ -527,6 +529,14 @@ export class Game {
     this.waveDone++;
     if (!reward) return;
     this.kills++;
+    this.combo++; this.comboT = 1.3; this.bestCombo = Math.max(this.bestCombo, this.combo);
+    if (this.combo % 10 === 0) {
+      // Cada 10 bajas seguidas: perlas extra que crecen con el combo y la oleada
+      const bonus = Math.round((1.5 + this.wave * 0.4) * Math.min(5, this.combo / 10));
+      this.gain(bonus);
+      this.text(0, -110, L(`COMBO ×${this.combo}  +${bonus}`, `COMBO ×${this.combo}  +${bonus}`), '#7ff0e0', true, 1.1);
+      this.emit('combo', this.combo);
+    }
     if (e.elite) this.elites++;
     if (e.type === 'puffer') this.puffers++;
     let pr = Math.max(1, Math.round(e.rew * this.st.pk * (1 + 0.06 * (this.wave - 1))));
@@ -791,6 +801,7 @@ export class Game {
       this.emit('thunder');
     }
     this.hp = Math.min(st.hp, this.hp + st.rep * dt);
+    if (this.comboT > 0) { this.comboT -= dt; if (this.comboT <= 0) this.combo = 0; }
     if (this.taps < TAP_MAX) { this.tapT += dt; if (this.tapT >= st.tapCd) { this.tapT = 0; this.taps++; } } else this.tapT = 0;
     if (this.poisonT > 0) {
       this.poisonT -= dt;

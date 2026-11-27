@@ -117,6 +117,47 @@ export const BLESSINGS: Blessing[] = [
   { id: 'furia', name: 'Furia del farero', desc: '+20% de cadencia', icon: '🔥', max: 3 },
 ];
 
+/* ---------- Progresión del farero, colección y premios diarios ---------- */
+/** Experiencia que pide el nivel lv para pasar al siguiente. */
+export const xpNeed = (lv: number) => 80 + 55 * (lv - 1);
+/** Experiencia que da una partida. */
+export const runXp = (wave: number, kills: number, bosses: number) => wave * 12 + Math.floor(kills / 4) + bosses * 60;
+/** Coral al subir al nivel lv. */
+export const levelCoral = (lv: number) => 10 + 5 * lv;
+/** Nivel y experiencia dentro del nivel a partir de la experiencia total. */
+export function levelOf(xp: number) {
+  let lv = 1, rest = xp;
+  while (rest >= xpNeed(lv)) { rest -= xpNeed(lv); lv++; }
+  return { lv, rest, need: xpNeed(lv) };
+}
+
+/** Faros: recolorean las franjas rojas del sprite. hue = tono nuevo (grados), sat y lum multiplican. */
+export interface SkinDef { id: string; name: string; lv: number; hue: number; sat: number; lum: number; }
+export const SKINS: SkinDef[] = [
+  { id: 'clasico', name: 'Faro clásico', lv: 1, hue: 0, sat: 1, lum: 1 },
+  { id: 'marino', name: 'Faro marino', lv: 2, hue: 212, sat: 1, lum: 1 },
+  { id: 'esmeralda', name: 'Faro esmeralda', lv: 4, hue: 150, sat: 0.9, lum: 1 },
+  { id: 'nocturno', name: 'Faro nocturno', lv: 6, hue: 220, sat: 0.15, lum: 0.45 },
+  { id: 'coral', name: 'Faro coral', lv: 9, hue: 340, sat: 0.85, lum: 1.25 },
+  { id: 'aurora', name: 'Faro aurora', lv: 12, hue: 275, sat: 0.95, lum: 1.05 },
+  { id: 'solar', name: 'Faro solar', lv: 16, hue: 38, sat: 1, lum: 1.2 },
+];
+/** Color de la luz del faro (haz, rayos y reflejo en el agua). */
+export interface BeamDef { id: string; name: string; lv: number; rgb: string; }
+export const BEAMS: BeamDef[] = [
+  { id: 'calida', name: 'Luz cálida', lv: 1, rgb: '255,236,160' },
+  { id: 'turquesa', name: 'Luz turquesa', lv: 3, rgb: '140,250,230' },
+  { id: 'rosa', name: 'Luz de coral', lv: 5, rgb: '255,170,200' },
+  { id: 'verde', name: 'Luz de bengala', lv: 7, rgb: '170,255,150' },
+  { id: 'violeta', name: 'Luz violeta', lv: 10, rgb: '205,170,255' },
+  { id: 'helada', name: 'Luz helada', lv: 14, rgb: '215,240,255' },
+];
+/** Premio diario: 7 días que se repiten; perder un día no reinicia la racha. */
+export const STREAK = [10, 15, 20, 30, 40, 55, 100];
+/** Cofre del faro: coral por hora sin jugar, según tu mejor oleada; se llena en 8 horas. */
+export const chestRate = (bestWave: number) => 2 + bestWave * 0.25;
+export const CHEST_HOURS = 8;
+
 /* ---------- Criaturas nuevas por mundo ---------- */
 /** Ficha que se muestra la primera vez que aparece cada criatura especial. */
 export interface CreatureInfo { id: string; name: string; desc: string; zone: number; }
@@ -244,6 +285,8 @@ localize(BLESSINGS, ['name', 'desc']);
 localize(ZONES, ['name', 'desc', 'boss', 'bossTitle']);
 localize(ACHIEVEMENTS, ['name', 'desc']);
 localize(CREATURES, ['name', 'desc']);
+localize(SKINS, ['name']);
+localize(BEAMS, ['name']);
 for (const k of Object.keys(HINTS)) { const es = HINTS[k]; Object.defineProperty(HINTS, k, { get: () => t(es), enumerable: true }); }
 /** Nombre de pestaña / rama en el idioma activo. */
 export const tabName = (i: number) => t(TABS[i]);

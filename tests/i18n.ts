@@ -1,6 +1,6 @@
 // Verifica que todos los textos visibles tengan traducción al inglés.
 import { setLang, missing, t } from '../src/i18n';
-import { DEFS, MODS, PERM, BLESSINGS, ZONES, ACHIEVEMENTS, HINTS, MPOOL, TABS, BRANCHES } from '../src/data';
+import { DEFS, MODS, PERM, BLESSINGS, ZONES, ACHIEVEMENTS, HINTS, MPOOL, TABS, BRANCHES, SKINS, BEAMS, CREATURES } from '../src/data';
 import { AIMS } from '../src/game';
 setLang('en');
 const read = (o: object, f: string[]) => f.forEach(k => void (o as Record<string, unknown>)[k]);
@@ -8,6 +8,7 @@ DEFS.forEach(d => read(d, ['name'])); MODS.forEach(d => read(d, ['name', 'desc']
 BLESSINGS.forEach(d => read(d, ['name', 'desc'])); ZONES.forEach(d => read(d, ['name', 'desc', 'boss', 'bossTitle']));
 ACHIEVEMENTS.forEach(d => read(d, ['name', 'desc'])); AIMS.forEach(d => read(d, ['name'])); Object.values(HINTS);
 [...TABS, ...BRANCHES].forEach(t);
+[...SKINS, ...BEAMS].forEach(d => read(d, ['name'])); CREATURES.forEach(d => read(d, ['name', 'desc']));
 MPOOL.forEach(m => m.text(2));
 // Textos de la interfaz que pasan por t() en main.ts / game.ts / index.html
 import { readFileSync } from 'fs';

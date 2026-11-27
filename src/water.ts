@@ -19,6 +19,7 @@ uniform vec2 uC;        // centro del mundo en píxeles
 uniform float uS;       // píxeles por unidad de mundo
 uniform vec3 uDeep, uShal, uTint;
 uniform float uLamp, uLampOn, uFlash, uIce, uLava, uQ;
+uniform vec3 uBeam;     // color de la luz del faro
 
 // Hash sin seno: en GPUs de celular el seno con números grandes se ve en bloques
 float h(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
@@ -76,7 +77,7 @@ void main(){
   float ang = atan(dl.y, dl.x);
   float da = abs(mod(ang - uLamp + 3.14159, 6.28318) - 3.14159);
   float cone = smoothstep(0.22, 0.0, da) * smoothstep(340.0, 30.0, length(dl)) * uLampOn;
-  col += vec3(1.0, 0.9, 0.68) * cone * 0.16;
+  col += uBeam * cone * 0.16;
 
   // Hielo: témpanos planos con borde claro
   if (uIce > 0.0) {
@@ -125,7 +126,7 @@ export class Water {
   private constructor(canvas: HTMLCanvasElement, gl: WebGLRenderingContext, prog: WebGLProgram) {
     this.canvas = canvas;
     this.gl = gl;
-    for (const k of ['uRes', 'uT', 'uC', 'uS', 'uDeep', 'uShal', 'uTint', 'uLamp', 'uLampOn', 'uFlash', 'uIce', 'uLava', 'uQ'])
+    for (const k of ['uRes', 'uT', 'uC', 'uS', 'uDeep', 'uShal', 'uTint', 'uLamp', 'uLampOn', 'uFlash', 'uIce', 'uLava', 'uQ', 'uBeam'])
       this.u[k] = gl.getUniformLocation(prog, k);
   }
 
@@ -175,7 +176,7 @@ export class Water {
   }
 
   /** Dibuja el mar; cx, cy y s describen la cámara en píxeles CSS. */
-  render(w: number, h: number, res: number, z: Zone, t: number, cx: number, cy: number, s: number, lamp: number, lampOn: number, flash: number, q = 2) {
+  render(w: number, h: number, res: number, z: Zone, t: number, cx: number, cy: number, s: number, lamp: number, lampOn: number, flash: number, q = 2, beam = '255,236,160') {
     const gl = this.gl, W = Math.max(1, Math.round(w * res)), H = Math.max(1, Math.round(h * res));
     if (this.canvas.width !== W || this.canvas.height !== H) { this.canvas.width = W; this.canvas.height = H; }
     gl.viewport(0, 0, W, H);
@@ -193,6 +194,8 @@ export class Water {
     gl.uniform1f(this.u.uIce, z.mech === 'ice' ? 1 : 0);
     gl.uniform1f(this.u.uLava, z.mech === 'lava' ? 1 : 0);
     gl.uniform1f(this.u.uQ, q);
+    const bc = beam.split(',').map(v => +v / 255);
+    gl.uniform3f(this.u.uBeam, bc[0], bc[1] * 0.95, bc[2] * 0.85);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return this.canvas;
   }

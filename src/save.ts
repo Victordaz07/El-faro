@@ -27,6 +27,14 @@ export interface Save {
   lang?: string;
   /** Criaturas especiales cuya ficha ya se mostró. */
   seen?: string[];
+  /** Experiencia total del farero. */
+  xp?: number;
+  /** Faro y luz elegidos en la colección. */
+  skin?: string; beam?: string;
+  /** Premio diario: próximo día de la racha (0-6) y fecha del último reclamado. */
+  streak?: { day: number; last: string };
+  /** Cofre del faro: momento (ms) desde que junta coral. */
+  chestFrom?: number;
 }
 
 const KEY = 'faro_tormenta_v2';
@@ -90,6 +98,7 @@ export function load(): Save {
     }
   } catch { /* sin almacenamiento: se juega igual */ }
   ensureDaily(s);
+  if (!s.chestFrom) s.chestFrom = Date.now();
   return s;
 }
 
@@ -147,4 +156,14 @@ export function challengeSeed(date = today()) {
   let h = 7;
   for (const c of date) h = (h * 131 + c.charCodeAt(0)) >>> 0;
   return h;
+}
+
+/* ---------- Cofre del faro ---------- */
+import { chestRate, CHEST_HOURS } from './data';
+/** Coral acumulado en el cofre, cuánto falta para llenarse (horas) y si está lleno. */
+export function chestState(s: Save, now = Date.now()) {
+  const h = Math.max(0, (now - (s.chestFrom || now)) / 3.6e6);
+  const rate = chestRate(s.stats.bestWave || 0);
+  const coral = Math.floor(Math.min(h, CHEST_HOURS) * rate);
+  return { coral, full: h >= CHEST_HOURS, left: Math.max(0, CHEST_HOURS - h), max: Math.floor(CHEST_HOURS * rate) };
 }

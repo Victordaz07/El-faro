@@ -1,6 +1,6 @@
 // Dibujo en canvas: agua animada, faro 2.5D, criaturas sombreadas, efectos y clima.
 import { Game, Enemy, EType, LAMP_Y, TURRET_POS } from './game';
-import type { Zone } from './data';
+import type { Zone, SkinDef } from './data';
 import { Water } from './water';
 import { ready, sheetFor, Sheet, islaArt, faroArt, redArt, arponArt, turretArt, bossSheet, Still } from './art';
 
@@ -21,6 +21,40 @@ function adaptQuality(now: number) {
   ema = ema * 0.95 + dt * 0.05;
   slow = ema > 0.04 ? slow + dt : Math.max(0, slow - dt * 0.5);
   if (slow > 3 && quality > 0) { quality--; slow = 0; ema = 1 / 60; }
+}
+/** Color de la luz del faro (colección) y faro recoloreado. */
+let BEAM = '255,236,160';
+export function setBeam(rgb: string) { BEAM = rgb; }
+let skinDef: SkinDef | null = null;
+const skinCache = new Map<string, HTMLCanvasElement>();
+export function setSkin(s: SkinDef) { skinDef = s; }
+/** Copia del sprite del faro con las franjas rojas en otro color (se calcula una vez por faro). */
+export function skinnedFaro(s: SkinDef | null = skinDef): CanvasImageSource {
+  const src = faroArt.img;
+  if (!s || s.id === 'clasico' || !ready(src)) return src;
+  let c = skinCache.get(s.id);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = src.naturalWidth; c.height = src.naturalHeight;
+    const x = c.getContext('2d', { willReadFrequently: true })!;
+    x.drawImage(src, 0, 0);
+    const d = x.getImageData(0, 0, c.width, c.height), px = d.data;
+    for (let i = 0; i < px.length; i += 4) {
+      const r = px[i] / 255, g = px[i + 1] / 255, b = px[i + 2] / 255;
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, dd = mx - mn;
+      if (dd < 0.18 || mx !== r) continue; // solo los rojos saturados (franjas y techo)
+      let h = ((g - b) / dd) * 60; if (h < 0) h += 360;
+      if (h > 25 && h < 335) continue;
+      const sat = Math.min(1, (dd / (1 - Math.abs(2 * l - 1))) * s.sat), lum = Math.min(0.95, l * s.lum);
+      const C = (1 - Math.abs(2 * lum - 1)) * sat, X = C * (1 - Math.abs(((s.hue / 60) % 2) - 1)), m = lum - C / 2;
+      const k = Math.floor(s.hue / 60) % 6;
+      const [R, G, B] = [[C, X, 0], [X, C, 0], [0, C, X], [0, X, C], [X, 0, C], [C, 0, X]][k];
+      px[i] = (R + m) * 255; px[i + 1] = (G + m) * 255; px[i + 2] = (B + m) * 255;
+    }
+    x.putImageData(d, 0, 0);
+    skinCache.set(s.id, c);
+  }
+  return c;
 }
 /** Cámara del último cuadro (para convertir un toque en pantalla a coordenadas del juego). */
 export const lastCam = { x: 0, y: 0, s: 1 };
@@ -75,7 +109,7 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
   // Fondo y agua: shader en la GPU, o patrón 2D si no hay WebGL
   if (water === undefined) water = Water.create();
   if (water) {
-    const c = water.render(vw, vh, quality === 2 ? Math.min(1, dpr * 0.6) : quality === 1 ? 0.45 : 0.3, zone, now, cam.x, cam.y, cam.s, lampA, 1, g ? g.lightning : 0, quality);
+    const c = water.render(vw, vh, quality === 2 ? Math.min(1, dpr * 0.6) : quality === 1 ? 0.45 : 0.3, zone, now, cam.x, cam.y, cam.s, lampA, 1, g ? g.lightning : 0, quality, BEAM);
     ctx.drawImage(c, 0, 0, vw, vh);
   } else {
     ctx.fillStyle = radial(ctx, vw / 2, vh / 2, Math.max(vw, vh) * 0.8, [[0, zone.sky0], [1, zone.sky1]]);
@@ -237,7 +271,7 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
     ctx.rotate(g.lamp);
     for (const [len, w, a] of [[300, 50, 0.13], [280, 24, 0.22]] as const) {
       const bg = ctx.createLinearGradient(0, 0, len, 0);
-      bg.addColorStop(0, `rgba(255,236,160,${a})`); bg.addColorStop(1, 'rgba(255,236,160,0)');
+      bg.addColorStop(0, `rgba(${BEAM},${a})`); bg.addColorStop(1, `rgba(${BEAM},0)`);
       ctx.fillStyle = bg; ctx.beginPath(); ctx.moveTo(0, -3); ctx.lineTo(len, -w); ctx.lineTo(len, w); ctx.lineTo(0, 3); ctx.closePath(); ctx.fill();
     }
     ctx.restore();
@@ -251,7 +285,7 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
       } else if (f.kind === 'nova') {
         const r = 30 + (1 - k) * 240;
         ctx.globalAlpha = k;
-        ctx.fillStyle = radial(ctx, 0, LAMP_Y * 0.5, r, [[0, 'rgba(255,243,176,0)'], [0.75, 'rgba(255,243,176,.15)'], [1, 'rgba(255,243,176,.7)']]);
+        ctx.fillStyle = radial(ctx, 0, LAMP_Y * 0.5, r, [[0, `rgba(${BEAM},0)`], [0.75, `rgba(${BEAM},.15)`], [1, `rgba(${BEAM},.7)`]]);
         ctx.beginPath(); ctx.arc(0, LAMP_Y * 0.5, r, 0, TAU); ctx.fill();
       } else if (f.kind === 'zap') {
         const tx = f.tx ?? 0, ty = f.ty ?? 0, segs = 9;
@@ -331,7 +365,7 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
     for (const b of g.bolts) {
       if (b.kind === 'harpoon') continue;
       const tx = b.px - (b.x - b.px) * 2, ty = b.py - (b.y - b.py) * 2;
-      const col = b.crit ? '255,214,90' : b.bounce ? '140,220,255' : '255,246,200';
+      const col = b.crit ? '255,214,90' : b.bounce ? '140,220,255' : BEAM;
       ctx.strokeStyle = `rgba(${col},.25)`; ctx.lineWidth = b.crit ? 10 : 7;
       ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(b.x, b.y); ctx.stroke();
       ctx.strokeStyle = `rgba(${col},1)`; ctx.lineWidth = b.crit ? 3.5 : 2.2;
@@ -374,7 +408,7 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
     ctx.globalCompositeOperation = 'lighter';
     ctx.save(); ctx.translate(0, LAMP_Y); ctx.rotate(now * 0.6);
     const bg = ctx.createLinearGradient(0, 0, 300, 0);
-    bg.addColorStop(0, 'rgba(255,236,160,.3)'); bg.addColorStop(1, 'rgba(255,236,160,0)');
+    bg.addColorStop(0, `rgba(${BEAM},.3)`); bg.addColorStop(1, `rgba(${BEAM},0)`);
     ctx.fillStyle = bg; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(300, -40); ctx.lineTo(300, 40); ctx.closePath(); ctx.fill();
     ctx.restore();
     ctx.globalCompositeOperation = 'source-over';
@@ -493,12 +527,12 @@ function drawTower(ctx: CanvasRenderingContext2D, t: number, g: Game | null) {
     // Faro renderizado desde faro-solo.glb, parado en el claro de la isla (linterna en LAMP_Y)
     ctx.fillStyle = 'rgba(0,0,0,.25)';
     ctx.beginPath(); ctx.ellipse(9, -3, 17, 6, -0.3, 0, TAU); ctx.fill();
-    drawStill(ctx, faroArt, 0, 0);
+    { const k = faroArt.k; ctx.drawImage(skinnedFaro(), -faroArt.ox * k, -faroArt.oy * k, faroArt.w * k, faroArt.h * k); }
   } else blit(ctx, tw, 72, 1);
   // resplandor de la linterna
   const pulse = 0.75 + 0.25 * Math.sin(t * 6);
   ctx.globalCompositeOperation = 'lighter';
-  ctx.fillStyle = radial(ctx, 0, LAMP_Y, 30, [[0, `rgba(255,236,150,${0.85 * pulse})`], [1, 'rgba(255,236,150,0)']]);
+  ctx.fillStyle = radial(ctx, 0, LAMP_Y, 30, [[0, `rgba(${BEAM},${0.85 * pulse})`], [1, `rgba(${BEAM},0)`]]);
   ctx.beginPath(); ctx.arc(0, LAMP_Y, 30, 0, TAU); ctx.fill();
   ctx.globalCompositeOperation = 'source-over';
   // barrera
@@ -1079,7 +1113,7 @@ function lighting(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, vw:
   c.beginPath(); c.moveTo(0, -6); c.lineTo(330, -78); c.lineTo(330, 78); c.lineTo(0, 6); c.closePath(); c.fill();
   c.restore();
   if (g) {
-    for (const b of g.bolts) if (b.kind === 'light') light(b.x, b.y, b.crit ? 46 : 30, b.crit ? '255,210,90' : '255,240,200', 0.55);
+    for (const b of g.bolts) if (b.kind === 'light') light(b.x, b.y, b.crit ? 46 : 30, b.crit ? '255,210,90' : BEAM, 0.55);
     for (const s of g.eshots) light(s.x, s.y, 32, '90,240,150', 0.55);
     for (const f of g.fireballs) { const p = g.fireballPos(f); light(p.x, p.y - p.h, 40, '255,140,50', 0.6); }
     for (const e of g.enemies) {
