@@ -84,6 +84,9 @@ function onEvent(e: GEvent, d?: number) {
     case 'harpoon': sfx.harpoon(); break;
     case 'net': sfx.net(); break;
     case 'slam': sfx.slam(); break;
+    case 'zap': sfx.zap(); vibrate(25); break;
+    case 'charge': sfx.charge(); break;
+    case 'bite': sfx.bite(); break;
     case 'frostwarn': sfx.warn(); $('frostw').style.display = 'block'; break;
     case 'frost': sfx.frost(); $('frostw').style.display = 'none'; vibrate(60); break;
     case 'erupt': sfx.erupt(); vibrate(30); break;

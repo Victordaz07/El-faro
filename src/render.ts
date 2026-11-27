@@ -143,6 +143,14 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
       ctx.strokeStyle = `rgba(210,235,255,${k * 0.22})`; ctx.lineWidth = 1.2;
       const r = (f.r || 8) * (1.1 + (1 - k) * 1.3);
       ctx.beginPath(); ctx.ellipse(f.x, f.y, r, r * 0.55, 0, 0, TAU); ctx.stroke();
+    } else if (f.kind === 'netfly') {
+      const p = 1 - k, tx = f.tx ?? f.x, ty = f.ty ?? f.y;
+      const nx = f.x + (tx - f.x) * p, ny = f.y + (ty - f.y) * p - Math.sin(p * Math.PI) * 45;
+      ctx.strokeStyle = 'rgba(201,164,106,.6)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.quadraticCurveTo((f.x + nx) / 2, Math.min(f.y, ny) - 20, nx, ny); ctx.stroke();
+      ctx.fillStyle = `rgba(0,10,25,${0.25 * p})`;
+      ctx.beginPath(); ctx.ellipse(f.x + (tx - f.x) * p, f.y + (ty - f.y) * p, (f.r || 40) * (0.2 + 0.7 * p), (f.r || 40) * (0.15 + 0.5 * p), 0, 0, TAU); ctx.fill();
+      drawNet(ctx, nx, ny, (f.r || 40) * (0.2 + 0.8 * p), f.c);
     } else if (f.kind === 'net') {
       ctx.globalAlpha = Math.min(1, k * 2.5);
       drawNet(ctx, f.x, f.y, f.r || 40, f.c);
@@ -205,6 +213,9 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
   if (g) for (const b of g.bolts) {
     if (b.kind !== 'harpoon') continue;
     const a = Math.atan2(b.y - b.py, b.x - b.px);
+    const tp = TURRET_POS.tA, mx = (tp.x + b.x) / 2, my = (tp.y - 8 + b.y) / 2 + 10;
+    ctx.strokeStyle = 'rgba(201,164,106,.75)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(tp.x, tp.y - 8); ctx.quadraticCurveTo(mx, my, b.x, b.y); ctx.stroke();
     ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(a);
     ctx.strokeStyle = '#6b4a2c'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(0, 0); ctx.stroke();
     ctx.fillStyle = '#d9d2c3'; ctx.beginPath(); ctx.moveTo(5, 0); ctx.lineTo(-2, -3.5); ctx.lineTo(-2, 3.5); ctx.closePath(); ctx.fill();
@@ -249,6 +260,46 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
         ctx.globalAlpha = k;
         ctx.fillStyle = radial(ctx, 0, LAMP_Y * 0.5, r, [[0, 'rgba(255,243,176,0)'], [0.75, 'rgba(255,243,176,.15)'], [1, 'rgba(255,243,176,.7)']]);
         ctx.beginPath(); ctx.arc(0, LAMP_Y * 0.5, r, 0, TAU); ctx.fill();
+      } else if (f.kind === 'zap') {
+        const tx = f.tx ?? 0, ty = f.ty ?? 0, segs = 9;
+        const pts: [number, number][] = [];
+        const nx = -(ty - f.y), ny = tx - f.x, nl = Math.hypot(nx, ny) || 1;
+        for (let i = 0; i <= segs; i++) {
+          const p = i / segs, j = i === 0 || i === segs ? 0 : (Math.random() - 0.5) * 16;
+          pts.push([f.x + (tx - f.x) * p + (nx / nl) * j, f.y + (ty - f.y) * p + (ny / nl) * j]);
+        }
+        for (const [w, col] of [[7, `rgba(80,240,160,${0.35 * k})`], [2.2, `rgba(230,255,245,${k})`]] as const) {
+          ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineJoin = 'round';
+          ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
+        }
+        ctx.strokeStyle = `rgba(160,255,210,${0.7 * k})`; ctx.lineWidth = 1;
+        for (let i = 2; i < segs - 1; i += 3) {
+          const [x, y] = pts[i];
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (Math.random() - 0.5) * 18, y + (Math.random() - 0.5) * 18); ctx.stroke();
+        }
+      } else if (f.kind === 'bite') {
+        const r = (f.r || 8) * 0.9, c = 1 - k, h = f.h || 0;
+        ctx.strokeStyle = `rgba(255,240,230,${k})`; ctx.lineWidth = 2; ctx.lineCap = 'round';
+        for (const sgn of [-1, 1]) {
+          const ang = h + Math.PI + sgn * (0.9 - c * 0.8);
+          ctx.beginPath(); ctx.arc(f.x, f.y, r, ang - 0.5, ang + 0.5); ctx.stroke();
+        }
+        ctx.fillStyle = `rgba(255,220,200,${k})`;
+        for (let i = 0; i < 4; i++) { const aa = i * 1.6 + h; ctx.fillRect(f.x + Math.cos(aa) * r * c * 1.6, f.y + Math.sin(aa) * r * c * 1.6, 2, 2); }
+      } else if (f.kind === 'sting') {
+        ctx.strokeStyle = `rgba(230,170,255,${k})`; ctx.lineWidth = 1.4;
+        for (let i = 0; i < 5; i++) {
+          const aa = Math.random() * TAU, rr = 6 + (1 - k) * 14;
+          ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.x + Math.cos(aa) * rr * 0.5 + (Math.random() - 0.5) * 5, f.y + Math.sin(aa) * rr * 0.5); ctx.lineTo(f.x + Math.cos(aa) * rr, f.y + Math.sin(aa) * rr); ctx.stroke();
+        }
+      } else if (f.kind === 'bash') {
+        ctx.strokeStyle = `rgba(220,240,255,${k * 0.9})`; ctx.lineWidth = 3 * k + 0.5;
+        const r = 6 + (1 - k) * 20;
+        ctx.beginPath(); ctx.ellipse(f.x, f.y, r, r * 0.7, 0, 0, TAU); ctx.stroke();
+      } else if (f.kind === 'spray') {
+        ctx.fillStyle = f.c; ctx.globalAlpha = Math.min(1, k * 1.6);
+        ctx.beginPath(); ctx.arc(f.x, f.y, 1.3 + k, 0, TAU); ctx.fill();
+        ctx.globalAlpha = 1;
       } else if (f.kind === 'strike') {
         ctx.globalAlpha = k;
         ctx.fillStyle = radial(ctx, f.x, f.y, (f.r || 30) * 1.5, [[0, 'rgba(240,245,255,1)'], [1, 'rgba(160,190,255,0)']]);
@@ -506,7 +557,8 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, zone: 
   const a = Math.atan2(-e.y, -e.x), t = time + e.wob, k = e.r / { crab: 10, jelly: 9, mini: 9, sardine: 5, eel: 9, puffer: 11, turtle: 13, hermit: 11, boss: 32 }[e.type];
   const dist = Math.hypot(e.x, e.y);
   ctx.save();
-  ctx.translate(e.x, e.y);
+  const lunge = e.lungeT > 0 ? Math.sin((1 - e.lungeT / 0.24) * Math.PI) * e.r * 0.75 : 0;
+  ctx.translate(e.x + Math.cos(a) * lunge, e.y + Math.sin(a) * lunge);
   // sombra en el agua
   ctx.fillStyle = 'rgba(0,10,25,.35)';
   ctx.beginPath(); ctx.ellipse(2, 4, e.r * 1.05, e.r * 0.7, 0, 0, TAU); ctx.fill();
@@ -608,6 +660,18 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, zone: 
       break;
     }
   }
+  }
+  if (e.type === 'eel' && e.chargeT > 0) {
+    const k = 1 - e.chargeT / 0.5, hx = Math.cos(a) * e.r * 1.7, hy = Math.sin(a) * e.r * 1.7 - 4;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = radial(ctx, hx, hy, 6 + 12 * k, [[0, `rgba(220,255,240,${0.9 * k})`], [0.4, `rgba(80,240,160,${0.6 * k})`], [1, 'rgba(80,240,160,0)']]);
+    ctx.beginPath(); ctx.arc(hx, hy, 6 + 12 * k, 0, TAU); ctx.fill();
+    ctx.strokeStyle = `rgba(200,255,230,${0.8 * k})`; ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      const aa = Math.random() * TAU, rr = 6 + 8 * k;
+      ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + Math.cos(aa) * rr * 0.5 + (Math.random() - 0.5) * 4, hy + Math.sin(aa) * rr * 0.5); ctx.lineTo(hx + Math.cos(aa) * rr, hy + Math.sin(aa) * rr); ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
   }
   if (e.hitT > 0 && !sheet) {
     ctx.globalCompositeOperation = 'lighter';
@@ -796,11 +860,14 @@ function lighting(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, vw:
       else if (f.kind === 'strike') light(f.x, f.y, 90, '200,220,255', k);
       else if (f.kind === 'ring') light(f.x, f.y, 120, '255,200,140', k * 0.4);
       else if (f.kind === 'slam') light(f.x, f.y, (f.r || 80), '255,220,170', k * 0.25);
+      else if (f.kind === 'zap') { const tx = f.tx ?? 0, ty = f.ty ?? 0; for (const p of [0, 0.5, 1]) light(f.x + (tx - f.x) * p, f.y + (ty - f.y) * p, 55, '120,255,190', k * 0.8); }
+      else if (f.kind === 'sting') light(f.x, f.y, 40, '210,140,255', k * 0.6);
     }
     for (const e of g.enemies) {
       if (e.burnT > 0) light(e.x, e.y, e.r * 3, '255,130,40', 0.45);
       if (e.elite) light(e.x, e.y, e.r * 3, '255,210,120', 0.3);
       if (e.type === 'jelly' || e.type === 'mini') light(e.x, e.y, e.r * 3, '200,120,255', 0.28);
+      if (e.type === 'eel' && e.chargeT > 0) light(e.x, e.y, 50, '100,255,180', 0.8 * (1 - e.chargeT / 0.5));
     }
     if (g.lightning > 0) {
       c.setTransform(1, 0, 0, 1, 0, 0);

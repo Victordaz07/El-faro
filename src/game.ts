@@ -21,6 +21,8 @@ export interface Enemy {
   dead: boolean; wob: number; stun: number; hitT: number; elite: boolean;
   age: number; summonT: number; enraged: boolean; wakeT: number;
   slowT: number; burn: number; burnT: number;
+  /** Carga de la descarga (anguila) y embestida al atacar (resto). */
+  chargeT: number; lungeT: number;
 }
 export interface Bolt {
   x: number; y: number; px: number; py: number; t: Enemy | null; d: number; crit: boolean; bounce: boolean;
@@ -28,7 +30,10 @@ export interface Bolt {
 }
 export interface EShot { x: number; y: number; d: number; c: string; gone?: boolean; }
 export interface Fx {
-  kind: 'p' | 'ring' | 'nova' | 'wake' | 'splash' | 'boom' | 'net' | 'slam' | 'warn' | 'strike' | 'sink';
+  kind: 'p' | 'ring' | 'nova' | 'wake' | 'splash' | 'boom' | 'net' | 'slam' | 'warn' | 'strike' | 'sink'
+    | 'zap' | 'bite' | 'sting' | 'bash' | 'netfly' | 'spray';
+  /** Para 'zap' y 'netfly': punto de destino. */
+  tx?: number; ty?: number;
   x: number; y: number; vx: number; vy: number; t: number; max: number; c: string; r?: number;
   /** Para 'sink': tipo de criatura y rumbo, para dibujarla hundiéndose. */
   et?: string; h?: number;
@@ -36,7 +41,8 @@ export interface Fx {
 export interface Txt { x: number; y: number; s: string; c: string; t: number; max: number; big: boolean; }
 export interface Hazard { x: number; y: number; t: number; r: number; }
 export type GEvent = 'shot' | 'crit' | 'kill' | 'hurt' | 'wave' | 'boss' | 'bossdown' | 'over' | 'flash' | 'buy'
-  | 'thunder' | 'boom' | 'enrage' | 'elite' | 'cards' | 'revive' | 'frostwarn' | 'frost' | 'erupt' | 'harpoon' | 'net' | 'slam';
+  | 'thunder' | 'boom' | 'enrage' | 'elite' | 'cards' | 'revive' | 'frostwarn' | 'frost' | 'erupt' | 'harpoon' | 'net' | 'slam'
+  | 'zap' | 'charge' | 'bite';
 
 interface Proto { hp: number; spd: number; r: number; dmg: number; rew: number; stop: number; atk: number; armor: number; }
 const P: Record<EType, Proto> = {
@@ -92,6 +98,8 @@ export class Game {
   enemies: Enemy[] = [];
   bolts: Bolt[] = [];
   eshots: EShot[] = [];
+  /** Redes en el aire: se aplican al caer. */
+  nets: { x: number; y: number; R: number; t: number }[] = [];
   fx: Fx[] = [];
   texts: Txt[] = [];
   hazards: Hazard[] = [];
@@ -331,7 +339,7 @@ export class Game {
       r: p.r * (elite ? 1.3 : 1), dmg: p.dmg * ds * (elite ? 1.5 : 1), rew: p.rew * (elite ? 3 : 1),
       stop: p.stop, atkRate: p.atk, atk: Math.random() * 0.5, armor: p.armor * (1 + w * 0.12),
       dead: false, wob: Math.random() * 6, stun: 0, hitT: 0, elite, age: 0, summonT: 5, enraged: false, wakeT: 0,
-      slowT: 0, burn: 0, burnT: 0,
+      slowT: 0, burn: 0, burnT: 0, chargeT: 0, lungeT: 0,
     };
     this.enemies.push(e);
     this.fx.push({ kind: 'splash', x, y, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '#bfe8ff', r: e.r * 0.8 });
@@ -431,6 +439,31 @@ export class Game {
     }
   }
 
+  /** Descarga eléctrica de la anguila: golpea al instante. */
+  private zap(e: Enemy) {
+    const d = Math.hypot(e.x, e.y) || 1;
+    const tx = (e.x / d) * 28, ty = (e.y / d) * 28 - 14;
+    this.fx.push({ kind: 'zap', x: e.x, y: e.y, tx, ty, vx: 0, vy: 0, t: 0.28, max: 0.28, c: '#b8ffe0' });
+    this.burst(tx, ty, '#b8ffe0', 8, 80);
+    this.emit('zap');
+    this.hurt(e.dmg);
+  }
+
+  private landNets(dt: number) {
+    for (const n of this.nets) {
+      n.t -= dt;
+      if (n.t > 0) continue;
+      this.fx.push({ kind: 'net', x: n.x, y: n.y, vx: 0, vy: 0, t: 2.5, max: 2.5, c: '#e8d9b0', r: n.R });
+      this.fx.push({ kind: 'splash', x: n.x, y: n.y, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#bfe8ff', r: n.R * 0.6 });
+      for (const e of this.enemies) {
+        if (e.dead || (e.x - n.x) ** 2 + (e.y - n.y) ** 2 > n.R * n.R) continue;
+        e.slowT = 2.5 + 0.3 * (this.lv.tR - 1);
+        this.damage(e, this.st.tR, true);
+      }
+    }
+    this.nets = this.nets.filter(n => n.t > 0);
+  }
+
   private gameOver() {
     this.over = true;
     this.hp = Math.max(0, this.hp);
@@ -514,12 +547,9 @@ export class Game {
           this.tcd.tR = Math.max(2.2, 4 - 0.2 * (this.lv.tR - 1));
           const p = TURRET_POS.tR;
           this.tAim.tR = Math.atan2(best.y - p.y, best.x - p.x);
-          this.fx.push({ kind: 'net', x: best.x, y: best.y, vx: 0, vy: 0, t: 2.5, max: 2.5, c: '#e8d9b0', r: R });
-          for (const e of this.enemies) {
-            if (e.dead || (e.x - best.x) ** 2 + (e.y - best.y) ** 2 > R * R) continue;
-            e.slowT = 2.5 + 0.3 * (this.lv.tR - 1);
-            this.damage(e, st.tR, true);
-          }
+          const fly = 0.38;
+          this.fx.push({ kind: 'netfly', x: p.x, y: p.y - 6, tx: best.x, ty: best.y, vx: 0, vy: 0, t: fly, max: fly, c: '#e8d9b0', r: R });
+          this.nets.push({ x: best.x, y: best.y, R, t: fly });
           this.emit('net');
         } else this.tcd.tR = 0.5;
       }
@@ -533,6 +563,10 @@ export class Game {
         this.tcd.tN = Math.max(1.5, 3 - 0.15 * (this.lv.tN - 1));
         this.slamT = 0.5;
         this.fx.push({ kind: 'slam', x: 0, y: 10, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#c9a46a', r: R });
+        for (let i = 0; i < 22; i++) {
+          const a = Math.random() * Math.PI * 2, v = 25 + Math.random() * 90, rr = R * (0.6 + Math.random() * 0.4), life = 0.4 + Math.random() * 0.35;
+          this.fx.push({ kind: 'spray', x: Math.cos(a) * rr, y: 10 + Math.sin(a) * rr * 0.8, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.6 - 40 - Math.random() * 70, t: life, max: life, c: '#d8f0ff' });
+        }
         for (const e of this.enemies) if (!e.dead && Math.hypot(e.x, e.y) < R + e.r) this.damage(e, st.tN, true);
         this.shake = Math.max(this.shake, 0.1);
         this.emit('slam');
@@ -641,6 +675,7 @@ export class Game {
     this.mechanics(dt);
     if (this.over) return;
     this.turrets(dt);
+    this.landNets(dt);
 
     // Apuntar y disparar desde la linterna
     const tg = this.target();
@@ -737,6 +772,12 @@ export class Game {
         }
       } else if (e.type === 'puffer') {
         this.fx.push({ kind: 'boom', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#ffd166', r: 50 });
+        this.fx.push({ kind: 'ring', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '#fff1b8' });
+        this.fx.push({ kind: 'splash', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.7, max: 0.7, c: '#bfe8ff', r: 26 });
+        for (let i = 0; i < 16; i++) {
+          const a = (i / 16) * Math.PI * 2, v = 150 + Math.random() * 60;
+          this.fx.push({ kind: 'spray', x: e.x, y: e.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0.35, max: 0.35, c: '#c4851a' });
+        }
         this.burst(e.x, e.y, '#ffd166', 18, 140);
         this.kill(e, false);
         this.emit('boom');
@@ -744,14 +785,30 @@ export class Game {
         if (this.over) return;
       } else {
         e.atk -= dt * (e.slowT > 0 ? 0.6 : 1);
-        if (e.atk <= 0) {
+        e.lungeT = Math.max(0, e.lungeT - dt);
+        if (e.type === 'eel') {
+          // Se carga brillando y luego lanza una descarga instantánea
+          if (e.chargeT > 0) {
+            e.chargeT -= dt;
+            if (e.chargeT <= 0) { this.zap(e); if (this.over) return; }
+          } else if (e.atk <= 0) {
+            e.atk = e.atkRate;
+            e.chargeT = 0.5;
+            this.emit('charge');
+          }
+        } else if (e.atk <= 0) {
           e.atk = e.atkRate;
-          if (e.type === 'eel') {
-            this.eshots.push({ x: e.x, y: e.y, d: e.dmg, c: '#4ade80' });
-          } else if (e.type === 'boss') {
+          e.lungeT = 0.24;
+          const hx = (e.x / d) * 30, hy = (e.y / d) * 30 - 6;
+          if (e.type === 'boss') {
             this.fx.push({ kind: 'ring', x: 0, y: 0, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#ff5ca8' });
-            this.hurt(e.dmg, e);
-          } else this.hurt(e.dmg, e);
+            this.fx.push({ kind: 'splash', x: hx, y: hy, vx: 0, vy: 0, t: 0.7, max: 0.7, c: '#bfe8ff', r: 30 });
+          } else {
+            const kind = e.type === 'jelly' || e.type === 'mini' ? 'sting' : e.type === 'turtle' ? 'bash' : 'bite';
+            this.fx.push({ kind, x: hx, y: hy, vx: 0, vy: 0, t: 0.3, max: 0.3, c: '', r: e.r, h: Math.atan2(-e.y, -e.x) });
+            this.emit('bite');
+          }
+          this.hurt(e.dmg, e);
           if (this.over) return;
         }
       }
@@ -761,6 +818,7 @@ export class Game {
     for (const f of this.fx) {
       f.t -= dt;
       if (f.kind === 'p') { f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.94; f.vy *= 0.94; }
+      else if (f.kind === 'spray') { f.x += f.vx * dt; f.y += f.vy * dt; f.vy += 260 * dt; f.vx *= 0.97; }
     }
     this.fx = this.fx.filter(f => f.t > 0);
     for (const t of this.texts) { t.t -= dt; t.y -= 20 * dt; }
