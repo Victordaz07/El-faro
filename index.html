@@ -253,6 +253,14 @@ html[lang=en] .up.new::after{content:'NEW'}
 .card.mode{align-items:center;gap:10px}
 .card.mode>em{font-style:normal;font-size:28px;flex:none}
 .card.mode b small{margin-left:6px;font-size:11px}
+/* Áreas táctiles de al menos 44 px sin cambiar el aspecto (accesibilidad en celular) */
+.ibtn,.tab,#aim{position:relative}
+#aim{position:absolute}
+.ibtn::after{content:'';position:absolute;inset:-6px}
+.tab::after{content:'';position:absolute;inset:-2px}
+#aim::after{content:'';position:absolute;inset:-3px -4px -3px -2px}
+.row3 .big,.row2 .big{min-height:44px}
+#ready{padding:13px 26px}
 </style>
 </head>
 <body>
