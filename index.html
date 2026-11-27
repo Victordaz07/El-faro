@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#07101c">
 <title>Faro en la Tormenta</title>
+<link rel="artifact-thumbnail" href="thumb.png">
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
 html,body{margin:0;height:100%;background:#050b14;color:#e8f1ff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden;touch-action:manipulation}
@@ -19,7 +20,7 @@ button{font-family:inherit;cursor:pointer}
 .ibtn{width:34px;height:34px;border-radius:9px;border:1px solid #27507c;background:#0f2540;color:#cfe6ff;font-weight:900;font-size:13px}
 #stage{position:relative;flex:1;min-height:0}
 canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-#banner{white-space:pre-line;position:absolute;top:13%;left:0;right:0;text-align:center;font-weight:900;font-size:28px;letter-spacing:.12em;opacity:0;pointer-events:none;text-shadow:0 2px 14px #000;transition:opacity .35s,transform .35s;transform:scale(.9)}
+#banner{position:absolute;top:13%;left:0;right:0;text-align:center;font-weight:900;font-size:28px;letter-spacing:.12em;opacity:0;pointer-events:none;text-shadow:0 2px 14px #000;transition:opacity .35s,transform .35s;transform:scale(.9)}
 #banner.on{opacity:1;transform:scale(1)}
 #boss{position:absolute;top:8px;left:14px;right:14px;display:none}
 #bossname{font-size:11px;font-weight:900;letter-spacing:.12em;color:#ffb0d8}
@@ -116,6 +117,16 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .namebox{display:flex;gap:6px;width:100%;max-width:360px}
 .namebox input{flex:1;padding:10px;border-radius:10px;border:1px solid #2c5a8f;background:#0b1a2d;color:#fff;font-size:14px;user-select:text;-webkit-user-select:text}
 .namebox button{padding:10px 14px;border-radius:10px;border:0;background:#35e0b0;color:#04241b;font-weight:900}
+.up .ic{position:absolute;right:6px;bottom:5px;color:var(--c);opacity:.55}
+.up.ready .ic{opacity:.95}
+.tab{display:flex;align-items:center;justify-content:center;gap:4px}
+.tab svg{width:15px;height:15px;color:var(--c)}
+#stage::before,#stage::after{content:'';position:absolute;left:0;right:0;height:0;background:#000;z-index:4;transition:height .45s ease;pointer-events:none}
+#stage::before{top:0}#stage::after{bottom:0}
+#stage.cine::before,#stage.cine::after{height:11%}
+#stage.cine #flash,#stage.cine #aim,#stage.cine #mod{opacity:0;transition:opacity .3s}
+#stage.cine #banner{z-index:5}
+#banner small{display:block;font-size:13px;letter-spacing:.2em;opacity:.8;font-weight:700}
 #tip{position:absolute;z-index:8;left:12px;right:12px;display:none;padding:14px;border-radius:14px;background:#fffbe8;color:#1b1500;box-shadow:0 10px 40px rgba(0,0,0,.6);font-size:14px;line-height:1.4}
 #tip.on{display:block;animation:pop .3s both}
 #tip b{display:block;font-size:15px;margin-bottom:4px}

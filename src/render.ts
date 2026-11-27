@@ -5,6 +5,9 @@ import { Water } from './water';
 
 let water: Water | null | undefined;
 
+/** Foco de cámara para cinemáticas: punto del mundo y acercamiento (1 = normal). */
+export const camFocus = { x: 0, y: 0, z: 1 };
+
 /* Calidad automática: si el dispositivo no alcanza ~25 FPS se baja la resolución
    del mar y de la luz; si aún así no alcanza, se usa el mar 2D. */
 let quality = 2, lastNow = 0, slow = 0, ema = 1 / 60;
@@ -80,7 +83,10 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
 
   let sx = 0, sy = 0;
   if (g && g.shake > 0) { const k = g.shake * 22; sx = (Math.random() - 0.5) * k; sy = (Math.random() - 0.5) * k; }
-  const cam = g ? { x: vw / 2 + sx, y: vh / 2 + sy, s: sc } : { x: vw / 2, y: vh * 0.3, s: sc * 1.45 };
+  const z = camFocus.z, fx = camFocus.x, fy = camFocus.y;
+  const cam = g
+    ? { x: vw / 2 + sx - fx * sc * z, y: vh / 2 + sy - fy * sc * z, s: sc * z }
+    : { x: vw / 2, y: vh * 0.3, s: sc * 1.45 };
   const lampA = g ? g.lamp : now * 0.6;
 
   // Fondo y agua: shader en la GPU, o patrón 2D si no hay WebGL

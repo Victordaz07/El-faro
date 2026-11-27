@@ -129,6 +129,7 @@ export interface Zone {
   ring: string; // "r,g,b"
   tint: string;
   minion: string;
+  bossTitle: string;
   mech: Mech;
   weather: Weather;
 }
@@ -138,27 +139,27 @@ export const UNLOCK_WAVE = 15;
 export const ZONES: Zone[] = [
   {
     id: 'bahia', name: 'Bahía Tranquila', desc: 'Donde empieza todo.',
-    hp: 1, dmg: 1, reward: 1, boss: 'KRAKEN', mech: 'none', weather: 'rain',
+    hp: 1, dmg: 1, reward: 1, boss: 'KRAKEN', bossTitle: 'Señor de la Bahía', mech: 'none', weather: 'rain',
     sky0: '#10405a', sky1: '#04101c', ring: '120,200,255', tint: '#4b2377', minion: 'jelly',
   },
   {
     id: 'arrecife', name: 'Arrecife Rojo', desc: 'Criaturas más duras. Coral ×1.8',
-    hp: 1.7, dmg: 1.4, reward: 1.8, boss: 'REY CANGREJO', mech: 'none', weather: 'rain',
+    hp: 1.7, dmg: 1.4, reward: 1.8, boss: 'REY CANGREJO', bossTitle: 'Tirano del Arrecife', mech: 'none', weather: 'rain',
     sky0: '#4a1e2e', sky1: '#12060c', ring: '255,160,140', tint: '#8a2a1a', minion: 'crab',
   },
   {
     id: 'helado', name: 'Mar Helado', desc: 'La escarcha congela tu faro. Coral ×2.4',
-    hp: 2.2, dmg: 1.6, reward: 2.4, boss: 'SERPIENTE DE HIELO', mech: 'ice', weather: 'snow',
+    hp: 2.2, dmg: 1.6, reward: 2.4, boss: 'SERPIENTE DE HIELO', bossTitle: 'Guardiana del Hielo Eterno', mech: 'ice', weather: 'snow',
     sky0: '#2d5a78', sky1: '#08141f', ring: '200,235,255', tint: '#2f7fa6', minion: 'turtle',
   },
   {
     id: 'volcan', name: 'Volcán Submarino', desc: 'Erupciones que dañan a todos. Coral ×2.8',
-    hp: 2.6, dmg: 1.8, reward: 2.8, boss: 'TITÁN DE MAGMA', mech: 'lava', weather: 'ash',
+    hp: 2.6, dmg: 1.8, reward: 2.8, boss: 'TITÁN DE MAGMA', bossTitle: 'Corazón del Volcán', mech: 'lava', weather: 'ash',
     sky0: '#4a2410', sky1: '#120604', ring: '255,170,90', tint: '#b3401a', minion: 'puffer',
   },
   {
     id: 'abismo', name: 'El Abismo', desc: 'Solo ves lo que alumbra tu faro. Coral ×3.5',
-    hp: 3.2, dmg: 2.2, reward: 3.5, boss: 'LEVIATÁN', mech: 'dark', weather: 'rain',
+    hp: 3.2, dmg: 2.2, reward: 3.5, boss: 'LEVIATÁN', bossTitle: 'Lo que vive en el fondo', mech: 'dark', weather: 'rain',
     sky0: '#1a1240', sky1: '#03020a', ring: '170,140,255', tint: '#1f6f6a', minion: 'eel',
   },
 ];

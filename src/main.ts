@@ -5,7 +5,8 @@ import {
   researchTotal, zonesOpen, challengeZone, challengeSeed, today,
 } from './save';
 import { Game, GEvent, AIMS } from './game';
-import { draw } from './render';
+import { draw, camFocus } from './render';
+import { ICONS, TAB_ICONS } from './icons';
 import { initAudio, setMuted, sfx } from './audio';
 import { startMusic, setMusicEnabled, setMusicLevel } from './music';
 import { getBoard, Row } from './leaderboard';
@@ -18,6 +19,7 @@ setMuted(save.muted);
 setMusicEnabled(save.music);
 let g: Game | null = null;
 let runZone: Zone = ZONES[0];
+let introT = 0, introWave = -1;
 let tab = 0, rtab = 0, speed = 1, paused = false, last = 0, hudT = 0, bannerT = 0;
 const cv = $<HTMLCanvasElement>('c'), ctx = cv.getContext('2d')!, stage = $('stage');
 let vw = 360, vh = 400, dpr = 1;
@@ -36,8 +38,12 @@ const spawnR = () => Math.hypot(vw, vh) / 2 / (Math.min(vw, vh) / 400) + 16;
 function vibrate(ms: number) { try { navigator.vibrate?.(ms); } catch { /* sin vibración */ } }
 function audio() { initAudio(); startMusic(); }
 
-function banner(text: string) {
-  const b = $('banner'); b.textContent = text; b.classList.add('on'); bannerT = 1.5;
+function banner(text: string, dur = 1.5) {
+  const [head, ...rest] = text.split('\n');
+  const b = $('banner');
+  b.innerHTML = esc(head) + (rest.length ? '<small>' + esc(rest.join(' ')) + '</small>' : '');
+  b.classList.add('on');
+  bannerT = dur;
 }
 
 function toast(title: string, sub: string) {
@@ -62,7 +68,7 @@ function onEvent(e: GEvent, d?: number) {
     case 'kill': sfx.kill(); break;
     case 'hurt': sfx.hurt(); vibrate(15); break;
     case 'wave': banner('OLEADA ' + d + (g?.mod ? '\n' + g.mod.name : '')); sfx.wave(); tutorialFor(d || 0); break;
-    case 'boss': banner('¡' + runZone.boss + '!'); sfx.boss(); vibrate(150); break;
+    case 'boss': sfx.boss(); vibrate(150); break;
     case 'bossdown': banner('¡JEFE DERROTADO!'); sfx.bossdown(); vibrate(80); break;
     case 'flash': sfx.flash(); vibrate(40); break;
     case 'buy': sfx.buy(); break;
@@ -103,6 +109,7 @@ function start(daily = false) {
   $('aim').querySelector('span')!.textContent = AIMS[0].name;
   tab = 0;
   setMusicLevel(1);
+  introT = 0; introWave = -1; camFocus.x = camFocus.y = 0; camFocus.z = 1; stage.classList.remove('cine');
   updatePanel(); updateHud();
   if (save.tut === 0) setTimeout(() => tutorialFor(0), 400);
 }
@@ -243,7 +250,7 @@ function buildPanel() {
   for (const d of DEFS) {
     const el = document.createElement('button');
     el.className = 'up t' + d.tab;
-    el.innerHTML = '<div class="n"><span></span><span></span></div><div class="v"></div><div class="k"></div>';
+    el.innerHTML = '<div class="n"><span></span><span></span></div><div class="v"></div><div class="k"></div><div class="ic">' + (ICONS[d.id] || '') + '</div>';
     holdToBuy(el, () => {
       $('hint').innerHTML = '<b>' + d.name + ':</b> ' + (HINTS[d.id] || 'mejora de ' + TABS[d.tab].toLowerCase());
       if (!g || paused || g.over) return;
@@ -256,7 +263,7 @@ function buildPanel() {
   }
   TABS.forEach((t, i) => {
     const b = document.createElement('button');
-    b.className = 'tab'; b.innerHTML = t + '<span class="dot"></span>';
+    b.className = 'tab'; b.innerHTML = TAB_ICONS[i] + '<span>' + t + '</span><span class="dot"></span>';
     b.addEventListener('click', () => { tab = i; sfx.click(); updatePanel(); });
     $('tabs').appendChild(b);
   });
@@ -318,6 +325,7 @@ function open(id: string, from = 'menu') { audio(); sfx.click(); hideAll(); back
 
 function showMenu() {
   g = null;
+  introT = 0; camFocus.x = camFocus.y = 0; camFocus.z = 1; stage.classList.remove('cine');
   setMusicLevel(0);
   for (const id of ['flash', 'aim', 'frostw', 'mod', 'boss']) $(id).style.display = 'none';
   const z = zone();
@@ -566,7 +574,24 @@ function loop(nowMs: number) {
   last = now;
   if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) $('banner').classList.remove('on'); }
   if (g && !paused && !g.over) {
-    let acc = dt * speed;
+    // Cinemática de entrada del jefe: cámara lenta, acercamiento y franjas
+    const boss = g.boss;
+    if (boss && introWave !== g.wave) {
+      introWave = g.wave; introT = 2.6;
+      stage.classList.add('cine');
+      banner(runZone.boss + '\n' + runZone.bossTitle, 2.6);
+    }
+    let slow = 1;
+    if (introT > 0) {
+      introT -= dt;
+      const t = 2.6 - introT, k = Math.min(1, t / 0.6, Math.max(0, introT) / 0.7);
+      const e = k * k * (3 - 2 * k);
+      const bx = boss ? boss.x : camFocus.x / 0.75, by = boss ? boss.y : camFocus.y / 0.75;
+      camFocus.x = bx * 0.75 * e; camFocus.y = by * 0.75 * e; camFocus.z = 1 + 0.75 * e;
+      slow = 0.25 + 0.75 * (1 - e);
+      if (introT <= 0) { stage.classList.remove('cine'); camFocus.x = camFocus.y = 0; camFocus.z = 1; }
+    }
+    let acc = dt * speed * slow;
     while (acc > 0) { const h = Math.min(acc, 1 / 60); g.update(h); acc -= h; if (g.over || g.state === 'cards') break; }
     hudT -= dt;
     if (hudT <= 0) { hudT = 0.1; updateHud(); updatePanel(); }
@@ -577,6 +602,7 @@ function loop(nowMs: number) {
 
 // acceso para pruebas automáticas
 (window as unknown as { __faro: () => Game | null }).__faro = () => g;
+(window as unknown as { __cam: typeof camFocus }).__cam = camFocus;
 (window as unknown as { __zone: (id: string) => void }).__zone = (id: string) => { runZone = ZONES.find(z => z.id === id)!; if (g) g.zone = runZone; };
 
 buildPanel();

@@ -19,6 +19,8 @@ Idioma de la interfaz y de los comentarios: **español**.
 - `src/save.ts` — guardado local, misiones diarias, logros, desafío diario.
 - `src/leaderboard.ts` — ranking: Claude DB (artifact) → Firebase (`src/firebase.config.ts`) → local.
 - `src/main.ts` — interfaz, pantallas, tutorial y bucle.
+- `src/icons.ts` — íconos SVG propios de mejoras y pestañas.
+- `assets/` — `icon.png` (ícono de la app, 1024) y `thumb.png` (portada 1200×630), ambos renderizados desde el propio juego.
 
 ## Reglas
 - La lógica de juego no toca el DOM (para que `npm run sim` siga funcionando).
