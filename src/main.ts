@@ -1,5 +1,5 @@
 // Controlador de interfaz: pantallas, panel de mejoras, HUD, tutorial y bucle principal.
-import { MODES, MODE_RULES, LEVELS_PER_WORLD, LEVEL_WAVES, levelClearCoral, starsFor, levelOf, runXp, levelCoral, SKINS, BEAMS, STREAK, CHEST_HOURS, CREATURES, DEFS, tabName, branchName, BLESSINGS, PERM, BRANCHES, TABS, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone } from './data';
+import { MODES, MODE_RULES, LEVELS_PER_WORLD, LEVEL_WAVES, levelClearCoral, starsFor, levelOf, runXp, levelCoral, SKINS, BEAMS, STREAK, CHEST_HOURS, CREATURES, DEFS, tabName, branchName, BLESSINGS, PERM, BRANCHES, TABS, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone, COSTA, WEAPONS, WeaponId } from './data';
 import {
   load, persist, ensureDaily, track, zoneUnlocked, readyMissions, checkAchievements,
   researchTotal, zonesOpen, challengeZone, challengeSeed, today, chestState,
@@ -48,7 +48,8 @@ function resize() {
   vw = Math.max(1, r.width); vh = Math.max(1, r.height);
   cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr);
 }
-const spawnR = () => Math.hypot(vw, vh) / 2 / (Math.min(vw, vh) / 400) + 16;
+// Modo Costa: las criaturas nacen justo arriba de la pantalla (la muralla está abajo)
+const spawnR = () => runMode === 'costa' ? Math.max(260, (view.costaY || vh * 0.7) / (Math.min(vw, vh) / 400) + 40) : Math.hypot(vw, vh) / 2 / (Math.min(vw, vh) / 400) + 16;
 
 /** Traduce los textos fijos de index.html (escritos en español). */
 function translateDom() {
@@ -191,7 +192,7 @@ function start(daily = false, level: { zi: number; n: number } | null = null, mo
     runZone = ZONES[0];
     g = new Game(save, runZone, onEvent, spawnR, { mode });
     const info = MODES.find(m => m.id === mode)!;
-    setTimeout(() => banner(info.icon + ' ' + info.name.toUpperCase() + '\n' + (mode === 'aguante' ? t('Sin tienda: aguanta todo lo que puedas') : mode === 'travesia' ? t('Toca lo que flota para mejorar el barco') : mode === 'escolta' ? t('Protege los barcos de suministros') : t('Resiste 12 oleadas')), 2.4), 300);
+    setTimeout(() => banner(info.icon + ' ' + info.name.toUpperCase() + '\n' + (mode === 'aguante' ? t('Sin tienda: aguanta todo lo que puedas') : mode === 'travesia' ? t('Toca lo que flota para mejorar el barco') : mode === 'escolta' ? t('Protege los barcos de suministros') : mode === 'costa' ? t('Arma tu muralla y resiste 15 oleadas') : t('Resiste 12 oleadas')), 2.4), 300);
   } else {
     recordFrom = save.zoneBest[zone().id] || 0;
     runZone = zone();
@@ -202,7 +203,7 @@ function start(daily = false, level: { zi: number; n: number } | null = null, mo
   for (const id of ['flash', 'aim', 'taps']) $(id).style.display = '';
   $('frostw').style.display = 'none';
   $('aim').querySelector('span')!.textContent = AIMS[0].name;
-  tab = 0;
+  tab = g.mode === 'costa' ? 3 : 0;
   $('dock').classList.remove('closed');
   setMusicLevel(1);
   introT = 0; introWave = -1; camFocus.x = camFocus.y = 0; camFocus.z = 1; stage.classList.remove('cine');
@@ -266,11 +267,12 @@ function endRun() {
     const better = val > rec.best || stars2 > rec.stars;
     save.modes[m] = { best: Math.max(rec.best, val), stars: Math.max(rec.stars, stars2) };
     if (g.won && !rec.stars) { lvBonus = 40; save.coral += lvBonus; }
-    $('overtitle').textContent = g.won ? t('¡MISIÓN CUMPLIDA!') : m === 'escolta' && g.ship && g.ship.hp <= 0 ? t('¡HUNDIERON EL BARCO!') : t('EL FARO SE APAGÓ');
+    $('overtitle').textContent = g.won ? t('¡MISIÓN CUMPLIDA!') : m === 'escolta' && g.ship && g.ship.hp <= 0 ? t('¡HUNDIERON EL BARCO!') : m === 'costa' ? t('¡LA MURALLA CAYÓ!') : t('EL FARO SE APAGÓ');
     html = (g.won ? `<div class="stars">${'★'.repeat(stars2)}<i>${'★'.repeat(3 - stars2)}</i></div>` : '') + info.icon + ' ' + info.name + ' · ' + (
       m === 'aguante' ? L(`aguantaste <b>${g.wave} oleadas</b>`, `you held <b>${g.wave} waves</b>`)
       : m === 'escolta' ? L(`entregas <b>${g.deliveries}/${MODE_RULES.escolta.total}</b>`, `deliveries <b>${g.deliveries}/${MODE_RULES.escolta.total}</b>`)
       : m === 'travesia' ? L(`recorriste <b>${val}%</b> · ${g.found} mejoras recogidas`, `you sailed <b>${val}%</b> · ${g.found} upgrades found`)
+      : m === 'costa' ? L(`oleada <b>${g.wave}/${MODE_RULES.costa.waves}</b>`, `wave <b>${g.wave}/${MODE_RULES.costa.waves}</b>`)
       : L(`oleada <b>${g.wave}/${MODE_RULES.asedio.waves}</b>`, `wave <b>${g.wave}/${MODE_RULES.asedio.waves}</b>`)) +
       (better && !g.won && rec.best ? L(' <b style="color:#35e0b0">¡nuevo récord!</b>', ' <b style="color:#35e0b0">new best!</b>') : '') +
       (lvBonus ? L(`<br>Premio de la misión: <b style="color:#ffb35c">+${lvBonus} ◆</b>`, `<br>Mission reward: <b style="color:#ffb35c">+${lvBonus} ◆</b>`) : '');
@@ -618,8 +620,55 @@ function showHint(html: string) {
   hintTo = window.setTimeout(() => h.classList.remove('show'), 2200);
 }
 
+/** Modo Costa: una tarjeta por hueco de la muralla (pestaña FUERTE). */
+const slotBtns: { el: HTMLElement; n: HTMLElement; lv: HTMLElement; v: HTMLElement; k: HTMLElement }[] = [];
+let pickSlot = -1;
+function openPicker(i: number) {
+  if (!g || g.over) return;
+  pickSlot = i; paused = true; stopHold();
+  const list = $('wlist'); list.innerHTML = '';
+  for (const w of WEAPONS) {
+    const c = g.openCost(i, w.id), el = document.createElement('div');
+    el.className = 'card';
+    el.innerHTML = `<div><b>${w.icon} ${esc(w.name)}</b><span>${esc(w.desc)}</span></div><button${g.pearls < c ? ' disabled' : ''}>${c}</button>`;
+    el.querySelector('button')!.addEventListener('click', () => {
+      if (g && g.openSlot(i, w.id)) { sfx.buy(); closePicker(); updatePanel(); updateHud(); }
+    });
+    list.appendChild(el);
+  }
+  $('wpick').classList.add('on');
+}
+function closePicker() { pickSlot = -1; $('wpick').classList.remove('on'); paused = false; }
+$('wcancel').addEventListener('click', () => { sfx.click(); closePicker(); });
+
+function buildSlotCards() {
+  const grid = $('grid');
+  for (let i = 0; i < COSTA.slotX.length; i++) {
+    const el = document.createElement('button');
+    el.className = 'up t3';
+    el.innerHTML = '<div class="top"><div class="ic"><em class="lv"></em></div><div class="n"></div></div><div class="v"></div><div class="k"></div>';
+    holdToBuy(el, () => {
+      if (!g || g.mode !== 'costa') return;
+      const s = g.slots[i];
+      if (!s.open && !g.slotAvail(i)) showHint(L(`Este hueco se abre en la oleada ${COSTA.slotWave[i]}`, `This slot opens on wave ${COSTA.slotWave[i]}`));
+    }, () => {
+      if (!g || paused || g.over) return false;
+      const s = g.slots[i];
+      if (!s.open) { if (g.slotAvail(i)) openPicker(i); return false; }
+      const ok = g.upSlot(i);
+      if (ok) { sfx.buy(); updatePanel(); updateHud(); }
+      return ok;
+    });
+    el.style.display = 'none';
+    grid.appendChild(el);
+    const q = (sel: string) => el.querySelector(sel) as HTMLElement;
+    slotBtns.push({ el, n: q('.n'), lv: q('.lv'), v: q('.v'), k: q('.k') });
+  }
+}
+
 function buildPanel() {
   const grid = $('grid');
+  buildSlotCards();
   for (const d of DEFS) {
     const el = document.createElement('button');
     el.className = 'up t' + d.tab;
@@ -656,13 +705,36 @@ function buildPanel() {
 
 /** Mejoras que acaban de aparecer (llevan la etiqueta NUEVO hasta que se compran o se mira su pestaña). */
 const freshUps = new Set<string>();
-const tabOpen = (i: number) => !!g && DEFS.some(d => d.tab === i && g!.isOpen(d.id));
+const tabOpen = (i: number) => !!g && (g.mode === 'costa' && i === 3 || DEFS.some(d => d.tab === i && g!.isOpen(d.id)));
 
 function updatePanel() {
   if (!g) return;
   if (!tabOpen(tab)) tab = 0;
+  const costa = g.mode === 'costa';
+  slotBtns.forEach((b, i) => {
+    const show = costa && tab === 3, s = g!.slots[i];
+    b.el.style.display = show ? '' : 'none';
+    if (!show) return;
+    const avail = g!.slotAvail(i);
+    if (s.open && s.w) {
+      const W = WEAPONS.find(w => w.id === s.w)!, c = g!.upCost(i), max = !isFinite(c);
+      b.n.textContent = W.icon + ' ' + W.name; b.lv.textContent = String(s.lv);
+      b.v.innerHTML = max ? L('NIVEL MÁX', 'MAX LEVEL') : L('Nivel ', 'Level ') + s.lv + ' <i>→ ' + (s.lv + 1) + '</i>';
+      b.k.textContent = max ? '★' : String(c);
+      b.el.classList.toggle('off', max || g!.pearls < c); b.el.classList.toggle('ready', !max && g!.pearls >= c);
+    } else if (avail) {
+      const c = Math.min(...WEAPONS.map(w => g!.openCost(i, w.id)));
+      b.n.textContent = '➕ ' + L('Hueco ', 'Slot ') + (i + 1); b.lv.textContent = '';
+      b.v.textContent = L('Elige un arma', 'Pick a weapon'); b.k.textContent = String(c);
+      b.el.classList.toggle('off', g!.pearls < c); b.el.classList.toggle('ready', g!.pearls >= c);
+    } else {
+      b.n.textContent = '🔒 ' + L('Hueco ', 'Slot ') + (i + 1); b.lv.textContent = '';
+      b.v.textContent = L('Ola ', 'Wave ') + COSTA.slotWave[i]; b.k.textContent = '';
+      b.el.classList.add('off'); b.el.classList.remove('ready');
+    }
+  });
   for (const o of btns) {
-    const show = o.tab === tab && g.isOpen(o.id);
+    const show = o.tab === tab && g.isOpen(o.id) && !(costa && o.tab === 3);
     o.el.classList.toggle('new', freshUps.has(o.id));
     o.el.style.display = show ? '' : 'none';
     if (!show) continue;
@@ -680,7 +752,9 @@ function updatePanel() {
     el.classList.toggle('on', i === tab);
     const open = tabOpen(i);
     el.classList.toggle('hid', !open);
-    const can = open && DEFS.some(d => d.tab === i && g!.isOpen(d.id) && g!.pearls >= g!.cost(d.id));
+    const lab = el.querySelector('span');
+    if (lab && i === 3) lab.textContent = costa ? t('ARMAS') : tabName(3);
+    const can = open && (costa && i === 3 ? g!.slots.some((s, k) => s.open ? isFinite(g!.upCost(k)) && g!.pearls >= g!.upCost(k) : g!.slotAvail(k) && g!.pearls >= Math.min(...WEAPONS.map(w => g!.openCost(k, w.id)))) : false) || open && DEFS.some(d => d.tab === i && g!.isOpen(d.id) && g!.pearls >= g!.cost(d.id));
     const isNew = DEFS.some(d => d.tab === i && freshUps.has(d.id));
     el.querySelector('.dot')!.classList.toggle('on', (can || isNew) && i !== tab);
   });
@@ -688,7 +762,7 @@ function updatePanel() {
 
 function updateHud() {
   if (!g) return;
-  if (g.mode === 'escolta' || g.mode === 'travesia' || g.mode === 'aguante' || g.mode === 'asedio') {
+  if (g.mode === 'escolta' || g.mode === 'travesia' || g.mode === 'aguante' || g.mode === 'asedio' || g.mode === 'costa') {
     const tw = g.totalWaves;
     $('wave').firstChild!.nodeValue = t('OLEADA') + ' ' + Math.max(1, g.wave) + (tw ? '/' + tw : '');
     const info = MODES.find(m => m.id === g!.mode)!;
@@ -697,6 +771,7 @@ function updateHud() {
       g.mode === 'escolta' ? L(`Entregas ${g.deliveries}/${MODE_RULES.escolta.total}`, `Deliveries ${g.deliveries}/${MODE_RULES.escolta.total}`) + (g.ship && g.ship.phase !== 'gap' ? L(' · Barco ', ' · Ship ') + Math.ceil(g.ship.hp) : '')
       : g.mode === 'travesia' ? L(`${Math.floor(g.missionProgress * 100)}% del viaje · mejoras ${g.found}`, `${Math.floor(g.missionProgress * 100)}% sailed · upgrades ${g.found}`)
       : g.mode === 'aguante' ? L(' Récord ', ' Best ') + rec
+      : g.mode === 'costa' ? L('Defiende la muralla', 'Defend the wall')
       : L('Defiende la bahía', 'Defend the bay'));
     if (g.mode === 'travesia' || g.mode === 'escolta') $('wprog').style.width = g.missionProgress * 100 + '%';
   } else if (g.level) {
@@ -719,7 +794,7 @@ function updateHud() {
   const st = g.st, p = Math.max(0, g.hp) / st.hp;
   $('hpfill').style.width = p * 100 + '%';
   $('hpfill').className = p > 0.6 ? 'ok' : p > 0.3 ? 'mid' : '';
-  $('hpt').textContent = L('Faro ', 'Lighthouse ') + Math.ceil(Math.max(0, g.hp)) + ' / ' + Math.round(st.hp);
+  $('hpt').textContent = (g.mode === 'costa' ? L('Muralla ', 'Wall ') : L('Faro ', 'Lighthouse ')) + Math.ceil(Math.max(0, g.hp)) + ' / ' + Math.round(st.hp);
   $('sht').textContent = st.bar > 0 ? t('Barrera') + ' ' + Math.ceil(g.shield) + ' / ' + Math.round(st.bar) : '';
   $('shfill').style.width = st.bar > 0 ? (g.shield / st.bar) * 100 + '%' : '0';
   if (g.mode !== 'travesia' && g.mode !== 'escolta') $('wprog').style.width = g.waveProgress * 100 + '%';
@@ -1088,7 +1163,12 @@ function loop(nowMs: number) {
     hudT -= dt;
     if (hudT <= 0) { hudT = 0.1; updateHud(); updatePanel(); }
   }
-  if (g) {
+  if (g && g.mode === 'costa') {
+    const dockH = $('dock').getBoundingClientRect().height;
+    const tgt = vh - dockH - 128;
+    view.costaY += ((view.costaY || tgt) - view.costaY) + (tgt - (view.costaY || tgt)) * Math.min(1, dt * 8);
+    view.offY = 0;
+  } else if (g) {
     const hudH = $('hud').getBoundingClientRect().height, dockH = $('dock').getBoundingClientRect().height + 40;
     const target = Math.max(-140, Math.min(60, (hudH - dockH) / 2));
     view.offY += (target - view.offY) * Math.min(1, dt * 8);

@@ -99,7 +99,9 @@ void main(){
   }
 
   // Travesía: franja clara alrededor del barco
-  if (uShipMode > 0.5) col = mix(col, c1, (1.0 - smoothstep(30.0, 90.0, length(vec2(w0.x, w0.y * 0.8)))) * 0.6);
+  if (uShipMode > 0.5 && uShipMode < 1.5) col = mix(col, c1, (1.0 - smoothstep(30.0, 90.0, length(vec2(w0.x, w0.y * 0.8)))) * 0.6);
+  // Costa: el mar se aclara y se vuelve menos profundo hacia la muralla (la costa está abajo, en y = 0)
+  if (uShipMode > 1.5) col = mix(col, c1, smoothstep(-210.0, -10.0, w0.y) * 0.55);
   // 2) Líneas de espuma de la orilla: una fija pegada a la roca y dos que se alejan y se apagan
   float shore = 1.0 - edge(abs(re - 44.0 - (fbm(vec2(a * 5.0, t * 0.5)) - 0.5) * 5.0) - 2.6, px);
   float foam = shore * (0.55 + 0.45 * step(0.35, fbm(vec2(a * 7.0, t * 0.3))));
@@ -182,7 +184,7 @@ export class Water {
   }
 
   /** Dibuja el mar; cx, cy y s describen la cámara en píxeles CSS. */
-  render(w: number, h: number, res: number, z: Zone, t: number, cx: number, cy: number, s: number, lamp: number, lampOn: number, flash: number, q = 2, beam = '255,236,160', scroll = 0, shipMode = false) {
+  render(w: number, h: number, res: number, z: Zone, t: number, cx: number, cy: number, s: number, lamp: number, lampOn: number, flash: number, q = 2, beam = '255,236,160', scroll = 0, shipMode: boolean | number = false) {
     const gl = this.gl, W = Math.max(1, Math.round(w * res)), H = Math.max(1, Math.round(h * res));
     if (this.canvas.width !== W || this.canvas.height !== H) { this.canvas.width = W; this.canvas.height = H; }
     gl.viewport(0, 0, W, H);
@@ -201,7 +203,7 @@ export class Water {
     gl.uniform1f(this.u.uLava, z.mech === 'lava' ? 1 : 0);
     gl.uniform1f(this.u.uQ, q);
     gl.uniform1f(this.u.uScroll, scroll % 10000);
-    gl.uniform1f(this.u.uShipMode, shipMode ? 1 : 0);
+    gl.uniform1f(this.u.uShipMode, shipMode === true ? 1 : shipMode ? +shipMode : 0);
     const bc = beam.split(',').map(v => +v / 255);
     gl.uniform3f(this.u.uBeam, bc[0], bc[1] * 0.95, bc[2] * 0.85);
     gl.drawArrays(gl.TRIANGLES, 0, 3);

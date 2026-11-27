@@ -12,6 +12,7 @@ Idiomas del juego: **español e inglés** (`src/i18n.ts`). Comentarios del códi
 - `npm run sim:zonas` — compara las 5 zonas con el mismo nivel de investigación (`PERM=0,3`); **no compares zonas con distinta investigación ni con una sola partida al azar: engaña**
 - `npm run sim:tune` — busca por nivel el multiplicador de perlas iniciales (`LEVEL_PEARL_MULT` en data.ts) para que el bot sin investigación gane un % objetivo en Bahía (`OBJ=...`)
 - `npm run sim:modes` — bot que juega Aguante, Escolta, Travesía y Asedio
+- `npm run sim:costa` — bot del Modo Costa (`N`, `PERM=0,3`, `ARMAS`, `HP`, `SC`, `WC` para afinar)
 - `npm test` — verifica que las perlas cuadren (iniciales + ganadas − gastadas) en partidas completas y que todo texto tenga traducción al inglés (`tests/i18n.ts`)
 - `npm run android:sync` / `npm run android:open` — Capacitor
 
@@ -41,6 +42,7 @@ Idiomas del juego: **español e inglés** (`src/i18n.ts`). Comentarios del códi
   - **Aguante** (1-2): sin tienda; mejoras iniciales según el nivel de farero; pausas cortas; se mide cuántas oleadas aguantas.
   - **Escolta** (1-4): barco de suministros `g.ship` (fases gap → in → dock → out) que descarga perlas y vida; `MODE_RULES.escolta.aggro` de las criaturas van por él (`e.toShip`, `goal()`); si se hunde (`hurtShip`) se pierde; gana con `total` entregas.
   - **Travesía** (1-6): sin isla ni tienda; el "faro" es un barco (`drawPlayerShip`); el mar avanza (`g.voyage`, `uScroll`/`uShipMode` en el shader) y las criaturas se desplazan hacia atrás; barriles, restos y cofres (`g.pickups`) se tocan para mejorar el barco gratis (`collect`); gana al llegar a `total`.
+  - **Costa** (1-3 → `unlock: '0-3'`): muralla abajo, el mar arriba; piratas y monstruos bajan en línea recta (`hd = π/2`, `goal()` = punto de la muralla). 7 huecos (`COSTA.slotX/slotWave/slotCost`): empieza con un cañón al centro y los demás se abren por oleada; cada hueco recibe Cañón, Ballesta, Mortero (`g.shells`, arco) o Luz de costa (haz continuo, src 'area'), con disparo automático (`costaUpdate`, `pickFor`) + toque. 15 oleadas, capitán en la 8 y jefe en la 15. Tienda en la pestaña 4 (ARMAS): `slotBtns` en main.ts, selector `#wpick`. Dibujo por código en render.ts (`drawCostaBase/Front`, `drawSlot`, `drawWeapon`, `drawCostaBeams`); agua con `shipMode = 2` (más clara hacia la muralla). La decoración de `deco-*.glb` se usa **solo aquí** (`COSTA_DECO`, franja de tierra, subtle; sin rocas). Balance pendiente de la prueba de Victor (el bot con investigación 3 nunca pierde vida).
   - **Asedio pirata** (1-8): mitad piratas (`pirate` dispara cañonazos en arco = `fireballs` con `ball`, se desvían tocándolos; `raider` aborda), mitad monstruos; 12 oleadas y el `captain` como jefe.
   - Las criaturas atacan a su objetivo (`goal(e)`: faro o barco) con `strike()`; su rumbo está en `e.hd`.
 - **Modo infinito** (extra, se abre al superar el nivel 1-10, `endlessUnlocked`): el juego de siempre, con récord por zona, desafío diario y ranking (`#endless`, `buildEndless`).
@@ -53,7 +55,7 @@ Idiomas del juego: **español e inglés** (`src/i18n.ts`). Comentarios del códi
 
 ## Reglas
 - Todo texto nuevo visible pasa por `t()` o `L()` y lleva su traducción en `EN`; `npm test` falla si falta alguna.
-- Las perlas solo entran por `gain()` y solo salen por `buy()` en game.ts; nunca modificar `pearls` directamente.
+- Las perlas solo entran por `gain()` y solo salen por `pay()` (la usan `buy()`, `openSlot()` y `upSlot()`) en game.ts; nunca modificar `pearls` directamente.
 - Comprar manteniendo presionado usa una sola repetición global (`holdStop` en main.ts) que se detiene al soltar, al fallar una compra o con otro toque.
 - La lógica de juego no toca el DOM (para que `npm run sim` siga funcionando).
 - El azar de oleadas y cartas usa la semilla (`mulberry`) para que el desafío diario sea igual para todos.

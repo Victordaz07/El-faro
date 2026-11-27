@@ -1,5 +1,5 @@
 // Lógica pura de una partida (sin DOM): se puede simular en Node.
-import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing, ZONES, CREATURES, LEVEL_WAVES, LEVEL_START, levelPearls, levelOf, MODE_RULES } from './data';
+import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing, ZONES, CREATURES, LEVEL_WAVES, LEVEL_START, levelPearls, levelOf, MODE_RULES, COSTA, WEAPONS, WeaponId } from './data';
 import { localize, t, L } from './i18n';
 import type { Save } from './save';
 
@@ -43,15 +43,19 @@ export interface Enemy {
 /** Bola de fuego del pez ígneo: vuela en arco hacia el faro y se puede apagar tocándola. */
 export interface Fireball { sx: number; sy: number; tx: number; ty: number; t: number; max: number; d: number; ball?: boolean; toShip?: boolean; gone?: boolean; }
 /** Modos de juego. */
-export type Mode = 'campaign' | 'endless' | 'aguante' | 'escolta' | 'travesia' | 'asedio';
+export type Mode = 'campaign' | 'endless' | 'aguante' | 'escolta' | 'travesia' | 'asedio' | 'costa';
 /** Barco de suministros (Escolta) o barco propio (Travesía). */
 export interface Ship { x: number; y: number; hp: number; max: number; phase: 'gap' | 'in' | 'dock' | 'out'; t: number; ang: number; n: number; hitT: number; }
 /** Objetos a la deriva en la Travesía. */
 export interface Pickup { x: number; y: number; kind: 'barril' | 'restos' | 'cofre'; id: number; }
 export interface Bolt {
   x: number; y: number; px: number; py: number; t: Enemy | null; d: number; crit: boolean; bounce: boolean;
-  kind: 'light' | 'harpoon'; speed: number; gone?: boolean;
+  kind: 'light' | 'harpoon' | 'cball' | 'quarrel'; speed: number; gone?: boolean;
 }
+/** Hueco de la muralla (Modo Costa): arma, nivel y estado para dibujarla. */
+export interface Slot { x: number; open: boolean; w: WeaponId | null; lv: number; cd: number; aim: number; fire: number; on: boolean; tx: number; ty: number; }
+/** Bomba de mortero en el aire: cae en (tx, ty) y explota en área. */
+export interface Shell { sx: number; sy: number; tx: number; ty: number; t: number; max: number; R: number; d: number; gone?: boolean; }
 export interface EShot { x: number; y: number; d: number; c: string; gone?: boolean; }
 export interface Fx {
   kind: 'p' | 'ring' | 'nova' | 'wake' | 'splash' | 'boom' | 'net' | 'slam' | 'warn' | 'strike' | 'sink'
@@ -208,6 +212,9 @@ export class Game {
   deliveries = 0;
   voyage = 0;
   pickups: Pickup[] = [];
+  /** Modo Costa: huecos de la muralla y bombas de mortero en el aire. */
+  slots: Slot[] = COSTA.slotX.map(x => ({ x, open: false, w: null, lv: 0, cd: 0.4, aim: -Math.PI / 2, fire: 0, on: false, tx: 0, ty: 0 }));
+  shells: Shell[] = [];
   pickT = 3;
   /** Mejoras conseguidas en la Travesía (para la pantalla final). */
   found = 0;
@@ -243,6 +250,7 @@ export class Game {
       this.st = this.stats(); this.hp = this.st.hp;
     }
     if (this.mode === 'travesia') { this.lv.dmg = this.lv.spd = this.lv.hp = 2; this.st = this.stats(); this.hp = this.st.hp; }
+    if (this.mode === 'costa') { const s0 = this.slots[0]; s0.open = true; s0.w = 'canon'; s0.lv = 1; this.pearls += 15; }
     if (this.mode === 'escolta') this.ship = { x: 0, y: 0, hp: 0, max: 0, phase: 'gap', t: 4, ang: 0, n: 0, hitT: 0 };
     void R0;
     if (opts.level) {
@@ -312,29 +320,73 @@ export class Game {
     if (!d) return false;
     // En la campaña aparecen más mejoras a medida que se pasan niveles; en Aguante y Travesía no se compra
     if (this.mode === 'aguante' || this.mode === 'travesia') return false;
+    if (this.mode === 'costa') return !['tA', 'tR', 'tN', 'chain'].includes(id);
     if (this.mode === 'escolta' || this.mode === 'asedio') return true;
     return !this.level || d.at <= this.level.g || this.lv[id] > 0;
   }
   /** Oleada dentro del nivel (1..waves) o la oleada normal en el modo infinito. */
   get shownWave() { return this.level ? Math.max(1, this.wave - this.level.start + 1) : this.wave; }
-  get lastWave() { return this.level ? this.level.start + this.level.waves - 1 : this.mode === 'asedio' ? MODE_RULES.asedio.waves : Infinity; }
+  get lastWave() { return this.level ? this.level.start + this.level.waves - 1 : this.mode === 'asedio' ? MODE_RULES.asedio.waves : this.mode === 'costa' ? MODE_RULES.costa.waves : Infinity; }
   /** Total de oleadas mostrado en la barra (0 = sin final). */
-  get totalWaves() { return this.level ? this.level.waves : this.mode === 'asedio' ? MODE_RULES.asedio.waves : 0; }
+  get totalWaves() { return this.level ? this.level.waves : this.mode === 'asedio' ? MODE_RULES.asedio.waves : this.mode === 'costa' ? MODE_RULES.costa.waves : 0; }
   /** Empieza ya la primera oleada (botón LISTO en la preparación). */
   skipPrep() { if (this.state === 'pause' && this.pauseT > 0.3) this.pauseT = 0.3; }
 
   buy(id: string) {
     if (this.over || this.state === 'cards' || !this.isOpen(id)) return false;
     const c = this.cost(id);
-    if (this.pearls < c) return false;
-    this.pearls -= c;
-    this.pearlsSpent += c;
+    if (!this.pay(c)) return false;
     this.lv[id]++;
     this.refresh();
     this.flashCd = Math.min(this.flashCd, this.st.fcd);
     this.buys++;
     this.emit('buy');
     return true;
+  }
+
+  /** Las perlas solo salen por aquí (mejoras y huecos). */
+  private pay(c: number) {
+    if (this.pearls < c) return false;
+    this.pearls -= c;
+    this.pearlsSpent += c;
+    return true;
+  }
+
+  /* ---------- Modo Costa: huecos y armas ---------- */
+  /** El hueco ya se puede abrir (por oleada) y sigue vacío. */
+  slotAvail(i: number) { return this.mode === 'costa' && !this.slots[i].open && this.wave >= COSTA.slotWave[i]; }
+  openCost(i: number, w: WeaponId) { return COSTA.slotCost[i] + WEAPONS.find(x => x.id === w)!.cost; }
+  upCost(i: number) {
+    const s = this.slots[i], w = WEAPONS.find(x => x.id === s.w);
+    return w && s.lv < COSTA.maxLv ? Math.ceil(w.up * Math.pow(1.5, s.lv - 1)) : Infinity;
+  }
+  openSlot(i: number, w: WeaponId) {
+    if (this.over || !this.slotAvail(i) || !this.pay(this.openCost(i, w))) return false;
+    const s = this.slots[i];
+    s.open = true; s.w = w; s.lv = 1; s.cd = 0.4;
+    this.buys++;
+    this.fx.push({ kind: 'ring', x: s.x, y: COSTA.gunY, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#ffe9a8' });
+    this.emit('buy');
+    return true;
+  }
+  upSlot(i: number) {
+    const s = this.slots[i];
+    if (this.over || !s.open || s.lv >= COSTA.maxLv || !this.pay(this.upCost(i))) return false;
+    s.lv++;
+    this.buys++;
+    this.fx.push({ kind: 'ring', x: s.x, y: COSTA.gunY, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#ffe9a8' });
+    this.emit('buy');
+    return true;
+  }
+  /** Números de un arma según su nivel y las mejoras globales (Daño, Cadencia y Alcance). */
+  weaponStat(w: WeaponId, lv: number) {
+    const st = this.st, L1 = lv - 1, sm = st.spd / 1.2, rm = st.rng / 200;
+    switch (w) {
+      case 'canon': return { dmg: st.dmg * 2.4 * (1 + 0.5 * L1), rate: 0.5 * sm * (1 + 0.04 * L1), range: 270 * rm, R: 0, n: 1 };
+      case 'ballesta': return { dmg: st.dmg * 0.8 * (1 + 0.4 * L1), rate: 1.6 * sm * (1 + 0.04 * L1), range: 300 * rm, R: 0, n: lv >= 3 ? 2 : 1 };
+      case 'mortero': return { dmg: st.dmg * 2.0 * (1 + 0.5 * L1), rate: 0.28 * sm * (1 + 0.04 * L1), range: 290 * rm, R: 40 + 4 * lv, n: 1 };
+      default: return { dmg: st.dmg * 1.0 * (1 + 0.4 * L1), rate: 1, range: 230 * rm, R: 30 + 3 * lv, n: 1 + Math.floor(lv / 2) };
+    }
   }
 
   get allTurrets() { return this.lv.tA > 0 && this.lv.tR > 0 && this.lv.tN > 0; }
@@ -393,7 +445,7 @@ export class Game {
       this.damage(e, this.st.dmg * 4 * (e.type === 'boss' ? 0.4 : 1), true, 'area');
       if (e.type === 'seal') e.under = false;
       e.stun = e.type === 'boss' ? 0.6 : 1.6;
-      if (d > 1 && e.type !== 'boss') { e.x += (e.x / d) * 28; e.y += (e.y / d) * 28; }
+      if (d > 1 && e.type !== 'boss') { if (this.mode === 'costa') e.y -= 28; else { e.x += (e.x / d) * 28; e.y += (e.y / d) * 28; } }
     }
     this.fx.push({ kind: 'nova', x: 0, y: 0, vx: 0, vy: 0, t: 0.6, max: 0.6, c: '#fff3b0' });
     this.shake = Math.max(this.shake, 0.18);
@@ -465,7 +517,7 @@ export class Game {
 
   /* ---------- Oleadas ---------- */
   private startWave() {
-    const w = this.wave, boss = this.level ? this.level.boss && w === this.lastWave : this.mode === 'asedio' ? w === this.lastWave : this.mode === 'endless' ? w % 10 === 0 : w % 10 === 0 && this.mode !== 'travesia';
+    const w = this.wave, boss = this.level ? this.level.boss && w === this.lastWave : this.mode === 'asedio' || this.mode === 'costa' ? w === this.lastWave : this.mode === 'endless' ? w % 10 === 0 : w % 10 === 0 && this.mode !== 'travesia';
     this.wr = mulberry(this.seed + w * 7919);
     const R = this.wr;
     this.mod = null;
@@ -479,6 +531,7 @@ export class Game {
     const q: EType[] = [];
     if (boss) { q.push(this.mode === 'asedio' ? 'captain' : 'boss'); for (let i = 0; i < Math.floor(n / 3); i++) q.push(this.pick()); }
     else for (let i = 0; i < n; i++) q.push(this.pick());
+    if (this.mode === 'costa' && w === 8) q.push('captain');
     this.current = R() * Math.PI * 2;
     this.queue = q;
     this.waveTotal = q.reduce((s, t) => s + (t === 'sardine' ? 4 : 1), 0);
@@ -493,7 +546,7 @@ export class Game {
 
   private pick(): EType {
     // Asedio: mitad piratas, mitad monstruos
-    if (this.mode === 'asedio' && this.wr() < 0.5) return this.wave >= 2 && this.wr() < 0.4 ? 'pirate' : 'raider';
+    if ((this.mode === 'asedio' || this.mode === 'costa') && this.wr() < 0.5) return this.wave >= 2 && this.wr() < 0.4 ? 'pirate' : 'raider';
     const zi = this.zoneIndex;
     const opts: [EType, number][] = [];
     for (const [type, minW, wt, home] of TABLE) {
@@ -512,6 +565,7 @@ export class Game {
     if (this.mod?.id === 'caparazon') hs *= 1.35;
     // Campaña: tramos cortos sin la pausa de los jefes cada 10 oleadas, un poco más suaves
     if (this.level) hs *= 0.8;
+    if (this.mode === 'costa') hs *= 1 + COSTA.hp * Math.pow(Math.min(1, (w - 1) / 14), 2);
     return { hs, ds: Math.pow(1.05, w - 1) * this.zone.dmg };
   }
 
@@ -519,6 +573,7 @@ export class Game {
   goal(e: Enemy) {
     const s = this.ship;
     if (e.toShip && s && this.mode === 'escolta' && (s.phase === 'in' || s.phase === 'dock')) return { x: s.x, y: s.y, ship: true };
+    if (this.mode === 'costa') return { x: Math.max(-COSTA.half, Math.min(COSTA.half, e.x)), y: 0, ship: false };
     return { x: 0, y: 0, ship: false };
   }
 
@@ -534,7 +589,7 @@ export class Game {
       dead: false, wob: Math.random() * 6, stun: 0, hitT: 0, elite, age: 0, summonT: 5, enraged: false, wakeT: 0,
       slowT: 0, burn: 0, burnT: 0, chargeT: 0, lungeT: 0,
       shell: 0, shellMax: 0, phase: Math.random() * 3, under: false, mode: 0,
-      hd: Math.atan2(-y, -x), toShip: this.mode === 'escolta' && type !== 'boss' && Math.random() < MODE_RULES.escolta.aggro,
+      hd: this.mode === 'costa' ? Math.PI / 2 : Math.atan2(-y, -x), toShip: this.mode === 'escolta' && type !== 'boss' && Math.random() < MODE_RULES.escolta.aggro,
     };
     if (type === 'lobster') e.shell = e.shellMax = e.max * 0.7;
     if (type === 'captain') { e.hp = e.max = p.hp * Math.pow(1.15, w) * this.zone.hp; }
@@ -547,7 +602,8 @@ export class Game {
     const R = this.spawnR();
     const a = this.mode === 'travesia' ? -Math.PI / 2 + (this.wr() - 0.5) * 2.4
       : this.mod?.id === 'corriente' ? this.current + (this.wr() - 0.5) * 1.4 : this.wr() * Math.PI * 2;
-    const x = Math.cos(a) * R, y = Math.sin(a) * R;
+    let x = Math.cos(a) * R, y = Math.sin(a) * R;
+    if (this.mode === 'costa') { x = (this.wr() * 2 - 1) * (COSTA.half + 25); y = -R * 1.1; }
     if (type === 'sardine') {
       for (let i = 0; i < 4; i++) this.make('sardine', x + (Math.random() - 0.5) * 30, y + (Math.random() - 0.5) * 30);
       return;
@@ -631,7 +687,7 @@ export class Game {
     this.text(e.x, e.y, '+' + pr, '#8fe9ff');
     this.burst(e.x, e.y, COLORS[e.type], e.type === 'boss' ? 46 : e.elite ? 20 : 9, e.type === 'boss' ? 170 : 90);
     this.fx.push({ kind: 'splash', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#bfe8ff', r: e.r });
-    if (e.type !== 'boss') this.fx.push({ kind: 'sink', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.55, max: 0.55, c: '', r: e.r, et: e.type, h: Math.atan2(-e.y, -e.x) });
+    if (e.type !== 'boss') this.fx.push({ kind: 'sink', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.55, max: 0.55, c: '', r: e.r, et: e.type, h: e.hd });
     if (e.type === 'star') {
       for (let i = 0; i < 2; i++) { this.make('starlet', e.x + (i ? 9 : -9), e.y + (i ? 4 : -4)); this.waveTotal++; }
     }
@@ -688,7 +744,7 @@ export class Game {
       if (this.perm.revive && !this.revived) {
         this.revived = true;
         this.hp = this.st.hp * 0.4;
-        for (const e of this.enemies) { e.stun = 2; const dd = Math.hypot(e.x, e.y) || 1; if (e.type !== 'boss') { e.x += (e.x / dd) * 40; e.y += (e.y / dd) * 40; } }
+        for (const e of this.enemies) { e.stun = 2; const dd = Math.hypot(e.x, e.y) || 1; if (e.type !== 'boss') { if (this.mode === 'costa') e.y -= 40; else { e.x += (e.x / dd) * 40; e.y += (e.y / dd) * 40; } } }
         this.fx.push({ kind: 'nova', x: 0, y: 0, vx: 0, vy: 0, t: 0.9, max: 0.9, c: '#ffb35c' });
         this.text(0, -100, t('¡SEGUNDA LLAMA!'), '#ffb35c', true, 1.6);
         this.emit('revive');
@@ -928,6 +984,76 @@ export class Game {
     }
   }
 
+  /* ---------- Modo Costa: los huecos apuntan y disparan solos ---------- */
+  /** Mejor objetivo para un arma en (px, py): según el modo de apuntar, o el centro del grupo más denso (mortero). */
+  private pickFor(px: number, py: number, R: number, minR = 0, dense = 0): Enemy | null {
+    let best: Enemy | null = null, bs = -Infinity;
+    for (const e of this.enemies) {
+      if (e.dead || this.hidden(e)) continue;
+      const d = Math.hypot(e.x - px, e.y - py);
+      if (d > R + e.r || d < minR) continue;
+      let sc: number;
+      if (dense) { sc = 0; for (const o of this.enemies) if (!o.dead && (o.x - e.x) ** 2 + (o.y - e.y) ** 2 < dense * dense) sc++; sc -= d / 1000; }
+      else sc = this.aim === 'cerca' ? -d : this.aim === 'fuerte' ? e.hp : this.aim === 'debil' ? -e.hp : this.threat(e) + (400 - d) / 8;
+      if (sc > bs) { bs = sc; best = e; }
+    }
+    return best;
+  }
+
+  private costaUpdate(dt: number) {
+    const st = this.st, gy = COSTA.gunY;
+    this.lamp = 0;
+    for (const s of this.slots) {
+      if (!s.open || !s.w) continue;
+      s.fire = Math.max(0, s.fire - dt);
+      s.cd -= dt;
+      s.on = false;
+      const W = this.weaponStat(s.w, s.lv);
+      const tg = this.pickFor(s.x, gy, W.range, s.w === 'mortero' ? 60 : 0, s.w === 'mortero' ? W.R : 0);
+      if (!tg) continue;
+      const want = Math.atan2(tg.y - gy, tg.x - s.x);
+      s.aim += Math.atan2(Math.sin(want - s.aim), Math.cos(want - s.aim)) * Math.min(1, dt * 14);
+      if (s.w === 'luz') {
+        // Haz continuo sobre el objetivo y los que están pegados a él
+        s.on = true; s.tx = tg.x; s.ty = tg.y;
+        let n = 0;
+        for (const e of this.enemies) {
+          if (e.dead || n >= W.n || (e.x - tg.x) ** 2 + (e.y - tg.y) ** 2 > (W.R + e.r) ** 2) continue;
+          n++;
+          this.damage(e, W.dmg * dt, true, 'area');
+          e.slowT = Math.max(e.slowT, 0.3);
+        }
+        continue;
+      }
+      if (s.cd > 0) continue;
+      s.cd += 1 / W.rate;
+      s.fire = 0.22;
+      const crit = Math.random() < st.cc;
+      const fcrit = crit ? st.cf : 1;
+      if (s.w === 'canon') {
+        this.bolts.push({ x: s.x, y: gy, px: s.x, py: gy, t: tg, d: W.dmg * fcrit, crit, bounce: true, kind: 'cball', speed: 340 });
+        this.emit('cannon');
+      } else if (s.w === 'ballesta') {
+        for (let i = 0; i < W.n; i++) {
+          const t2 = i === 0 ? tg : this.nearestTo(tg.x, tg.y, 120, tg) || tg;
+          this.bolts.push({ x: s.x + (i ? 5 : -(W.n - 1) * 2.5), y: gy, px: s.x, py: gy, t: t2, d: W.dmg * fcrit, crit, bounce: true, kind: 'quarrel', speed: 560 });
+        }
+        this.emit('harpoon');
+      } else {
+        const fly = Math.max(0.6, Math.min(1.2, Math.hypot(tg.x - s.x, tg.y - gy) / 260));
+        this.shells.push({ sx: s.x, sy: gy, tx: tg.x, ty: tg.y, t: 0, max: fly, R: W.R, d: W.dmg * fcrit });
+        this.emit('slam');
+      }
+      this.burst(s.x + Math.cos(s.aim) * 14, gy + Math.sin(s.aim) * 14, '#ffd9a0', 3, 50);
+    }
+  }
+
+  /** Posición de una bomba de mortero (en el aire describe un arco). */
+  shellPos(sh: Shell) {
+    const k = Math.min(1, sh.t / sh.max);
+    return { x: sh.sx + (sh.tx - sh.sx) * k, y: sh.sy + (sh.ty - sh.sy) * k, h: Math.sin(k * Math.PI) * 70 };
+  }
+
   /* ---------- Mecánicas de zona ---------- */
   private mechanics(dt: number) {
     const m = this.zone.mech;
@@ -1025,7 +1151,7 @@ export class Game {
         this.text(0, -95, '+' + pw + L(' perlas', ' pearls') + (it > 0 ? ' (+' + it + L(' interés)', ' interest)') : ''), '#8fe9ff', true, 1.4);
         this.coral += st.cw * this.zone.reward;
         if (this.bl.marea) this.hp = Math.min(st.hp, this.hp + st.hp * 0.2 * this.bl.marea);
-        if ((this.level || this.mode === 'asedio') && this.wave >= this.lastWave) { this.winLevel(); return; }
+        if ((this.level || this.mode === 'asedio' || this.mode === 'costa') && this.wave >= this.lastWave) { this.winLevel(); return; }
         if (this.mode === 'aguante' || this.mode === 'travesia') this.pauseT = 0.5;
         if ((this.level ? this.shownWave : this.wave) % 5 === 0) {
           this.dealCards();
@@ -1039,11 +1165,11 @@ export class Game {
 
     this.mechanics(dt);
     if (this.over) return;
-    this.turrets(dt);
-    this.landNets(dt);
+    if (this.mode === 'costa') this.costaUpdate(dt);
+    else { this.turrets(dt); this.landNets(dt); }
 
-    // Apuntar y disparar desde la linterna
-    const tg = this.target();
+    // Apuntar y disparar desde la linterna (en la costa disparan los huecos de la muralla)
+    const tg = this.mode === 'costa' ? null : this.target();
     if (tg) {
       const want = Math.atan2(tg.y - LAMP_Y, tg.x);
       const diff = Math.atan2(Math.sin(want - this.lamp), Math.cos(want - this.lamp));
@@ -1068,8 +1194,14 @@ export class Game {
       b.px = b.x; b.py = b.y;
       if (d <= s + e.r * 0.6) {
         b.gone = true;
-        const dealt = this.damage(e, b.d, false, b.kind === 'harpoon' ? 'turret' : 'beam');
+        const dealt = this.damage(e, b.d, false, b.kind === 'light' ? 'beam' : 'turret');
         if (b.kind === 'harpoon') { this.burst(e.x, e.y, '#c9a46a', 5, 70); continue; }
+        if (b.kind === 'cball' || b.kind === 'quarrel') {
+          this.burst(e.x, e.y, b.kind === 'cball' ? '#9aa3b2' : '#e6c58f', b.kind === 'cball' ? 7 : 3, b.kind === 'cball' ? 90 : 60);
+          if (b.kind === 'cball') this.fx.push({ kind: 'boom', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.3, max: 0.3, c: '#ffcf8a', r: 14 });
+          if (b.crit) { this.crits++; this.text(e.x, e.y - 10, Math.round(dealt) + '!', '#ffe27a', true, 0.7); this.emit('crit'); }
+          continue;
+        }
         this.burst(e.x, e.y, b.crit ? '#ffe27a' : '#fff6c8', b.crit ? 6 : 2, 60);
         if (e.armor && dealt < b.d * 0.5) this.text(e.x, e.y - 12, t('coraza'), '#e8c39e', false, 0.5);
         if (this.bl.fuego && !e.dead) { e.burn = Math.max(e.burn, (dealt * 0.4 * this.bl.fuego) / 2); e.burnT = 2; }
@@ -1097,6 +1229,19 @@ export class Game {
 
     if (this.mode === 'escolta') { this.updateShip(dt); if (this.over) return; }
     if (this.mode === 'travesia') { this.updateVoyage(dt); if (this.over) return; }
+
+    // Bombas de mortero
+    for (const sh of this.shells) {
+      sh.t += dt;
+      if (sh.t < sh.max) continue;
+      sh.gone = true;
+      this.fx.push({ kind: 'boom', x: sh.tx, y: sh.ty, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#ff8a3d', r: sh.R });
+      this.burst(sh.tx, sh.ty, '#ff9a52', 10, 110);
+      this.shake = Math.max(this.shake, 0.08);
+      for (const e of this.enemies) if (!e.dead && (e.x - sh.tx) ** 2 + (e.y - sh.ty) ** 2 < (sh.R + e.r) ** 2) this.damage(e, sh.d, true, 'turret');
+      this.emit('boom');
+    }
+    this.shells = this.shells.filter(sh => !sh.gone);
 
     // Bolas de fuego del pez ígneo
     for (const f of this.fireballs) {
@@ -1220,7 +1365,7 @@ export class Game {
             const shots = e.type === 'captain' ? 3 : 1;
             for (let i = 0; i < shots; i++) {
               const sp = (i - (shots - 1) / 2) * 16;
-              this.fireballs.push({ sx: e.x, sy: e.y, tx: (tg.ship ? tg.x : 0) + sp, ty: (tg.ship ? tg.y : -10) + Math.abs(sp) * 0.3, t: -i * 0.12, max: ball ? 1.6 : 1.4, d: e.dmg, ball, toShip: tg.ship });
+              this.fireballs.push({ sx: e.x, sy: e.y, tx: tg.x + sp, ty: (tg.ship ? tg.y : tg.y - 10) + Math.abs(sp) * 0.3, t: -i * 0.12, max: ball ? 1.6 : 1.4, d: e.dmg, ball, toShip: tg.ship });
             }
             if (ball) this.fx.push({ kind: 'cannon', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '', r: e.r, h: e.hd });
             this.emit(ball ? 'cannon' : 'fire');

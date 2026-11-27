@@ -143,15 +143,41 @@ export const MODE_RULES = {
   escolta: { unlock: '0-4', total: 6, shipHp: 40, speed: 30, dock: 70, unload: 10, gap: 3, aggro: 0.7 },
   travesia: { unlock: '0-6', speed: 16, total: 2600 },
   asedio: { unlock: '0-8', waves: 12 },
+  costa: { unlock: '0-3', waves: 15 },
   endless: { unlock: '0-10' },
 };
-export interface ModeInfo { id: 'aguante' | 'escolta' | 'travesia' | 'asedio' | 'endless'; icon: string; name: string; desc: string; }
+export interface ModeInfo { id: 'aguante' | 'escolta' | 'travesia' | 'asedio' | 'costa' | 'endless'; icon: string; name: string; desc: string; }
 export const MODES: ModeInfo[] = [
+  { id: 'costa', icon: '🏰', name: 'Modo Costa', desc: 'Defiende tu muralla en la costa: piratas y monstruos vienen del mar. Arma huecos con cañón, ballesta, mortero y luz a medida que avanzas. 15 oleadas.' },
   { id: 'aguante', icon: '⏳', name: 'Aguante', desc: 'Sin comprar nada: juegas con tu investigación y tu nivel de farero. ¿Cuántas oleadas aguantas?' },
   { id: 'escolta', icon: '⚓', name: 'Escolta', desc: 'Llegan barcos con comida y suministros. Protégelos hasta que descarguen: si hunden uno, pierdes. Gana con 6 entregas.' },
   { id: 'travesia', icon: '⛵', name: 'Travesía', desc: 'Navega hasta una isla lejana. No hay tienda: mejora tu barco tocando barriles, restos y cofres a la deriva.' },
   { id: 'asedio', icon: '🏴', name: 'Asedio pirata', desc: 'Barcos piratas cañonean la bahía y sus botes intentan abordar, junto con monstruos. Resiste 12 oleadas y al capitán.' },
   { id: 'endless', icon: '♾️', name: 'Infinito', desc: 'Oleadas sin fin, con todas las mejoras desde el principio. Llega lo más lejos que puedas.' },
+];
+
+/* ---------- Modo Costa: muralla abajo, enemigos desde arriba, huecos para armas ---------- */
+export type WeaponId = 'canon' | 'ballesta' | 'mortero' | 'luz';
+export const COSTA = {
+  /** Semiancho de la muralla (unidades del juego); las criaturas atacan el punto de la muralla que tienen delante. */
+  half: 175,
+  /** Posición de cada hueco: el centro primero y luego hacia los lados. */
+  slotX: [0, 52, -52, 104, -104, 156, -156],
+  /** Oleada desde la que se puede abrir cada hueco, y lo que cuesta abrirlo (además del arma). */
+  slotWave: [0, 1, 3, 5, 7, 9, 11],
+  slotCost: [0, 25, 48, 78, 110, 160, 220],
+  maxLv: 6,
+  /** La vida de las criaturas sube hasta ×(1+hp) en la última oleada, con curva cuadrática (balance: npm run sim:costa). */
+  hp: 6,
+  /** Altura (y) de la boca de las armas. */
+  gunY: -8,
+};
+export interface WeaponInfo { id: WeaponId; icon: string; name: string; desc: string; cost: number; up: number; col: string; }
+export const WEAPONS: WeaponInfo[] = [
+  { id: 'canon', icon: '💣', name: 'Cañón', desc: 'Bala pesada: mucho daño a un solo objetivo.', cost: 22, up: 30, col: '#c9d2e0' },
+  { id: 'ballesta', icon: '🏹', name: 'Ballesta', desc: 'Dispara muy rápido. Desde el nivel 3 lanza dos virotes.', cost: 22, up: 26, col: '#d9b37a' },
+  { id: 'mortero', icon: '🧨', name: 'Mortero', desc: 'Lento, pero su bomba explota en área sobre los grupos.', cost: 40, up: 40, col: '#ff9a52' },
+  { id: 'luz', icon: '🔦', name: 'Luz de costa', desc: 'Haz que quema, frena y revela a los fantasmas.', cost: 32, up: 34, col: '#ffe9a8' },
 ];
 
 /* ---------- Progresión del farero, colección y premios diarios ---------- */
@@ -327,6 +353,7 @@ localize(CREATURES, ['name', 'desc']);
 localize(SKINS, ['name']);
 localize(BEAMS, ['name']);
 localize(MODES, ['name', 'desc']);
+localize(WEAPONS, ['name', 'desc']);
 for (const k of Object.keys(HINTS)) { const es = HINTS[k]; Object.defineProperty(HINTS, k, { get: () => t(es), enumerable: true }); }
 /** Nombre de pestaña / rama en el idioma activo. */
 export const tabName = (i: number) => t(TABS[i]);
