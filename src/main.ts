@@ -1,5 +1,5 @@
 // Controlador de interfaz: pantallas, panel de mejoras, HUD, tutorial y bucle principal.
-import { DEFS, TABS, PERM, BRANCHES, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone } from './data';
+import { DEFS, tabName, branchName, BLESSINGS, PERM, BRANCHES, TABS, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone } from './data';
 import {
   load, persist, ensureDaily, track, zoneUnlocked, readyMissions, checkAchievements,
   researchTotal, zonesOpen, challengeZone, challengeSeed, today,
@@ -15,11 +15,16 @@ import { menuArt, bossArt } from './art';
 import { initAudio, setMuted, sfx } from './audio';
 import { startMusic, setMusicEnabled, setMusicLevel } from './music';
 import { getBoard, Row } from './leaderboard';
+import { setLang, detectLang, lang, t, L, num } from './i18n';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
 const save = load();
+// #lang=en en la dirección sirve aunque no haya almacenamiento local
+setLang(detectLang(/lang=(es|en)/.exec(location.hash)?.[1] || save.lang));
+document.documentElement.lang = lang;
+translateDom();
 setMuted(save.muted);
 setMusicEnabled(save.music);
 let g: Game | null = null;
@@ -39,6 +44,20 @@ function resize() {
   cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr);
 }
 const spawnR = () => Math.hypot(vw, vh) / 2 / (Math.min(vw, vh) / 400) + 16;
+
+/** Traduce los textos fijos de index.html (escritos en español). */
+function translateDom() {
+  if (lang === 'es') return;
+  document.title = t('Faro en la Tormenta');
+  const walk = (n: Node) => {
+    if (n.nodeType === 3) { const v = n.nodeValue!.trim(); if (v) { const tr = t(v); if (tr !== v) n.nodeValue = n.nodeValue!.replace(v, tr); } }
+    else n.childNodes.forEach(walk);
+  };
+  walk(document.body);
+  document.querySelectorAll<HTMLInputElement>('[placeholder]').forEach(el => { el.placeholder = t(el.placeholder); });
+  const h1 = document.querySelector('#menu h1');
+  if (h1) h1.innerHTML = 'LIGHTHOUSE IN<br><em>THE STORM</em>';
+}
 
 function vibrate(ms: number) { try { navigator.vibrate?.(ms); } catch { /* sin vibración */ } }
 function audio() { initAudio(); startMusic(); }
@@ -72,14 +91,14 @@ function onEvent(e: GEvent, d?: number) {
     case 'crit': sfx.crit(); break;
     case 'kill': sfx.kill(); break;
     case 'hurt': sfx.hurt(); vibrate(15); break;
-    case 'wave': banner('OLEADA ' + d + (g?.mod ? '\n' + g.mod.name : '')); sfx.wave(); tutorialFor(d || 0); break;
+    case 'wave': banner(t('OLEADA') + ' ' + d + (g?.mod ? '\n' + g.mod.name : '')); sfx.wave(); tutorialFor(d || 0); break;
     case 'boss': sfx.boss(); vibrate(150); break;
-    case 'bossdown': banner('¡JEFE DERROTADO!'); sfx.bossdown(); vibrate(80); break;
+    case 'bossdown': banner(t('¡JEFE DERROTADO!')); sfx.bossdown(); vibrate(80); break;
     case 'flash': sfx.flash(); vibrate(40); break;
     case 'buy': sfx.buy(); break;
     case 'thunder': sfx.thunder(); break;
     case 'boom': sfx.boom(); vibrate(90); break;
-    case 'enrage': sfx.enrage(); banner('¡' + runZone.boss + ' FURIOSO!'); vibrate(200); break;
+    case 'enrage': sfx.enrage(); banner(L('¡' + runZone.boss + ' FURIOSO!', runZone.boss + ' ENRAGED!')); vibrate(200); break;
     case 'elite': sfx.elite(); break;
     case 'harpoon': sfx.harpoon(); break;
     case 'net': sfx.net(); break;
@@ -90,7 +109,7 @@ function onEvent(e: GEvent, d?: number) {
     case 'frostwarn': sfx.warn(); $('frostw').style.display = 'block'; break;
     case 'frost': sfx.frost(); $('frostw').style.display = 'none'; vibrate(60); break;
     case 'erupt': sfx.erupt(); vibrate(30); break;
-    case 'revive': sfx.revive(); banner('¡SEGUNDA LLAMA!'); vibrate(200); break;
+    case 'revive': sfx.revive(); banner(t('¡SEGUNDA LLAMA!')); vibrate(200); break;
     case 'cards': showCards(); break;
     case 'over': endRun(); break;
   }
@@ -154,19 +173,22 @@ function endRun() {
   $('frostw').style.display = 'none';
   let html: string;
   if (g.daily) {
-    $('overtitle').textContent = 'DESAFÍO TERMINADO';
-    html = `${z.name} · oleada <b>${g.wave}</b> · ${g.kills} criaturas<br>Puntuación: <b style="color:#ffd166">${g.score.toLocaleString('es')}</b><br>Mañana hay un desafío nuevo.`;
+    $('overtitle').textContent = t('DESAFÍO TERMINADO');
+    html = L(`${z.name} · oleada <b>${g.wave}</b> · ${g.kills} criaturas<br>Puntuación: <b style="color:#ffd166">${num(g.score)}</b><br>Mañana hay un desafío nuevo.`,
+      `${z.name} · wave <b>${g.wave}</b> · ${g.kills} creatures<br>Score: <b style="color:#ffd166">${num(g.score)}</b><br>A new challenge comes tomorrow.`);
   } else {
-    $('overtitle').textContent = 'EL FARO SE APAGÓ';
-    html = `${z.name} · llegaste a la <b>oleada ${g.wave}</b>` +
-      (g.wave > prevBest ? ' <b style="color:#35e0b0">¡nuevo récord!</b>' : `<br>Récord: ${prevBest}`);
+    $('overtitle').textContent = t('EL FARO SE APAGÓ');
+    html = L(`${z.name} · llegaste a la <b>oleada ${g.wave}</b>`, `${z.name} · you reached <b>wave ${g.wave}</b>`) +
+      (g.wave > prevBest ? L(' <b style="color:#35e0b0">¡nuevo récord!</b>', ' <b style="color:#35e0b0">new best!</b>') : L(`<br>Récord: ${prevBest}`, `<br>Best: ${prevBest}`));
   }
-  html += `<br>${g.kills} criaturas · ${g.bosses} jefes · ${g.elites} élites · ${g.cards} ${g.cards === 1 ? 'bendición' : 'bendiciones'}` +
-    `<br>Coral ganado: <b style="color:#ffb35c">+${g.earned} ◆</b>`;
+  html += L(`<br>${g.kills} criaturas · ${g.bosses} jefes · ${g.elites} élites · ${g.cards} ${g.cards === 1 ? 'bendición' : 'bendiciones'}` +
+    `<br>Coral ganado: <b style="color:#ffb35c">+${g.earned} ◆</b>`,
+    `<br>${g.kills} creatures · ${g.bosses} bosses · ${g.elites} elites · ${g.cards} ${g.cards === 1 ? 'blessing' : 'blessings'}` +
+    `<br>Coral earned: <b style="color:#ffb35c">+${g.earned} ◆</b>`);
   if (!g.daily && !nextWasOpen && zi + 1 < ZONES.length && zoneUnlocked(save, zi + 1))
-    html += `<br><br><b style="color:#ffe27a">🗺️ ¡Desbloqueaste ${ZONES[zi + 1].name}!</b>`;
+    html += L(`<br><br><b style="color:#ffe27a">🗺️ ¡Desbloqueaste ${ZONES[zi + 1].name}!</b>`, `<br><br><b style="color:#ffe27a">🗺️ You unlocked ${ZONES[zi + 1].name}!</b>`);
   const ready = readyMissions(save);
-  if (ready) html += `<br><br>🎯 ${ready} misión${ready > 1 ? 'es' : ''} lista${ready > 1 ? 's' : ''} para reclamar`;
+  if (ready) html += L(`<br><br>🎯 ${ready} misión${ready > 1 ? 'es' : ''} lista${ready > 1 ? 's' : ''} para reclamar`, `<br><br>🎯 ${ready} mission${ready > 1 ? 's' : ''} ready to claim`);
   $('overinfo').innerHTML = html;
   updateBadges();
   achievements();
@@ -191,8 +213,8 @@ function tutorialFor(wave: number) {
 function showTip(title: string, text: string, target: string) {
   paused = true;
   const tip = $('tip');
-  $('tiptitle').textContent = title;
-  $('tiptext').textContent = text;
+  $('tiptitle').textContent = t(title);
+  $('tiptext').textContent = t(text);
   tip.classList.add('on');
   tip.classList.remove('up', 'down');
   const app = $('app').getBoundingClientRect();
@@ -222,12 +244,12 @@ function showCards() {
     const el = document.createElement('button');
     el.className = 'bcard';
     const lv = g.bl[b.id];
-    el.innerHTML = `<div class="ic">${b.icon}</div><div><b>${esc(b.name)}</b><span>${esc(b.desc)}</span>${lv ? `<br><em>YA TIENES ${lv} · SE ACUMULA</em>` : ''}</div>`;
+    el.innerHTML = `<div class="ic">${b.icon}</div><div><b>${esc(b.name)}</b><span>${esc(b.desc)}</span>${lv ? `<br><em>${L(`YA TIENES ${lv} · SE ACUMULA`, `YOU HAVE ${lv} · STACKS`)}</em>` : ''}</div>`;
     el.addEventListener('click', () => {
       if (!g) return;
       g.pickCard(b.id); sfx.buy();
       $('cards').classList.remove('on');
-      toast(b.icon + ' ' + b.name, 'Bendición activa');
+      toast(b.icon + ' ' + b.name, t('Bendición activa'));
       if (save.tut === 4) { save.tut = 5; persist(save); }
       updatePanel(); updateHud();
     });
@@ -235,7 +257,7 @@ function showCards() {
   }
   const rr = $('reroll');
   rr.style.display = g.rerolls > 0 ? '' : 'none';
-  rr.textContent = `RE-TIRAR (${g.rerolls})`;
+  rr.textContent = `${t('RE-TIRAR')} (${g.rerolls})`;
   $('cards').classList.add('on');
 }
 $('reroll').addEventListener('click', () => { if (g?.reroll()) showCards(); });
@@ -304,7 +326,7 @@ function buildPanel() {
     el.className = 'up t' + d.tab;
     el.innerHTML = '<div class="top"><div class="ic">' + (ICONS[d.id] || '') + '<em class="lv"></em></div><div class="n"></div></div><div class="v"></div><div class="k"></div>';
     holdToBuy(el, () => {
-      showHint('<b>' + d.name + ':</b> ' + (HINTS[d.id] || 'mejora de ' + TABS[d.tab].toLowerCase()));
+      showHint('<b>' + d.name + ':</b> ' + (HINTS[d.id] || L('mejora de ', 'upgrade: ') + tabName(d.tab).toLowerCase()));
     }, () => {
       if (!g || paused || g.over) return false;
       const ok = g.buy(d.id);
@@ -316,9 +338,9 @@ function buildPanel() {
     const q = (sel: string) => el.querySelector(sel) as HTMLElement;
     btns.push({ id: d.id, tab: d.tab, el, n: q('.n'), lv: q('.lv'), v: q('.v'), k: q('.k') });
   }
-  TABS.forEach((t, i) => {
+  TABS.forEach((_, i) => {
     const b = document.createElement('button');
-    b.className = 'tab'; b.innerHTML = TAB_ICONS[i] + '<span>' + t + '</span><span class="dot"></span>';
+    b.className = 'tab'; b.innerHTML = TAB_ICONS[i] + '<span>' + tabName(i) + '</span><span class="dot"></span>';
     b.addEventListener('click', () => {
       stopHold();
       sfx.click();
@@ -356,15 +378,15 @@ function updatePanel() {
 
 function updateHud() {
   if (!g) return;
-  $('wave').firstChild!.nodeValue = 'OLEADA ' + Math.max(1, g.wave);
-  $('best').textContent = (g.daily ? '⭐ Desafío · ' : '') + runZone.name + (g.daily ? ' · ' + g.score.toLocaleString('es') + ' pts' : ' · Récord ' + best());
+  $('wave').firstChild!.nodeValue = t('OLEADA') + ' ' + Math.max(1, g.wave);
+  $('best').textContent = (g.daily ? L('⭐ Desafío · ', '⭐ Challenge · ') : '') + runZone.name + (g.daily ? ' · ' + num(g.score) + ' pts' : L(' · Récord ', ' · Best ') + best());
   $('pearls').textContent = String(g.pearls);
   $('coral').textContent = String(Math.floor(g.coral));
   const st = g.st, p = Math.max(0, g.hp) / st.hp;
   $('hpfill').style.width = p * 100 + '%';
   $('hpfill').className = p > 0.6 ? 'ok' : p > 0.3 ? 'mid' : '';
-  $('hpt').textContent = 'Faro ' + Math.ceil(Math.max(0, g.hp)) + ' / ' + Math.round(st.hp);
-  $('sht').textContent = st.bar > 0 ? 'Barrera ' + Math.ceil(g.shield) + ' / ' + Math.round(st.bar) : '';
+  $('hpt').textContent = L('Faro ', 'Lighthouse ') + Math.ceil(Math.max(0, g.hp)) + ' / ' + Math.round(st.hp);
+  $('sht').textContent = st.bar > 0 ? t('Barrera') + ' ' + Math.ceil(g.shield) + ' / ' + Math.round(st.bar) : '';
   $('shfill').style.width = st.bar > 0 ? (g.shield / st.bar) * 100 + '%' : '0';
   $('wprog').style.width = g.waveProgress * 100 + '%';
   const md = $('mod');
@@ -372,7 +394,7 @@ function updateHud() {
   const boss = g.boss;
   $('boss').style.display = boss ? 'block' : 'none';
   $('boss').classList.toggle('on', !!boss);
-  if (boss) { $('bossname').textContent = runZone.boss + (boss.enraged ? ' · FURIOSO' : ''); $('bossfill').style.width = Math.max(0, (boss.hp / boss.max) * 100) + '%'; }
+  if (boss) { $('bossname').textContent = runZone.boss + (boss.enraged ? L(' · FURIOSO', ' · ENRAGED') : ''); $('bossfill').style.width = Math.max(0, (boss.hp / boss.max) * 100) + '%'; }
   setMusicLevel(boss ? 2 : 1);
   const fb = $('flash');
   fb.style.setProperty('--p', String(1 - g.flashCd / g.flashMax));
@@ -392,15 +414,15 @@ function showMenu() {
   setMusicLevel(0);
   for (const id of ['flash', 'aim', 'frostw', 'mod', 'boss']) $(id).style.display = 'none';
   const z = zone();
-  $('menuinfo').innerHTML = `Zona: <b>${z.name}</b> · Récord: <b>${save.zoneBest[z.id] || 0}</b> · Coral: <b style="color:#ffb35c">${Math.floor(save.coral)} ◆</b>`;
+  $('menuinfo').innerHTML = `${L('Zona', 'Zone')}: <b>${z.name}</b> · ${L('Récord', 'Best')}: <b>${save.zoneBest[z.id] || 0}</b> · Coral: <b style="color:#ffb35c">${Math.floor(save.coral)} ◆</b>`;
   $('mute').textContent = save.muted ? '🔇' : '🔊';
     $('mus').style.opacity = save.music ? '1' : '.5';
   const cz = challengeZone(), done = save.challenge?.date === today();
   const dbtn = $<HTMLButtonElement>('daily');
   dbtn.disabled = done;
   $('dailyinfo').textContent = done
-    ? `Hoy: oleada ${save.challenge!.wave} · ${save.challenge!.score.toLocaleString('es')} pts · vuelve mañana`
-    : `${cz.name} · un solo intento · igual para todos`;
+    ? L(`Hoy: oleada ${save.challenge!.wave} · ${num(save.challenge!.score)} pts · vuelve mañana`, `Today: wave ${save.challenge!.wave} · ${num(save.challenge!.score)} pts · come back tomorrow`)
+    : L(`${cz.name} · un solo intento · igual para todos`, `${cz.name} · one try · same for everyone`);
   updateBadges();
   hideAll();
   $('menu').classList.add('on');
@@ -413,11 +435,11 @@ function updateBadges() {
 }
 
 function buildShop() {
-  $('shopcoral').innerHTML = `Coral disponible: <b style="color:#ffb35c">${Math.floor(save.coral)} ◆</b>`;
+  $('shopcoral').innerHTML = `${L('Coral disponible', 'Coral available')}: <b style="color:#ffb35c">${Math.floor(save.coral)} ◆</b>`;
   const tabs = $('rtabs'); tabs.innerHTML = '';
-  BRANCHES.forEach((b, i) => {
+  BRANCHES.forEach((_, i) => {
     const el = document.createElement('button');
-    el.textContent = b; el.className = i === rtab ? 'on' : '';
+    el.textContent = branchName(i); el.className = i === rtab ? 'on' : '';
     el.addEventListener('click', () => { rtab = i; sfx.click(); buildShop(); });
     tabs.appendChild(el);
   });
@@ -428,7 +450,7 @@ function buildShop() {
     const locked = !!req && !(save.perm[req.id] > 0);
     const row = document.createElement('div');
     row.className = 'card' + (p.req ? ' node' : '') + (p.big ? ' big1' : '') + (locked ? ' lock' : '');
-    row.innerHTML = `<div><b>${p.big ? '★ ' : ''}${p.name} · ${lv}/${p.max}</b><span>${locked ? '🔒 Requiere ' + req!.name : p.desc + (p.max > 1 ? ' por nivel' : '')}</span></div>`;
+    row.innerHTML = `<div><b>${p.big ? '★ ' : ''}${p.name} · ${lv}/${p.max}</b><span>${locked ? L('🔒 Requiere ', '🔒 Requires ') + req!.name : p.desc + (p.max > 1 ? L(' por nivel', ' per level') : '')}</span></div>`;
     const b = document.createElement('button');
     b.textContent = maxed ? 'MÁX' : '◆ ' + c;
     b.disabled = maxed || locked || save.coral < c;
@@ -447,7 +469,7 @@ function buildMap() {
     const op = zoneUnlocked(save, i), sel = z.id === save.zone;
     const row = document.createElement('div');
     row.className = 'card' + (sel ? ' sel' : '') + (op ? '' : ' lock');
-    row.innerHTML = `<div><b>${op ? '' : '🔒 '}${z.name}</b><span>${op ? z.desc + ' · Récord ' + (save.zoneBest[z.id] || 0) : 'Llega a la oleada ' + UNLOCK_WAVE + ' en ' + ZONES[i - 1].name}</span></div>`;
+    row.innerHTML = `<div><b>${op ? '' : '🔒 '}${z.name}</b><span>${op ? z.desc + L(' · Récord ', ' · Best ') + (save.zoneBest[z.id] || 0) : L('Llega a la oleada ' + UNLOCK_WAVE + ' en ' + ZONES[i - 1].name, 'Reach wave ' + UNLOCK_WAVE + ' in ' + ZONES[i - 1].name)}</span></div>`;
     const b = document.createElement('button'); b.className = 'g';
     b.textContent = sel ? 'ELEGIDA' : 'ELEGIR'; b.disabled = !op || sel;
     b.addEventListener('click', () => { save.zone = z.id; persist(save); sfx.click(); buildMap(); });
@@ -459,7 +481,7 @@ function buildMissions() {
   ensureDaily(save);
   const now = new Date(), end = new Date(now); end.setHours(24, 0, 0, 0);
   const h = Math.floor((+end - +now) / 3600000), m = Math.floor(((+end - +now) % 3600000) / 60000);
-  $('misinfo').innerHTML = `Nuevas misiones en ${h}h ${m}m · Coral: <b style="color:#ffb35c">${Math.floor(save.coral)} ◆</b>`;
+  $('misinfo').innerHTML = `${L('Nuevas misiones en', 'New missions in')} ${h}h ${m}m · Coral: <b style="color:#ffb35c">${Math.floor(save.coral)} ◆</b>`;
   const list = $('mislist'); list.innerHTML = '';
   for (const ms of save.daily.list) {
     const def = MPOOL.find(p => p.kind === ms.kind)!;
@@ -476,7 +498,7 @@ function buildMissions() {
   }
   const all = save.daily.list.every(x => x.claimed);
   const row = document.createElement('div'); row.className = 'card';
-  row.innerHTML = `<div><b>🎁 Cofre del día</b><span>Completa las 3 misiones</span></div>`;
+  row.innerHTML = `<div><b>${t('🎁 Cofre del día')}</b><span>${t('Completa las 3 misiones')}</span></div>`;
   const b = document.createElement('button'); b.className = 'g';
   b.textContent = save.daily.bonus ? '✓' : '◆ ' + DAILY_BONUS; b.disabled = save.daily.bonus || !all;
   b.addEventListener('click', () => {
@@ -490,10 +512,10 @@ function buildAchs() {
   const S = save.stats;
   const hrs = Math.floor(S.time / 3600), mins = Math.floor((S.time % 3600) / 60);
   const cells: [string, string][] = [
-    ['Mejor oleada', String(S.bestWave)], ['Partidas', String(S.runs)],
-    ['Criaturas', S.kills.toLocaleString('es')], ['Jefes', String(S.bosses)],
-    ['Élites', String(S.elites)], ['Críticos', S.crits.toLocaleString('es')],
-    ['Bendiciones', String(S.cards)], ['Tiempo jugado', hrs ? `${hrs}h ${mins}m` : `${mins}m`],
+    [t('Mejor oleada'), String(S.bestWave)], [t('Partidas'), String(S.runs)],
+    [t('Criaturas'), num(S.kills)], [t('Jefes'), String(S.bosses)],
+    [t('Élites'), String(S.elites)], [t('Críticos'), num(S.crits)],
+    [t('Bendiciones'), String(S.cards)], [t('Tiempo jugado'), hrs ? `${hrs}h ${mins}m` : `${mins}m`],
   ];
   $('statgrid').innerHTML = cells.map(([k, v]) => `<div>${k}<b>${v}</b></div>`).join('');
   const x = { research: researchTotal(save), zones: zonesOpen(save) };
@@ -523,7 +545,7 @@ async function submitScore() {
 async function buildRank() {
   const status = $('rankstatus'), list = $('ranklist');
   [...$('ranktabs').children].forEach(el => el.classList.toggle('on', (el as HTMLElement).dataset.k === rankKind));
-  status.textContent = 'Cargando…';
+  status.textContent = t('Cargando…');
   list.innerHTML = '';
   const b = await getBoard();
   $('namebox').style.display = b.needsName ? '' : 'none';
@@ -532,9 +554,9 @@ async function buildRank() {
   try {
     await b.submit(entry());
     rows = await b.list();
-    status.textContent = b.label;
+    status.textContent = t(b.label);
   } catch {
-    status.textContent = 'No se pudo cargar el ranking ahora. Inténtalo más tarde.';
+    status.textContent = t('No se pudo cargar el ranking ahora. Inténtalo más tarde.');
   }
   const d = today();
   const shown = rankKind === 'best'
@@ -542,7 +564,7 @@ async function buildRank() {
     : rows.filter(r => r.dailyDate === d && r.daily > 0).sort((a, c) => c.daily - a.daily);
   if (!shown.length) {
     const p = document.createElement('p');
-    p.textContent = rankKind === 'daily' ? 'Nadie ha jugado el desafío de hoy todavía.' : 'Aún no hay puntuaciones.';
+    p.textContent = t(rankKind === 'daily' ? 'Nadie ha jugado el desafío de hoy todavía.' : 'Aún no hay puntuaciones.');
     list.appendChild(p);
   }
   shown.slice(0, 50).forEach((r, i) => {
@@ -551,9 +573,9 @@ async function buildRank() {
     const pos = document.createElement('span'); pos.className = 'pos'; pos.textContent = ['🥇', '🥈', '🥉'][i] || String(i + 1);
     const nm = document.createElement('span'); nm.className = 'nm';
     const zn = ZONES.find(z => z.id === r.zone)?.name || '';
-    nm.textContent = (r.me ? (b.needsName ? r.name || 'Tú' : r.name + ' (tú)') : r.name) + (rankKind === 'best' && zn ? ' · ' + zn : '');
+    nm.textContent = (r.me ? (b.needsName ? r.name || t('Tú') : r.name + L(' (tú)', ' (you)')) : r.name) + (rankKind === 'best' && zn ? ' · ' + zn : '');
     const sc = document.createElement('span'); sc.className = 'sc';
-    sc.textContent = rankKind === 'best' ? 'Oleada ' + r.best : r.daily.toLocaleString('es') + ' pts';
+    sc.textContent = rankKind === 'best' ? L('Oleada ', 'Wave ') + r.best : num(r.daily) + ' pts';
     row.append(pos, nm, sc);
     list.appendChild(row);
   });
@@ -572,13 +594,13 @@ function toggleMute() {
   audio();
   save.muted = !save.muted; setMuted(save.muted); persist(save);
   $('mute').textContent = save.muted ? '🔇' : '🔊';
-  $('pmute').textContent = save.muted ? 'SONIDO: NO' : 'SONIDO: SÍ';
+  $('pmute').textContent = L(save.muted ? 'SONIDO: NO' : 'SONIDO: SÍ', save.muted ? 'SOUND: OFF' : 'SOUND: ON');
 }
 function toggleMusic() {
   audio();
   save.music = !save.music; setMusicEnabled(save.music); persist(save);
   $('mus').style.opacity = save.music ? '1' : '.5';
-  $('pmus').textContent = save.music ? 'MÚSICA: SÍ' : 'MÚSICA: NO';
+  $('pmus').textContent = L(save.music ? 'MÚSICA: SÍ' : 'MÚSICA: NO', save.music ? 'MUSIC: ON' : 'MUSIC: OFF');
 }
 
 function setPaused(p: boolean) {
@@ -586,15 +608,23 @@ function setPaused(p: boolean) {
   if (!g || g.over || g.state === 'cards') return;
   paused = p;
   $('pause').textContent = p ? '▶' : 'II';
-  $('pmute').textContent = save.muted ? 'SONIDO: NO' : 'SONIDO: SÍ';
-  $('pmus').textContent = save.music ? 'MÚSICA: SÍ' : 'MÚSICA: NO';
+  $('pmute').textContent = L(save.muted ? 'SONIDO: NO' : 'SONIDO: SÍ', save.muted ? 'SOUND: OFF' : 'SOUND: ON');
+  $('pmus').textContent = L(save.music ? 'MÚSICA: SÍ' : 'MÚSICA: NO', save.music ? 'MUSIC: ON' : 'MUSIC: OFF');
   const bl = Object.entries(g.bl).filter(([, v]) => v > 0);
-  $('pauseinfo').textContent = bl.length ? 'Bendiciones: ' + bl.map(([k, v]) => k + (v > 1 ? ' ×' + v : '')).join(', ') : '';
+  $('pauseinfo').textContent = bl.length ? t('Bendiciones') + ': ' + bl.map(([k, v]) => (BLESSINGS.find(b => b.id === k)?.name || k) + (v > 1 ? ' ×' + v : '')).join(', ') : '';
   $('pauseov').classList.toggle('on', p);
 }
 
 /* ---------- Eventos ---------- */
 $('play').addEventListener('click', () => start(false));
+// Idioma: se guarda y se recarga para que todo el texto quede en el idioma nuevo
+$('langbtn').textContent = lang.toUpperCase();
+$('langbtn').addEventListener('click', () => {
+  save.lang = lang === 'es' ? 'en' : 'es';
+  persist(save);
+  location.hash = 'lang=' + save.lang;
+  location.reload();
+});
 $('daily').addEventListener('click', () => start(true));
 $('again').addEventListener('click', () => start(false));
 $('tomenu').addEventListener('click', () => { sfx.click(); showMenu(); });
@@ -623,7 +653,7 @@ $('aim').addEventListener('click', () => {
   g.cycleAim(); sfx.click();
   $('aim').querySelector('span')!.textContent = AIMS.find(a => a.id === g!.aim)!.name;
   const tips: Record<string, string> = { cerca: 'dispara a lo más cercano', peligro: 'prioriza peces globo, anguilas, élites y jefes', fuerte: 'prioriza a quien tenga más vida', debil: 'remata a los más débiles' };
-  showHint('<b>Objetivo:</b> ' + tips[g.aim]);
+  showHint('<b>' + t('Objetivo:') + '</b> ' + t(tips[g.aim]));
 });
 window.addEventListener('resize', resize);
 if ('ResizeObserver' in window) new ResizeObserver(resize).observe(stage);

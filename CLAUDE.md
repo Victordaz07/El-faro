@@ -1,14 +1,14 @@
 # Faro en la Tormenta
 
 Juego de defensa por oleadas para celular (web primero, Android con Capacitor después).
-Idioma de la interfaz y de los comentarios: **español**.
+Idiomas del juego: **español e inglés** (`src/i18n.ts`). Comentarios del código: español.
 
 ## Comandos
 - `npm install`
 - `npm run dev` — servidor local (con `--host` para probar desde el celular)
 - `npm run build` — typecheck + `dist/index.html` en un solo archivo
 - `npm run sim` — bot que juega partidas en todas las zonas; úsalo después de cualquier cambio de balance
-- `npm test` — verifica que las perlas cuadren (iniciales + ganadas − gastadas) en partidas completas
+- `npm test` — verifica que las perlas cuadren (iniciales + ganadas − gastadas) en partidas completas y que todo texto tenga traducción al inglés (`tests/i18n.ts`)
 - `npm run android:sync` / `npm run android:open` — Capacitor
 
 ## Estructura
@@ -20,6 +20,7 @@ Idioma de la interfaz y de los comentarios: **español**.
 - `src/save.ts` — guardado local, misiones diarias, logros, desafío diario.
 - `src/leaderboard.ts` — ranking: Claude DB (artifact) → Firebase (`src/firebase.config.ts`) → local.
 - `src/main.ts` — interfaz, pantallas, tutorial y bucle.
+- `src/i18n.ts` — idiomas. El texto se escribe en español en el código; `t('texto')` lo traduce con el diccionario `EN`, `L(es, en)` para frases con números, y `localize()` (al final de data.ts) convierte los nombres y descripciones de los datos en getters. index.html se traduce al arrancar (`translateDom` en main.ts). Idioma: el guardado (`save.lang`), `#lang=en` en la dirección o el del dispositivo; el botón ES/EN del menú lo cambia y recarga.
 - `src/icons.ts` — íconos SVG propios de mejoras y pestañas.
 - Interfaz: tema de vidrio marino oscuro con acento turquesa (`--acc`) en index.html; sin dorado. Tipografías incrustadas Lilita One y Nunito. El mar ocupa toda la pantalla; HUD y barra inferior flotan encima. Barra inferior compacta (`#bar`): 4 pestañas en cuadrícula 2×2 + fila deslizable de mejoras (`#sheet`); tocar la pestaña activa la cierra. Compra: toque = 1, dedo quieto 0.38 s = repetida, deslizar = mover la fila. `view.offY` en render.ts centra el faro en la zona visible.
 - `assets/` — `icon.png` (ícono de la app) y `thumb.png` (portada). `assets/art/`: arte en WebP que se incrusta en el build (fondo del menú y retratos de jefes por zona); originales en `assets/art/originales/`. `assets/art/fase2/`: isla, faro, torretas, red, arpón y jefes renderizados desde `assets/models/` + `meta.json` con anclas.
@@ -32,6 +33,7 @@ Idioma de la interfaz y de los comentarios: **español**.
 - Guía para pedir modelos a ChatGPT: https://claude.ai/artifact/AGMa1dhbwEqj1UVswy85cL (prompt maestro + prompt por criatura).
 
 ## Reglas
+- Todo texto nuevo visible pasa por `t()` o `L()` y lleva su traducción en `EN`; `npm test` falla si falta alguna.
 - Las perlas solo entran por `gain()` y solo salen por `buy()` en game.ts; nunca modificar `pearls` directamente.
 - Comprar manteniendo presionado usa una sola repetición global (`holdStop` en main.ts) que se detiene al soltar, al fallar una compra o con otro toque.
 - La lógica de juego no toca el DOM (para que `npm run sim` siga funcionando).

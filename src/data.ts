@@ -1,4 +1,6 @@
-// Datos de diseño: mejoras, taller, zonas y misiones.
+// Datos de diseño: mejoras, taller, zonas y misiones. Los textos se escriben en español;
+// localize() (al final) los traduce al leerlos según el idioma elegido.
+import { localize, L, t } from './i18n';
 
 export interface UpDef {
   id: string;
@@ -29,9 +31,9 @@ export const DEFS: UpDef[] = [
   { id: 'ck', tab: 2, name: 'Coral/baja', base: 12, fmt: v => '×' + v.toFixed(2) },
   { id: 'cw', tab: 2, name: 'Coral/oleada', base: 14, fmt: v => '+' + v.toFixed(1) },
   { id: 'fcd', tab: 2, name: 'Destello', base: 12, fmt: v => Math.round(v) + 's' },
-  { id: 'tA', tab: 3, name: 'Arponero', base: 60, fmt: v => (v ? Math.round(v) + ' daño' : 'Construir') },
-  { id: 'tR', tab: 3, name: 'Lanzarredes', base: 70, fmt: v => (v ? Math.round(v) + ' daño' : 'Construir') },
-  { id: 'tN', tab: 3, name: 'Ancla', base: 90, fmt: v => (v ? Math.round(v) + ' daño' : 'Construir') },
+  { id: 'tA', tab: 3, name: 'Arponero', base: 60, fmt: v => (v ? Math.round(v) + L(' daño', ' dmg') : L('Construir', 'Build')) },
+  { id: 'tR', tab: 3, name: 'Lanzarredes', base: 70, fmt: v => (v ? Math.round(v) + L(' daño', ' dmg') : L('Construir', 'Build')) },
+  { id: 'tN', tab: 3, name: 'Ancla', base: 90, fmt: v => (v ? Math.round(v) + L(' daño', ' dmg') : L('Construir', 'Build')) },
 ];
 
 /** Descripción corta que se muestra al mantener presionada la mejora. */
@@ -174,13 +176,13 @@ export interface MDef {
 }
 
 export const MPOOL: MDef[] = [
-  { kind: 'kills', text: n => `Hunde ${n} criaturas`, goals: [80, 160, 260], rewards: [8, 14, 22] },
-  { kind: 'wave', text: n => `Llega a la oleada ${n}`, goals: [8, 12, 18], rewards: [8, 14, 24] },
-  { kind: 'boss', text: n => `Derrota ${n} jefe${n > 1 ? 's' : ''}`, goals: [1, 2], rewards: [12, 22] },
-  { kind: 'buys', text: n => `Compra ${n} mejoras`, goals: [30, 60], rewards: [8, 14] },
-  { kind: 'crits', text: n => `Asesta ${n} críticos`, goals: [25, 70], rewards: [8, 15] },
-  { kind: 'runs', text: n => `Juega ${n} partidas`, goals: [2, 4], rewards: [6, 12] },
-  { kind: 'flash', text: n => `Usa el Destello ${n} veces`, goals: [3, 8], rewards: [6, 12] },
+  { kind: 'kills', text: n => L(`Hunde ${n} criaturas`, `Sink ${n} creatures`), goals: [80, 160, 260], rewards: [8, 14, 22] },
+  { kind: 'wave', text: n => L(`Llega a la oleada ${n}`, `Reach wave ${n}`), goals: [8, 12, 18], rewards: [8, 14, 24] },
+  { kind: 'boss', text: n => L(`Derrota ${n} jefe${n > 1 ? 's' : ''}`, `Defeat ${n} boss${n > 1 ? 'es' : ''}`), goals: [1, 2], rewards: [12, 22] },
+  { kind: 'buys', text: n => L(`Compra ${n} mejoras`, `Buy ${n} upgrades`), goals: [30, 60], rewards: [8, 14] },
+  { kind: 'crits', text: n => L(`Asesta ${n} críticos`, `Land ${n} crits`), goals: [25, 70], rewards: [8, 15] },
+  { kind: 'runs', text: n => L(`Juega ${n} partidas`, `Play ${n} runs`), goals: [2, 4], rewards: [6, 12] },
+  { kind: 'flash', text: n => L(`Usa el Destello ${n} veces`, `Use the Flash ${n} times`), goals: [3, 8], rewards: [6, 12] },
 ];
 
 export const DAILY_BONUS = 25;
@@ -215,3 +217,15 @@ export const ACHIEVEMENTS: AchDef[] = [
   { id: 'z3', name: 'Explorador', desc: 'Desbloquea el Mar Helado', reward: 20, prog: (_s, x) => n(x.zones, 3) },
   { id: 'z5', name: 'Hasta el fondo', desc: 'Desbloquea El Abismo', reward: 60, prog: (_s, x) => n(x.zones, 5) },
 ];
+
+/* ---------- Traducción: los textos de estas listas se leen en el idioma activo ---------- */
+localize(DEFS, ['name']);
+localize(MODS, ['name', 'desc']);
+localize(PERM, ['name', 'desc']);
+localize(BLESSINGS, ['name', 'desc']);
+localize(ZONES, ['name', 'desc', 'boss', 'bossTitle']);
+localize(ACHIEVEMENTS, ['name', 'desc']);
+for (const k of Object.keys(HINTS)) { const es = HINTS[k]; Object.defineProperty(HINTS, k, { get: () => t(es), enumerable: true }); }
+/** Nombre de pestaña / rama en el idioma activo. */
+export const tabName = (i: number) => t(TABS[i]);
+export const branchName = (i: number) => t(BRANCHES[i]);

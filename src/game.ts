@@ -1,5 +1,6 @@
 // Lógica pura de una partida (sin DOM): se puede simular en Node.
 import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing } from './data';
+import { localize, t, L } from './i18n';
 import type { Save } from './save';
 
 export interface Stats {
@@ -14,6 +15,7 @@ export const AIMS: { id: Aim; name: string }[] = [
   { id: 'cerca', name: 'CERCANO' }, { id: 'peligro', name: 'PELIGRO' },
   { id: 'fuerte', name: 'FUERTE' }, { id: 'debil', name: 'DÉBIL' },
 ];
+localize(AIMS, ['name']);
 
 export interface Enemy {
   id: number; x: number; y: number; type: EType; hp: number; max: number; spd: number; r: number;
@@ -257,7 +259,7 @@ export class Game {
     if (id === 'cofre') {
       const p = 40 + this.wave * 14;
       this.gain(p);
-      this.text(0, -95, '+' + p + ' perlas', '#8fe9ff', true, 1.4);
+      this.text(0, -95, '+' + p + L(' perlas', ' pearls'), '#8fe9ff', true, 1.4);
     }
     this.refresh();
     if (id === 'escudo') this.shield = this.st.bar;
@@ -436,7 +438,7 @@ export class Game {
         this.hp = this.st.hp * 0.4;
         for (const e of this.enemies) { e.stun = 2; const dd = Math.hypot(e.x, e.y) || 1; if (e.type !== 'boss') { e.x += (e.x / dd) * 40; e.y += (e.y / dd) * 40; } }
         this.fx.push({ kind: 'nova', x: 0, y: 0, vx: 0, vy: 0, t: 0.9, max: 0.9, c: '#ffb35c' });
-        this.text(0, -100, '¡SEGUNDA LLAMA!', '#ffb35c', true, 1.6);
+        this.text(0, -100, t('¡SEGUNDA LLAMA!'), '#ffb35c', true, 1.6);
         this.emit('revive');
       } else this.gameOver();
     }
@@ -592,7 +594,7 @@ export class Game {
         this.frostT = 16 + Math.random() * 6;
         this.frostWarned = false;
         this.frozen = 4.5;
-        this.text(0, -100, '¡ESCARCHA!', '#bfe8ff', true, 1.2);
+        this.text(0, -100, t('¡ESCARCHA!'), '#bfe8ff', true, 1.2);
         this.emit('frost');
       }
     }
@@ -666,7 +668,7 @@ export class Game {
         const it = Math.min(Math.floor(this.pearls * st.int), (6 + this.wave) * Math.max(1, this.lv.int + (this.perm.interest || 0)));
         if (it > 0) pw += it;
         this.gain(pw);
-        this.text(0, -95, '+' + pw + ' perlas' + (it > 0 ? ' (+' + it + ' interés)' : ''), '#8fe9ff', true, 1.4);
+        this.text(0, -95, '+' + pw + L(' perlas', ' pearls') + (it > 0 ? ' (+' + it + L(' interés)', ' interest)') : ''), '#8fe9ff', true, 1.4);
         this.coral += st.cw * this.zone.reward;
         if (this.bl.marea) this.hp = Math.min(st.hp, this.hp + st.hp * 0.2 * this.bl.marea);
         if (this.wave % 5 === 0) {
@@ -713,7 +715,7 @@ export class Game {
         const dealt = this.damage(e, b.d);
         if (b.kind === 'harpoon') { this.burst(e.x, e.y, '#c9a46a', 5, 70); continue; }
         this.burst(e.x, e.y, b.crit ? '#ffe27a' : '#fff6c8', b.crit ? 6 : 2, 60);
-        if (e.armor && dealt < b.d * 0.5) this.text(e.x, e.y - 12, 'coraza', '#e8c39e', false, 0.5);
+        if (e.armor && dealt < b.d * 0.5) this.text(e.x, e.y - 12, t('coraza'), '#e8c39e', false, 0.5);
         if (this.bl.fuego && !e.dead) { e.burn = Math.max(e.burn, (dealt * 0.4 * this.bl.fuego) / 2); e.burnT = 2; }
         if (b.crit) {
           this.crits++;
@@ -763,7 +765,7 @@ export class Game {
         }
         if (!e.enraged && e.age > BOSS_ENRAGE) {
           e.enraged = true; e.dmg *= 1.6; e.atkRate *= 0.6; e.spd *= 1.5;
-          this.text(e.x, e.y - 40, '¡FURIA!', '#ff5c7a', true, 1.4);
+          this.text(e.x, e.y - 40, t('¡FURIA!'), '#ff5c7a', true, 1.4);
           this.emit('enrage');
         }
       }

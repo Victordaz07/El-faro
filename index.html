@@ -152,9 +152,9 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .prog div{height:100%;background:var(--acc)}
 .list{display:flex;flex-direction:column;gap:8px;width:100%;align-items:center}
 .tiny{font-size:12px;opacity:.7}
-#mute,#mus{position:absolute;top:calc(12px + env(safe-area-inset-top));width:42px;height:42px;padding:0;font-size:17px;border-radius:12px}
-#mute{right:12px}#mus{right:60px}
-#menu>#mus,#menu>#mute{margin:0}
+#mute,#mus,#langbtn{position:absolute;top:calc(12px + env(safe-area-inset-top));width:42px;height:42px;padding:0;font-size:17px;border-radius:12px}
+#mute{right:12px}#mus{right:60px}#langbtn{right:108px;font-family:var(--fd);font-size:14px;letter-spacing:.5px}
+#menu>#mus,#menu>#mute,#menu>#langbtn{margin:0}
 #menu{background:var(--ink);isolation:isolate;justify-content:flex-end;padding-bottom:calc(24px + env(safe-area-inset-bottom))}
 #menu>:first-child{margin-top:0}#menu>:last-child{margin-bottom:0}
 #menu::before{content:'';position:absolute;inset:-4%;z-index:-2;background:var(--art,none) center 16%/cover no-repeat;animation:kb 26s ease-in-out infinite alternate}
@@ -231,6 +231,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   <div class="ov on" id="menu">
     <button class="big sec" id="mus">♪</button>
     <button class="big sec" id="mute">🔊</button>
+    <button class="big sec" id="langbtn" aria-label="Idioma / Language">ES</button>
     <h1>FARO EN LA<br><em>TORMENTA</em></h1>
     <p id="menuinfo"></p>
     <button class="big" id="play">JUGAR</button>

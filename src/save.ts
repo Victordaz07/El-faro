@@ -23,6 +23,8 @@ export interface Save {
   tut: number;
   name: string;
   challenge: { date: string; score: number; wave: number; zone: string } | null;
+  /** Idioma elegido ('es' | 'en'); vacío = el del dispositivo. */
+  lang?: string;
 }
 
 const KEY = 'faro_tormenta_v2';
