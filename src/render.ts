@@ -1,6 +1,22 @@
 // Dibujo en canvas: agua animada, faro 2.5D, criaturas sombreadas, efectos y clima.
 import { Game, Enemy, LAMP_Y, TURRET_POS } from './game';
 import type { Zone } from './data';
+import { Water } from './water';
+
+let water: Water | null | undefined;
+
+/* Calidad automática: si el dispositivo no alcanza ~25 FPS se baja la resolución
+   del mar y de la luz; si aún así no alcanza, se usa el mar 2D. */
+let quality = 2, lastNow = 0, slow = 0, ema = 1 / 60;
+function adaptQuality(now: number) {
+  const dt = now - lastNow;
+  lastNow = now;
+  if (dt <= 0 || dt > 0.5) return;
+  ema = ema * 0.95 + dt * 0.05;
+  slow = ema > 0.04 ? slow + dt : Math.max(0, slow - dt * 0.5);
+  if (slow > 3 && quality > 0) { quality--; slow = 0; ema = 1 / 60; if (quality === 0) water = null; }
+}
+export function setQuality(q: number) { quality = q; if (q === 0) water = null; }
 
 const TAU = Math.PI * 2;
 const SS = 3; // superresolución de sprites
@@ -60,26 +76,36 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
   ctx.globalCompositeOperation = 'source-over';
   const sc = Math.min(vw, vh) / 400;
   const t = g ? g.t : now;
-
-  // Fondo y agua
-  ctx.fillStyle = radial(ctx, vw / 2, vh / 2, Math.max(vw, vh) * 0.8, [[0, zone.sky0], [1, zone.sky1]]);
-  ctx.fillRect(0, 0, vw, vh);
-  const pat = waterPattern(ctx, zone);
-  for (const [sp, a, k] of [[14, 0.9, 1], [-9, 0.6, 1.6]] as const) {
-    ctx.save();
-    ctx.globalAlpha = a;
-    ctx.translate((now * sp) % 256, (now * sp * 0.6) % 256);
-    ctx.scale(k * sc, k * sc * 0.9);
-    ctx.fillStyle = pat;
-    ctx.fillRect(-512, -512, vw / sc + 1024, vh / sc + 1024);
-    ctx.restore();
-  }
+  adaptQuality(now);
 
   let sx = 0, sy = 0;
   if (g && g.shake > 0) { const k = g.shake * 22; sx = (Math.random() - 0.5) * k; sy = (Math.random() - 0.5) * k; }
+  const cam = g ? { x: vw / 2 + sx, y: vh / 2 + sy, s: sc } : { x: vw / 2, y: vh * 0.3, s: sc * 1.45 };
+  const lampA = g ? g.lamp : now * 0.6;
+
+  // Fondo y agua: shader en la GPU, o patrón 2D si no hay WebGL
+  if (water === undefined) water = Water.create();
+  if (water) {
+    const c = water.render(vw, vh, quality === 2 ? Math.min(1, dpr * 0.6) : 0.4, zone, now, cam.x, cam.y, cam.s, lampA, 1, g ? g.lightning : 0);
+    ctx.drawImage(c, 0, 0, vw, vh);
+  } else {
+    ctx.fillStyle = radial(ctx, vw / 2, vh / 2, Math.max(vw, vh) * 0.8, [[0, zone.sky0], [1, zone.sky1]]);
+    ctx.fillRect(0, 0, vw, vh);
+    const pat = waterPattern(ctx, zone);
+    for (const [sp, a, k] of [[14, 0.9, 1], [-9, 0.6, 1.6]] as const) {
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.translate((now * sp) % 256, (now * sp * 0.6) % 256);
+      ctx.scale(k * sc, k * sc * 0.9);
+      ctx.fillStyle = pat;
+      ctx.fillRect(-512, -512, vw / sc + 1024, vh / sc + 1024);
+      ctx.restore();
+    }
+  }
+
   ctx.save();
-  if (g) { ctx.translate(vw / 2 + sx, vh / 2 + sy); ctx.scale(sc, sc); }
-  else { ctx.translate(vw / 2, vh * 0.3); ctx.scale(sc * 1.45, sc * 1.45); }
+  ctx.translate(cam.x, cam.y);
+  ctx.scale(cam.s, cam.s);
 
   // Gotas cayendo al mar
   ctx.strokeStyle = 'rgba(200,225,255,.25)';
@@ -135,7 +161,7 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
     ctx.beginPath(); ctx.ellipse(h.x, h.y, h.r * k, h.r * 0.7 * k, 0, 0, TAU); ctx.fill();
   }
 
-  if (!g) drawBoat(ctx, now);
+  if (!g) { drawBoat(ctx, now); drawGulls(ctx, now); }
   drawIsland(ctx, t);
 
   // Profundidad: lo que está "detrás" del faro se dibuja antes
@@ -150,25 +176,29 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
     ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 1.2;
     for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 6, LAMP_Y + Math.sin(a) * 6); ctx.lineTo(Math.cos(a) * 14, LAMP_Y + Math.sin(a) * 14); ctx.stroke(); }
   }
-  if (g && zone.mech === 'dark') {
-    ctx.fillStyle = radial(ctx, 0, 0, g.range * 1.15, [[0, 'rgba(2,0,10,0)'], [0.55, 'rgba(2,0,10,.25)'], [1, 'rgba(2,0,10,.94)']]);
-    ctx.fillRect(-800, -800, 1600, 1600);
+  if (g) for (const b of g.bolts) {
+    if (b.kind !== 'harpoon') continue;
+    const a = Math.atan2(b.y - b.py, b.x - b.px);
+    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(a);
+    ctx.strokeStyle = '#6b4a2c'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(0, 0); ctx.stroke();
+    ctx.fillStyle = '#d9d2c3'; ctx.beginPath(); ctx.moveTo(5, 0); ctx.lineTo(-2, -3.5); ctx.lineTo(-2, 3.5); ctx.closePath(); ctx.fill();
+    ctx.restore();
   }
+
+  // Iluminación: la escena queda en penumbra salvo donde hay luz
+  ctx.restore();
+  lighting(ctx, g, zone, vw, vh, dpr, cam, lampA, now);
+  ctx.save();
+  ctx.translate(cam.x, cam.y);
+  ctx.scale(cam.s, cam.s);
+  beamDust(ctx, lampA, now);
+  flare(ctx, now);
 
   if (g) {
     // Niebla
     if (g.mod?.id === 'niebla') {
       ctx.fillStyle = radial(ctx, 0, 0, g.range * 1.5, [[0, 'rgba(150,170,190,0)'], [0.6, 'rgba(150,170,190,0)'], [1, 'rgba(120,140,160,.8)']]);
       ctx.fillRect(-600, -600, 1200, 1200);
-    }
-
-    for (const b of g.bolts) {
-      if (b.kind !== 'harpoon') continue;
-      const a = Math.atan2(b.y - b.py, b.x - b.px);
-      ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(a);
-      ctx.strokeStyle = '#6b4a2c'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(0, 0); ctx.stroke();
-      ctx.fillStyle = '#d9d2c3'; ctx.beginPath(); ctx.moveTo(5, 0); ctx.lineTo(-2, -3.5); ctx.lineTo(-2, 3.5); ctx.closePath(); ctx.fill();
-      ctx.restore();
     }
     ctx.globalCompositeOperation = 'lighter';
     // Haz del faro
@@ -448,6 +478,11 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, zone: 
   // sombra en el agua
   ctx.fillStyle = 'rgba(0,10,25,.35)';
   ctx.beginPath(); ctx.ellipse(2, 4, e.r * 1.05, e.r * 0.7, 0, 0, TAU); ctx.fill();
+  if (e.type !== 'boss') {
+    const bob = Math.sin(t * 3 + e.wob);
+    ctx.strokeStyle = `rgba(225,242,255,${0.28 + 0.12 * bob})`; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.ellipse(0, 2, e.r * (1.15 + 0.08 * bob), e.r * (0.62 + 0.05 * bob), 0, 0.15, Math.PI - 0.15); ctx.stroke();
+  }
   if (e.elite) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = radial(ctx, 0, 0, e.r * 2, [[0.4, 'rgba(255,210,122,.45)'], [1, 'rgba(255,210,122,0)']]);
@@ -672,5 +707,122 @@ function drawWeather(ctx: CanvasRenderingContext2D, zone: Zone, vw: number, vh: 
       ctx.fillStyle = hot ? `rgba(255,140,60,${0.5 + 0.4 * Math.sin(now * 5 + i)})` : 'rgba(170,160,150,.45)';
       ctx.fillRect(x, y, hot ? 2 : 1.6, hot ? 2 : 1.6);
     }
+  }
+}
+
+/* ---------- Iluminación ---------- */
+let lm: HTMLCanvasElement | null = null;
+let lctx: CanvasRenderingContext2D | null = null;
+let LM_RES = 0.5;
+const AMBIENT: Record<string, string> = {
+  none: 'rgb(112,126,162)', ice: 'rgb(140,156,186)', lava: 'rgb(140,104,96)', dark: 'rgb(24,22,44)',
+};
+
+function lighting(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, vw: number, vh: number, dpr: number, cam: { x: number; y: number; s: number }, lamp: number, now: number) {
+  LM_RES = quality === 2 ? 0.5 : 0.33;
+  const W = Math.max(1, Math.round(vw * LM_RES)), H = Math.max(1, Math.round(vh * LM_RES));
+  if (!lm) { lm = document.createElement('canvas'); lctx = lm.getContext('2d'); }
+  if (!lctx) return;
+  if (lm.width !== W || lm.height !== H) { lm.width = W; lm.height = H; }
+  const c = lctx;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.globalCompositeOperation = 'source-over';
+  c.fillStyle = g || zone.mech === 'dark' ? AMBIENT[zone.mech] : AMBIENT.none;
+  c.fillRect(0, 0, W, H);
+  c.globalCompositeOperation = 'lighter';
+  c.setTransform(LM_RES * cam.s, 0, 0, LM_RES * cam.s, LM_RES * cam.x, LM_RES * cam.y);
+  const light = (x: number, y: number, r: number, rgb: string, a: number) => {
+    if (a <= 0.01) return;
+    c.fillStyle = radial(c, x, y, r, [[0, `rgba(${rgb},${a})`], [1, `rgba(${rgb},0)`]]);
+    c.fillRect(x - r, y - r, r * 2, r * 2);
+  };
+  const pulse = 0.85 + 0.15 * Math.sin(now * 6);
+  light(0, LAMP_Y, 150, '255,214,150', 0.75 * pulse);
+  light(0, 0, 95, '255,200,150', 0.35);
+  if (g && zone.mech === 'dark') light(0, 0, g.range * 0.95, '90,80,140', 0.35);
+  // cono del haz
+  c.save();
+  c.translate(0, LAMP_Y);
+  c.rotate(lamp);
+  const bg = c.createLinearGradient(0, 0, 330, 0);
+  bg.addColorStop(0, 'rgba(255,232,170,.85)'); bg.addColorStop(1, 'rgba(255,232,170,0)');
+  c.fillStyle = bg;
+  c.beginPath(); c.moveTo(0, -6); c.lineTo(330, -78); c.lineTo(330, 78); c.lineTo(0, 6); c.closePath(); c.fill();
+  c.restore();
+  if (g) {
+    for (const b of g.bolts) if (b.kind === 'light') light(b.x, b.y, b.crit ? 46 : 30, b.crit ? '255,210,90' : '255,240,200', 0.55);
+    for (const s of g.eshots) light(s.x, s.y, 32, '90,240,150', 0.55);
+    for (const h of g.hazards) light(h.x, h.y, h.r * 2.2, '255,110,40', 0.35 + 0.35 * (1 - h.t / 1.3));
+    for (const f of g.fx) {
+      const k = f.t / f.max;
+      if (f.kind === 'boom') light(f.x, f.y, (f.r || 40) * 2.4, '255,150,60', k);
+      else if (f.kind === 'nova') light(0, LAMP_Y * 0.5, 260, '255,240,180', k * 0.9);
+      else if (f.kind === 'strike') light(f.x, f.y, 90, '200,220,255', k);
+      else if (f.kind === 'ring') light(f.x, f.y, 120, '255,200,140', k * 0.4);
+      else if (f.kind === 'slam') light(f.x, f.y, (f.r || 80), '255,220,170', k * 0.25);
+    }
+    for (const e of g.enemies) {
+      if (e.burnT > 0) light(e.x, e.y, e.r * 3, '255,130,40', 0.45);
+      if (e.elite) light(e.x, e.y, e.r * 3, '255,210,120', 0.3);
+      if (e.type === 'jelly' || e.type === 'mini') light(e.x, e.y, e.r * 3, '200,120,255', 0.28);
+    }
+    if (g.lightning > 0) {
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.fillStyle = `rgba(200,215,255,${Math.min(0.9, g.lightning * 2.4)})`;
+      c.fillRect(0, 0, W, H);
+    }
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.drawImage(lm, 0, 0, vw, vh);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/** Polvo y gotas brillando dentro del haz. */
+function beamDust(ctx: CanvasRenderingContext2D, lamp: number, now: number) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.translate(0, LAMP_Y);
+  ctx.rotate(lamp);
+  for (let i = 0; i < 34; i++) {
+    const d = (hash(i) * 280 + now * (10 + hash(i + 3) * 14)) % 280 + 20;
+    const off = (hash(i + 9) - 0.5) * d * 0.42 + Math.sin(now * 1.5 + i) * 3;
+    const a = (1 - d / 300) * (0.35 + 0.35 * Math.sin(now * 3 + i * 1.7));
+    if (a <= 0) continue;
+    ctx.fillStyle = `rgba(255,240,200,${a})`;
+    ctx.fillRect(d, off, 1.6, 1.6);
+  }
+  ctx.restore();
+}
+
+/** Destello de lente en la linterna. */
+function flare(ctx: CanvasRenderingContext2D, now: number) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const p = 0.8 + 0.2 * Math.sin(now * 6);
+  for (const [w, h, a] of [[70, 1.6, 0.55], [26, 1, 0.4]] as const) {
+    const lg = ctx.createLinearGradient(-w, 0, w, 0);
+    lg.addColorStop(0, 'rgba(255,230,170,0)'); lg.addColorStop(0.5, `rgba(255,240,200,${a * p})`); lg.addColorStop(1, 'rgba(255,230,170,0)');
+    ctx.fillStyle = lg;
+    ctx.fillRect(-w, LAMP_Y - h / 2, w * 2, h);
+  }
+  ctx.fillStyle = radial(ctx, 0, LAMP_Y, 9, [[0, `rgba(255,255,240,${0.95 * p})`], [1, 'rgba(255,240,200,0)']]);
+  ctx.beginPath(); ctx.arc(0, LAMP_Y, 9, 0, TAU); ctx.fill();
+  ctx.strokeStyle = `rgba(255,210,150,${0.18 * p})`; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(0, LAMP_Y, 16 + Math.sin(now * 2) * 1.5, 0, TAU); ctx.stroke();
+  ctx.restore();
+}
+
+/** Gaviotas en la pantalla de inicio. */
+function drawGulls(ctx: CanvasRenderingContext2D, now: number) {
+  ctx.strokeStyle = 'rgba(235,240,250,.85)';
+  ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+  for (let i = 0; i < 4; i++) {
+    const sp = 14 + i * 3, x = ((now * sp + i * 170) % 620) - 310, y = -130 + i * 22 + Math.sin(now * 0.8 + i * 2) * 8;
+    const flap = Math.sin(now * (6 + i) + i) * 3.5, s = 0.8 + hash(i) * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x - 7 * s, y - flap * s); ctx.quadraticCurveTo(x - 3 * s, y - 3 * s, x, y);
+    ctx.quadraticCurveTo(x + 3 * s, y - 3 * s, x + 7 * s, y - flap * s);
+    ctx.stroke();
   }
 }

@@ -13,7 +13,8 @@ Idioma de la interfaz y de los comentarios: **español**.
 ## Estructura
 - `src/data.ts` — números de diseño: mejoras, torretas, investigación, bendiciones, zonas, misiones, logros. **El balance se toca aquí y en `scale()` de game.ts.**
 - `src/game.ts` — lógica pura sin DOM (se simula en Node). Todo lo de la partida vive aquí.
-- `src/render.ts` — canvas: agua, faro 2.5D, criaturas (sprites cacheados), efectos, clima por zona.
+- `src/water.ts` — mar con shader WebGL (olas, cáusticas, nubes, espuma, reflejo del haz, hielo, lava). Si no hay WebGL se usa el mar 2D.
+- `src/render.ts` — canvas: faro 2.5D, criaturas (sprites cacheados), efectos, clima por zona e **iluminación** (lightmap a media resolución que se multiplica sobre la escena). Tiene calidad automática (`adaptQuality`).
 - `src/audio.ts` / `src/music.ts` — sonido y música generados con Web Audio (sin archivos con derechos).
 - `src/save.ts` — guardado local, misiones diarias, logros, desafío diario.
 - `src/leaderboard.ts` — ranking: Claude DB (artifact) → Firebase (`src/firebase.config.ts`) → local.
