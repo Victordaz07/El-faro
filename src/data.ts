@@ -17,26 +17,26 @@ export const TABS = ['LUZ', 'MURALLA', 'MAREAS', 'ISLA'];
 export const DEFS: UpDef[] = [
   { id: 'dmg', tab: 0, name: 'Daño', base: 10, at: 1, fmt: v => v.toFixed(1) },
   { id: 'spd', tab: 0, name: 'Cadencia', base: 8, at: 1, fmt: v => v.toFixed(2) + '/s' },
-  { id: 'cc', tab: 0, name: 'Crítico', base: 7, at: 3, fmt: v => (v * 100).toFixed(0) + '%' },
-  { id: 'cf', tab: 0, name: 'Mult. crítico', base: 10, at: 7, fmt: v => '×' + v.toFixed(2) },
-  { id: 'rng', tab: 0, name: 'Alcance', base: 14, at: 4, fmt: v => Math.round(v) + '' },
-  { id: 'chain', tab: 0, name: 'Rebote', base: 16, at: 9, fmt: v => (v * 100).toFixed(0) + '%' },
+  { id: 'cc', tab: 0, name: 'Crítico', base: 7, at: 2, fmt: v => (v * 100).toFixed(0) + '%' },
+  { id: 'cf', tab: 0, name: 'Mult. crítico', base: 10, at: 5, fmt: v => '×' + v.toFixed(2) },
+  { id: 'rng', tab: 0, name: 'Alcance', base: 14, at: 3, fmt: v => Math.round(v) + '' },
+  { id: 'chain', tab: 0, name: 'Rebote', base: 16, at: 7, fmt: v => (v * 100).toFixed(0) + '%' },
   { id: 'tap', tab: 0, name: 'Toque', base: 9, at: 2, fmt: v => v.toFixed(1) },
   { id: 'hp', tab: 1, name: 'Integridad', base: 8, at: 1, fmt: v => Math.round(v) + '' },
   { id: 'rep', tab: 1, name: 'Reparación', base: 9, at: 2, fmt: v => v.toFixed(1) + '/s' },
-  { id: 'arm', tab: 1, name: 'Armadura', base: 10, at: 5, fmt: v => (v * 100).toFixed(0) + '%' },
+  { id: 'arm', tab: 1, name: 'Armadura', base: 10, at: 4, fmt: v => (v * 100).toFixed(0) + '%' },
   { id: 'bar', tab: 1, name: 'Barrera', base: 8, at: 4, fmt: v => Math.round(v) + '' },
-  { id: 'thorn', tab: 1, name: 'Espinas', base: 12, at: 10, fmt: v => (v * 100).toFixed(0) + '%' },
-  { id: 'vamp', tab: 1, name: 'Vida/baja', base: 14, at: 8, fmt: v => '+' + v.toFixed(1) },
+  { id: 'thorn', tab: 1, name: 'Espinas', base: 12, at: 9, fmt: v => (v * 100).toFixed(0) + '%' },
+  { id: 'vamp', tab: 1, name: 'Vida/baja', base: 14, at: 7, fmt: v => '+' + v.toFixed(1) },
   { id: 'pk', tab: 2, name: 'Perlas/baja', base: 10, at: 3, fmt: v => '×' + v.toFixed(2) },
   { id: 'pw', tab: 2, name: 'Perlas/oleada', base: 12, at: 3, fmt: v => '+' + Math.round(v) },
-  { id: 'int', tab: 2, name: 'Interés', base: 15, at: 11, fmt: v => (v * 100).toFixed(0) + '%' },
+  { id: 'int', tab: 2, name: 'Interés', base: 15, at: 10, fmt: v => (v * 100).toFixed(0) + '%' },
   { id: 'ck', tab: 2, name: 'Coral/baja', base: 12, at: 6, fmt: v => '×' + v.toFixed(2) },
-  { id: 'cw', tab: 2, name: 'Coral/oleada', base: 14, at: 9, fmt: v => '+' + v.toFixed(1) },
+  { id: 'cw', tab: 2, name: 'Coral/oleada', base: 14, at: 8, fmt: v => '+' + v.toFixed(1) },
   { id: 'fcd', tab: 2, name: 'Destello', base: 12, at: 5, fmt: v => Math.round(v) + 's' },
   { id: 'tA', tab: 3, name: 'Arponero', base: 60, at: 6, fmt: v => (v ? Math.round(v) + L(' daño', ' dmg') : L('Construir', 'Build')) },
-  { id: 'tR', tab: 3, name: 'Lanzarredes', base: 70, at: 9, fmt: v => (v ? Math.round(v) + L(' daño', ' dmg') : L('Construir', 'Build')) },
-  { id: 'tN', tab: 3, name: 'Ancla', base: 90, at: 12, fmt: v => (v ? Math.round(v) + L(' daño', ' dmg') : L('Construir', 'Build')) },
+  { id: 'tR', tab: 3, name: 'Lanzarredes', base: 70, at: 8, fmt: v => (v ? Math.round(v) + L(' daño', ' dmg') : L('Construir', 'Build')) },
+  { id: 'tN', tab: 3, name: 'Ancla', base: 90, at: 11, fmt: v => (v ? Math.round(v) + L(' daño', ' dmg') : L('Construir', 'Build')) },
 ];
 
 /** Descripción corta que se muestra al mantener presionada la mejora. */
@@ -118,6 +118,21 @@ export const BLESSINGS: Blessing[] = [
   { id: 'vampiro', name: 'Sangre de kraken', desc: '+1.5 de vida por cada baja', icon: '🩸', max: 3 },
   { id: 'furia', name: 'Furia del farero', desc: '+20% de cadencia', icon: '🔥', max: 3 },
 ];
+
+/* ---------- Campaña: 10 niveles por mundo ---------- */
+export const LEVELS_PER_WORLD = 10;
+/** Oleadas de cada nivel (el 10 termina con el jefe del mundo). */
+export const LEVEL_WAVES = [5, 6, 6, 7, 7, 8, 8, 9, 9, 10];
+/** Oleada de dificultad con la que empieza cada nivel (la dificultad sigue la de una partida larga). */
+export const LEVEL_START = [1, 2, 4, 6, 8, 10, 12, 14, 17, 20];
+/** Perlas que junta un buen jugador hasta el inicio de cada oleada (medido con el bot de la simulación). */
+const PEARL_CURVE = [0, 0, 16, 37, 62, 106, 160, 253, 383, 566, 743, 960, 1177, 1570, 1872, 2308, 2949, 3542, 4414, 5254, 6285, 6985];
+/** Perlas iniciales de un nivel: una parte de lo que habrías juntado hasta ahí, para no empezar de cero. */
+export const levelPearls = (n: number) => Math.round(1.0 * (PEARL_CURVE[LEVEL_START[n - 1]] || 0));
+/** Coral por superar un nivel por primera vez (índice global 1-50). */
+export const levelClearCoral = (g: number) => 8 + 4 * g;
+/** Estrellas según la vida que quede al ganar. */
+export const starsFor = (hpRatio: number) => (hpRatio >= 0.7 ? 3 : hpRatio >= 0.35 ? 2 : 1);
 
 /* ---------- Progresión del farero, colección y premios diarios ---------- */
 /** Experiencia que pide el nivel lv para pasar al siguiente. */

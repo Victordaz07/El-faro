@@ -10,6 +10,7 @@
     "sim": "esbuild tests/sim.ts --bundle --platform=node --outfile=tests/.sim.cjs --log-level=warning && node tests/.sim.cjs",
     "android:sync": "npm run build && npx cap sync android",
     "android:open": "npx cap open android",
+    "sim:camp": "esbuild tests/campaign.ts --bundle --platform=node --outfile=tests/.camp.cjs --log-level=warning && node tests/.camp.cjs",
     "test": "esbuild tests/pearls.ts --bundle --platform=node --outfile=tests/.pearls.cjs --log-level=warning && node tests/.pearls.cjs && esbuild tests/i18n.ts --bundle --platform=node --outfile=tests/.i18n.cjs --log-level=warning && node tests/.i18n.cjs"
   },
   "devDependencies": {

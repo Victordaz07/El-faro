@@ -1,5 +1,5 @@
 // Lógica pura de una partida (sin DOM): se puede simular en Node.
-import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing, ZONES, CREATURES } from './data';
+import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing, ZONES, CREATURES, LEVEL_WAVES, LEVEL_START, levelPearls } from './data';
 import { localize, t, L } from './i18n';
 import type { Save } from './save';
 
@@ -57,7 +57,7 @@ export interface Txt { x: number; y: number; s: string; c: string; t: number; ma
 export interface Hazard { x: number; y: number; t: number; r: number; }
 export type GEvent = 'shot' | 'crit' | 'kill' | 'hurt' | 'wave' | 'boss' | 'bossdown' | 'over' | 'flash' | 'buy'
   | 'thunder' | 'boom' | 'enrage' | 'elite' | 'cards' | 'revive' | 'frostwarn' | 'frost' | 'erupt' | 'harpoon' | 'net' | 'slam'
-  | 'zap' | 'charge' | 'bite' | 'combo' | 'reveal' | 'tap' | 'tapmiss' | 'heal' | 'crack' | 'fire' | 'poison' | 'newtype';
+  | 'zap' | 'charge' | 'bite' | 'combo' | 'reveal' | 'win' | 'tap' | 'tapmiss' | 'heal' | 'crack' | 'fire' | 'poison' | 'newtype';
 
 interface Proto { hp: number; spd: number; r: number; dmg: number; rew: number; stop: number; atk: number; armor: number; }
 const P: Record<EType, Proto> = {
@@ -123,7 +123,9 @@ export function mulberry(seed: number) {
   };
 }
 
-export interface GameOpts { seed?: number; daily?: boolean; }
+/** Nivel de la campaña: mundo (0-4) y número (1-10). Sin nivel = modo infinito. */
+export interface GameOpts { seed?: number; daily?: boolean; level?: { zi: number; n: number }; }
+export interface LevelInfo { zi: number; n: number; start: number; waves: number; boss: boolean; g: number; }
 
 export class Game {
   lv: Record<string, number> = {};
@@ -183,6 +185,10 @@ export class Game {
   pearlsStart: number;
   seed: number;
   daily: boolean;
+  /** Nivel de la campaña que se juega (null = modo infinito). */
+  level: LevelInfo | null = null;
+  /** Se ganó el nivel. */
+  won = false;
   private nid = 1;
   private wr: () => number = Math.random; // azar de la oleada (sembrado)
 
@@ -203,6 +209,13 @@ export class Game {
     this.st = this.stats();
     this.hp = this.st.hp;
     this.pearls = 20 + 25 * (this.perm.start || 0);
+    if (opts.level) {
+      const { zi, n } = opts.level;
+      this.level = { zi, n, start: LEVEL_START[n - 1], waves: LEVEL_WAVES[n - 1], boss: n === LEVEL_WAVES.length, g: zi * 10 + n };
+      this.wave = this.level.start - 1;
+      this.pearls += levelPearls(n);
+      this.pauseT = this.pearls > 60 ? 6 : 1.2; // tiempo para comprar antes de la primera oleada
+    }
     this.pearlsStart = this.pearls;
   }
 
@@ -260,8 +273,15 @@ export class Game {
   /** La mejora ya apareció en el panel (por oleada, o porque ya tiene nivel). */
   isOpen(id: string) {
     const d = DEFS.find(x => x.id === id);
-    return !!d && (Math.max(1, this.wave) >= d.at || this.lv[id] > 0);
+    if (!d) return false;
+    // En la campaña aparecen más mejoras a medida que se pasan niveles; en el infinito están todas
+    return !this.level || d.at <= this.level.g || this.lv[id] > 0;
   }
+  /** Oleada dentro del nivel (1..waves) o la oleada normal en el modo infinito. */
+  get shownWave() { return this.level ? Math.max(1, this.wave - this.level.start + 1) : this.wave; }
+  get lastWave() { return this.level ? this.level.start + this.level.waves - 1 : Infinity; }
+  /** Empieza ya la primera oleada (botón LISTO en la preparación). */
+  skipPrep() { if (this.state === 'pause' && this.pauseT > 0.3) this.pauseT = 0.3; }
 
   buy(id: string) {
     if (this.over || this.state === 'cards' || !this.isOpen(id)) return false;
@@ -402,7 +422,7 @@ export class Game {
 
   /* ---------- Oleadas ---------- */
   private startWave() {
-    const w = this.wave, boss = w % 10 === 0;
+    const w = this.wave, boss = this.level ? this.level.boss && w === this.lastWave : w % 10 === 0;
     this.wr = mulberry(this.seed + w * 7919);
     const R = this.wr;
     this.mod = null;
@@ -424,7 +444,6 @@ export class Game {
     this.state = 'spawn';
     this.shield = this.st.bar;
     this.emit(boss ? 'boss' : 'wave', w);
-    if (w > 1 && DEFS.some(d => d.at === w && !this.lv[d.id])) this.emit('reveal', w);
   }
 
   get zoneIndex() { return Math.max(0, ZONES.findIndex(z => z.id === this.zone.id)); }
@@ -446,6 +465,8 @@ export class Game {
     const w = this.wave;
     let hs = Math.pow(1.075, w - 1) * Math.pow(1.065, Math.max(0, w - 10)) * Math.pow(1.03, Math.max(0, w - 20)) * this.zone.hp;
     if (this.mod?.id === 'caparazon') hs *= 1.35;
+    // Campaña: tramos cortos sin la pausa de los jefes cada 10 oleadas, un poco más suaves
+    if (this.level) hs *= 0.8;
     return { hs, ds: Math.pow(1.05, w - 1) * this.zone.dmg };
   }
 
@@ -631,6 +652,13 @@ export class Game {
     this.hp = Math.max(0, this.hp);
     this.earned = Math.floor(this.coral + this.wave * 1.5 * this.zone.reward);
     this.emit('over');
+  }
+
+  private winLevel() {
+    this.won = true;
+    this.over = true;
+    this.earned = Math.floor(this.coral + this.shownWave * 1.5 * this.zone.reward);
+    this.emit('win');
   }
 
   get score() { return this.wave * 1000 + this.kills; }
@@ -838,7 +866,8 @@ export class Game {
         this.text(0, -95, '+' + pw + L(' perlas', ' pearls') + (it > 0 ? ' (+' + it + L(' interés)', ' interest)') : ''), '#8fe9ff', true, 1.4);
         this.coral += st.cw * this.zone.reward;
         if (this.bl.marea) this.hp = Math.min(st.hp, this.hp + st.hp * 0.2 * this.bl.marea);
-        if (this.wave % 5 === 0) {
+        if (this.level && this.wave >= this.lastWave) { this.winLevel(); return; }
+        if ((this.level ? this.shownWave : this.wave) % 5 === 0) {
           this.dealCards();
           if (this.cardOpts.length) { this.state = 'cards'; this.emit('cards'); return; }
         }

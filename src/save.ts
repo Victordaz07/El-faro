@@ -1,5 +1,5 @@
 // Guardado local, misiones diarias y desbloqueo de zonas.
-import { MPOOL, MKind, ZONES, UNLOCK_WAVE, ACHIEVEMENTS, PERM, LifeStats } from './data';
+import { MPOOL, MKind, ZONES, UNLOCK_WAVE, ACHIEVEMENTS, PERM, LifeStats, LEVELS_PER_WORLD } from './data';
 
 export interface Mission {
   kind: MKind;
@@ -35,6 +35,8 @@ export interface Save {
   streak?: { day: number; last: string };
   /** Cofre del faro: momento (ms) desde que junta coral. */
   chestFrom?: number;
+  /** Campaña: estrellas por nivel ('mundo-nivel', ej. '0-3'). */
+  camp?: Record<string, number>;
 }
 
 const KEY = 'faro_tormenta_v2';
@@ -99,6 +101,11 @@ export function load(): Save {
   } catch { /* sin almacenamiento: se juega igual */ }
   ensureDaily(s);
   if (!s.chestFrom) s.chestFrom = Date.now();
+  if (!s.camp) {
+    // Jugadores que ya tenían récords: los mundos donde llegaron a la oleada 15 cuentan como superados
+    s.camp = {};
+    ZONES.forEach((z, i) => { if ((s.zoneBest[z.id] || 0) >= UNLOCK_WAVE) for (let n = 1; n <= LEVELS_PER_WORLD; n++) s.camp![i + '-' + n] = 1; });
+  }
   return s;
 }
 
@@ -124,8 +131,25 @@ export const readyMissions = (s: Save) =>
   (!s.daily.bonus && s.daily.list.every(m => m.claimed) ? 1 : 0);
 
 export function zoneUnlocked(s: Save, i: number) {
-  return i === 0 || (s.zoneBest[ZONES[i - 1].id] || 0) >= UNLOCK_WAVE;
+  return i === 0 || (s.zoneBest[ZONES[i - 1].id] || 0) >= UNLOCK_WAVE || levelUnlocked(s, i, 1);
 }
+
+/* ---------- Campaña ---------- */
+export const starsOf = (s: Save, zi: number, n: number) => s.camp?.[zi + '-' + n] || 0;
+/** Un nivel se abre al superar el anterior; el nivel 1 de un mundo, al superar el 10 del anterior. */
+export function levelUnlocked(s: Save, zi: number, n: number): boolean {
+  if (zi === 0 && n === 1) return true;
+  return n === 1 ? starsOf(s, zi - 1, LEVELS_PER_WORLD) > 0 : starsOf(s, zi, n - 1) > 0;
+}
+/** Siguiente nivel por jugar: el primero abierto sin estrellas (o el último si ya están todos). */
+export function nextLevel(s: Save) {
+  for (let zi = 0; zi < ZONES.length; zi++) for (let n = 1; n <= LEVELS_PER_WORLD; n++)
+    if (levelUnlocked(s, zi, n) && !starsOf(s, zi, n)) return { zi, n };
+  return { zi: ZONES.length - 1, n: LEVELS_PER_WORLD };
+}
+/** El modo infinito se abre al superar el primer mundo. */
+export const endlessUnlocked = (s: Save) => starsOf(s, 0, LEVELS_PER_WORLD) > 0;
+export const totalStars = (s: Save) => Object.values(s.camp || {}).reduce((a, b) => a + b, 0);
 
 export function freshStats(): LifeStats {
   return { kills: 0, bosses: 0, elites: 0, puffers: 0, crits: 0, runs: 0, cards: 0, time: 0, bestWave: 0, flashes: 0, dailyDone: 0, noScratch10: false, allTurrets: false };

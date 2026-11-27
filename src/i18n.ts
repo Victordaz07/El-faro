@@ -123,6 +123,9 @@ const EN: Record<string, string> = {
   'Luz cálida': 'Warm light', 'Luz turquesa': 'Turquoise light', 'Luz de coral': 'Coral light', 'Luz de bengala': 'Flare light',
   'Luz violeta': 'Violet light', 'Luz helada': 'Ice light',
   'NUEVA MEJORA': 'NEW UPGRADE', 'NUEVAS MEJORAS': 'NEW UPGRADES',
+  NIVEL: 'LEVEL', '¡JEFE!': 'BOSS!', '¡NIVEL SUPERADO!': 'LEVEL CLEARED!', REPETIR: 'REPLAY', REINTENTAR: 'RETRY',
+  'SIGUIENTE NIVEL': 'NEXT LEVEL', NIVELES: 'LEVELS', INFINITO: 'ENDLESS', 'MODO INFINITO': 'ENDLESS MODE', '¡LISTO!': 'READY!',
+  'Oleadas sin fin, con todas las mejoras desde el principio. Llega lo más lejos que puedas.': 'Endless waves, with every upgrade from the start. Get as far as you can.',
   /* ----- Objetivo ----- */
   CERCANO: 'NEAREST', PELIGRO: 'DANGER', FUERTE: 'STRONG', 'DÉBIL': 'WEAK',
   /* ----- Textos flotantes ----- */

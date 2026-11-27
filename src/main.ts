@@ -1,8 +1,9 @@
 // Controlador de interfaz: pantallas, panel de mejoras, HUD, tutorial y bucle principal.
-import { levelOf, runXp, levelCoral, SKINS, BEAMS, STREAK, CHEST_HOURS, CREATURES, DEFS, tabName, branchName, BLESSINGS, PERM, BRANCHES, TABS, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone } from './data';
+import { LEVELS_PER_WORLD, LEVEL_WAVES, levelClearCoral, starsFor, levelOf, runXp, levelCoral, SKINS, BEAMS, STREAK, CHEST_HOURS, CREATURES, DEFS, tabName, branchName, BLESSINGS, PERM, BRANCHES, TABS, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone } from './data';
 import {
   load, persist, ensureDaily, track, zoneUnlocked, readyMissions, checkAchievements,
   researchTotal, zonesOpen, challengeZone, challengeSeed, today, chestState,
+  starsOf, levelUnlocked, nextLevel, endlessUnlocked, totalStars,
 } from './save';
 import { Game, GEvent, AIMS, TAP_MAX } from './game';
 import '@fontsource/lilita-one/latin-400.css';
@@ -96,7 +97,8 @@ function onEvent(e: GEvent, d?: number) {
     case 'kill': sfx.kill(); break;
     case 'hurt': sfx.hurt(); vibrate(15); break;
     case 'wave': if (g && !g.daily && d && recordFrom > 0 && d === recordFrom + 1) { setTimeout(() => { banner(t('¡NUEVO RÉCORD!')); sfx.ach(); vibrate(60); }, 1300); }
-      banner(t('OLEADA') + ' ' + d + (g?.mod ? '\n' + g.mod.name : '')); sfx.wave(); tutorialFor(d || 0); break;
+      banner(t('OLEADA') + ' ' + (g?.level ? g.shownWave + '/' + g.level.waves : d) + (g?.mod ? '\n' + g.mod.name : '')); sfx.wave(); tutorialFor(d || 0); break;
+    case 'win': endRun(); break;
     case 'boss': sfx.boss(); vibrate(150); break;
     case 'bossdown': banner(t('¡JEFE DERROTADO!')); sfx.bossdown(); vibrate(80); break;
     case 'flash': sfx.flash(); vibrate(40); break;
@@ -141,8 +143,13 @@ function onEvent(e: GEvent, d?: number) {
 }
 
 /* ---------- Partida ---------- */
-function start(daily = false) {
+/** Nivel de la campaña que se juega (null = infinito o desafío). */
+let runLevel: { zi: number; n: number } | null = null;
+const lvName = (zi: number, n: number) => `${zi + 1}-${n}`;
+
+function start(daily = false, level: { zi: number; n: number } | null = null) {
   stopHold();
+  runLevel = daily ? null : level;
   audio();
   hideAll();
   paused = false; $('pause').textContent = 'II';
@@ -156,6 +163,17 @@ function start(daily = false) {
     persist(save);
     g = new Game(save, runZone, onEvent, spawnR, { daily: true, seed: challengeSeed() });
     recordFrom = 0;
+  } else if (level) {
+    recordFrom = 0;
+    runZone = ZONES[level.zi];
+    g = new Game(save, runZone, onEvent, spawnR, { level });
+    // Mejoras nuevas que trae este nivel
+    const ups = DEFS.filter(x => x.at === g!.level!.g && g!.level!.g > 1);
+    ups.forEach(x => freshUps.add(x.id));
+    setTimeout(() => {
+      banner(t('NIVEL') + ' ' + lvName(level.zi, level.n) + '\n' + (level.n === LEVELS_PER_WORLD ? t('¡JEFE!') : L(`${g?.level?.waves} oleadas`, `${g?.level?.waves} waves`)));
+      if (ups.length) { toast('🆕 ' + (ups.length > 1 ? t('NUEVAS MEJORAS') : t('NUEVA MEJORA')), ups.map(x => x.name).join(' · ')); sfx.card(); }
+    }, 300);
   } else {
     recordFrom = save.zoneBest[zone().id] || 0;
     runZone = zone();
@@ -177,15 +195,30 @@ function endRun() {
   if (!g) return;
   const z = runZone, zi = ZONES.indexOf(z);
   const nextWasOpen = zi + 1 < ZONES.length && zoneUnlocked(save, zi + 1);
-  const prevBest = g.daily ? 0 : save.zoneBest[z.id] || 0;
+  const endless = !g.daily && !g.level;
+  const prevBest = endless ? save.zoneBest[z.id] || 0 : 0;
   const S = save.stats;
   save.coral += g.earned;
-  if (!g.daily) save.zoneBest[z.id] = Math.max(prevBest, g.wave);
+  if (endless) save.zoneBest[z.id] = Math.max(prevBest, g.wave);
+  // Campaña: estrellas y coral por superar el nivel
+  let lvBonus = 0, stars = 0, prevStars = 0, firstClear = false;
+  const endlessWasOpen = endlessUnlocked(save);
+  if (g.level) {
+    const key = g.level.zi + '-' + g.level.n;
+    prevStars = save.camp![key] || 0;
+    if (g.won) {
+      stars = starsFor(Math.max(0, g.hp) / g.st.hp);
+      firstClear = !prevStars;
+      if (firstClear) lvBonus += Math.round(levelClearCoral(g.level.g) * z.reward);
+      if (stars > prevStars) { lvBonus += 5 * (stars - prevStars); save.camp![key] = stars; }
+      save.coral += lvBonus;
+    }
+  }
   save.runs++;
   S.runs++; S.kills += g.kills; S.bosses += g.bosses; S.elites += g.elites; S.puffers += g.puffers;
   S.crits += g.crits; S.cards += g.cards; S.flashes += g.flashes; S.time += g.t;
-  S.bestWave = Math.max(S.bestWave, g.daily ? 0 : g.wave);
-  if (g.wave > 10 && g.hpLost10 === 0) S.noScratch10 = true;
+  S.bestWave = Math.max(S.bestWave, endless ? g.wave : 0);
+  if (endless && g.wave > 10 && g.hpLost10 === 0) S.noScratch10 = true;
   if (g.allTurrets) S.allTurrets = true;
   track(save, 'kills', g.kills); track(save, 'boss', g.bosses); track(save, 'buys', g.buys);
   track(save, 'crits', g.crits); track(save, 'flash', g.flashes); track(save, 'runs', 1);
@@ -195,14 +228,33 @@ function endRun() {
     S.dailyDone++;
   }
   persist(save);
-  sfx.over();
+  if (g.won) { sfx.bossdown(); vibrate(80); } else sfx.over();
   setMusicLevel(0);
   $('flash').style.display = 'none';
   $('aim').style.display = 'none';
   $('taps').style.display = 'none';
   $('frostw').style.display = 'none';
   let html: string;
-  if (g.daily) {
+  $('next').style.display = 'none';
+  $('again').textContent = t('OTRA VEZ');
+  if (g.level) {
+    const nm = t('NIVEL') + ' ' + lvName(g.level.zi, g.level.n);
+    if (g.won) {
+      $('overtitle').textContent = t('¡NIVEL SUPERADO!');
+      html = `<div class="stars">${'★'.repeat(stars)}<i>${'★'.repeat(3 - stars)}</i></div>${z.name} · ${nm}` +
+        (lvBonus ? L(`<br>Premio del nivel: <b style="color:#ffb35c">+${lvBonus} ◆</b>`, `<br>Level reward: <b style="color:#ffb35c">+${lvBonus} ◆</b>`) : '') +
+        (stars < 3 ? L('<br><small>Termina con más vida para ganar más estrellas</small>', '<br><small>Finish with more health to earn more stars</small>') : '');
+      const nx = nextLevel(save);
+      if (levelUnlocked(save, nx.zi, nx.n) && !(nx.zi === g.level.zi && nx.n === g.level.n)) { $('next').style.display = ''; }
+      $('again').textContent = t('REPETIR');
+    } else {
+      $('overtitle').textContent = t('EL FARO SE APAGÓ');
+      html = `${z.name} · ${nm} · ` + L(`oleada <b>${g.shownWave}/${g.level.waves}</b>`, `wave <b>${g.shownWave}/${g.level.waves}</b>`) +
+        L('<br><b style="color:#7ff0e0">Usa tu coral en INVESTIGAR para volver más fuerte</b>', '<br><b style="color:#7ff0e0">Spend your coral in RESEARCH to come back stronger</b>');
+      $('again').textContent = t('REINTENTAR');
+    }
+    if (!endlessWasOpen && endlessUnlocked(save)) html += L('<br><b style="color:#ffe27a">♾️ ¡Desbloqueaste el MODO INFINITO!</b>', '<br><b style="color:#ffe27a">♾️ You unlocked ENDLESS MODE!</b>');
+  } else if (g.daily) {
     $('overtitle').textContent = t('DESAFÍO TERMINADO');
     html = L(`${z.name} · oleada <b>${g.wave}</b> · ${g.kills} criaturas<br>Puntuación: <b style="color:#ffd166">${num(g.score)}</b><br>Mañana hay un desafío nuevo.`,
       `${z.name} · wave <b>${g.wave}</b> · ${g.kills} creatures<br>Score: <b style="color:#ffd166">${num(g.score)}</b><br>A new challenge comes tomorrow.`);
@@ -211,7 +263,7 @@ function endRun() {
     html = L(`${z.name} · llegaste a la <b>oleada ${g.wave}</b>`, `${z.name} · you reached <b>wave ${g.wave}</b>`) +
       (g.wave > prevBest ? L(' <b style="color:#35e0b0">¡nuevo récord!</b>', ' <b style="color:#35e0b0">new best!</b>') : L(`<br>Récord: ${prevBest}`, `<br>Best: ${prevBest}`));
   }
-  if (!g.daily && g.wave <= prevBest && prevBest - g.wave <= 3)
+  if (endless && g.wave <= prevBest && prevBest - g.wave <= 3)
     html += L(`<br><b style="color:#7ff0e0">¡Te faltaron ${prevBest - g.wave + 1} oleada${prevBest - g.wave ? 's' : ''} para tu récord!</b>`, `<br><b style="color:#7ff0e0">Just ${prevBest - g.wave + 1} more wave${prevBest - g.wave ? 's' : ''} to beat your best!</b>`);
   html += L(`<br>${g.kills} criaturas · ${g.bosses} jefes · ${g.elites} élites · combo máximo ×${g.bestCombo}` +
     `<br>Coral ganado: <b style="color:#ffb35c">+<span id="overcoral">0</span> ◆</b>`,
@@ -598,8 +650,15 @@ function updatePanel() {
 
 function updateHud() {
   if (!g) return;
-  $('wave').firstChild!.nodeValue = t('OLEADA') + ' ' + Math.max(1, g.wave);
-  $('best').textContent = (g.daily ? L('⭐ Desafío · ', '⭐ Challenge · ') : '') + runZone.name + (g.daily ? ' · ' + num(g.score) + ' pts' : L(' · Récord ', ' · Best ') + best());
+  if (g.level) {
+    $('wave').firstChild!.nodeValue = t('OLEADA') + ' ' + g.shownWave + '/' + g.level.waves;
+    $('best').textContent = runZone.name + ' · ' + t('NIVEL') + ' ' + lvName(g.level.zi, g.level.n);
+  } else {
+    $('wave').firstChild!.nodeValue = t('OLEADA') + ' ' + Math.max(1, g.wave);
+    $('best').textContent = (g.daily ? L('⭐ Desafío · ', '⭐ Challenge · ') : '') + runZone.name + (g.daily ? ' · ' + num(g.score) + ' pts' : L(' · Récord ', ' · Best ') + best());
+  }
+  // Preparación antes de la primera oleada de un nivel: comprar con calma y tocar LISTO
+  $('ready').classList.toggle('on', !!g.level && g.state === 'pause' && g.wave < g.level.start && g.pauseT > 0.4);
   $('pearls').textContent = String(g.pearls);
   tapDots.forEach((d, i) => d.classList.toggle('off', i >= Math.floor(g!.taps)));
   const cb = $('combo');
@@ -629,7 +688,7 @@ function updateHud() {
 }
 
 /* ---------- Pantallas ---------- */
-const OVS = ['menu', 'over', 'shop', 'map', 'missions', 'pauseov', 'cards', 'achs', 'rank', 'coll', 'dailyrw'];
+const OVS = ['menu', 'over', 'shop', 'map', 'missions', 'pauseov', 'cards', 'achs', 'rank', 'coll', 'dailyrw', 'endless'];
 let backTo = 'menu';
 function hideAll() { OVS.forEach(i => $(i).classList.remove('on')); }
 function open(id: string, from = 'menu') { audio(); sfx.click(); hideAll(); backTo = from; $(id).classList.add('on'); }
@@ -640,13 +699,18 @@ function showMenu() {
   setMusicLevel(0);
   for (const id of ['flash', 'aim', 'taps', 'frostw', 'mod', 'boss']) $(id).style.display = 'none';
   const z = zone();
-  $('menuinfo').innerHTML = `${L('Zona', 'Zone')}: <b>${z.name}</b> · ${L('Récord', 'Best')}: <b>${save.zoneBest[z.id] || 0}</b> · Coral: <b style="color:#ffb35c">${Math.floor(save.coral)} ◆</b>`;
+  void z;
+  const nl = nextLevel(save);
+  $('menuinfo').innerHTML = `${ZONES[nl.zi].name} · <b>${t('NIVEL')} ${lvName(nl.zi, nl.n)}</b> · <span style="color:#ffd166">★ ${totalStars(save)}</span> · Coral: <b style="color:#ffb35c">${Math.floor(save.coral)} ◆</b>`;
+  $('play').textContent = t('JUGAR') + ' · ' + t('NIVEL') + ' ' + lvName(nl.zi, nl.n);
+  $('endbtn').classList.toggle('lock', !endlessUnlocked(save));
+  $('endbtn').textContent = (endlessUnlocked(save) ? '' : '🔒 ') + t('INFINITO');
   $('mute').textContent = save.muted ? '🔇' : '🔊';
     $('mus').style.opacity = save.music ? '1' : '.5';
   const cz = challengeZone(), done = save.challenge?.date === today();
   const dbtn = $<HTMLButtonElement>('daily');
-  dbtn.disabled = done;
-  $('dailyinfo').textContent = done
+  dbtn.disabled = done || !endlessUnlocked(save);
+  $('dailyinfo').textContent = !endlessUnlocked(save) ? L('Se desbloquea al superar el nivel 1-10', 'Unlocks after beating level 1-10') : done
     ? L(`Hoy: oleada ${save.challenge!.wave} · ${num(save.challenge!.score)} pts · vuelve mañana`, `Today: wave ${save.challenge!.wave} · ${num(save.challenge!.score)} pts · come back tomorrow`)
     : L(`${cz.name} · un solo intento · igual para todos`, `${cz.name} · one try · same for everyone`);
   updateBadges();
@@ -692,16 +756,45 @@ function buildShop() {
   }
 }
 
+/** Mapa de la campaña: pestañas por mundo y 10 niveles con sus estrellas. */
+let mapWorld = -1;
 function buildMap() {
+  if (mapWorld < 0) mapWorld = nextLevel(save).zi;
+  $('mapinfo').innerHTML = L(`Supera cada nivel para abrir el siguiente. Estrellas: <b style="color:#ffd166">★ ${totalStars(save)} / ${ZONES.length * LEVELS_PER_WORLD * 3}</b>`, `Beat each level to open the next. Stars: <b style="color:#ffd166">★ ${totalStars(save)} / ${ZONES.length * LEVELS_PER_WORLD * 3}</b>`);
+  const tabs = $('wtabs'); tabs.innerHTML = '';
+  ZONES.forEach((z, i) => {
+    const b = document.createElement('button');
+    const open = levelUnlocked(save, i, 1);
+    b.textContent = open ? String(i + 1) : '🔒';
+    b.className = i === mapWorld ? 'on' : '';
+    b.addEventListener('click', () => { if (!open) { sfx.click(); return; } mapWorld = i; sfx.click(); buildMap(); });
+    tabs.appendChild(b);
+  });
+  const z = ZONES[mapWorld];
+  $('worlddesc').innerHTML = `<b>${z.name}</b> · ${z.desc}`;
+  const grid = $('lvgrid'); grid.innerHTML = '';
+  const cur = nextLevel(save);
+  for (let n = 1; n <= LEVELS_PER_WORLD; n++) {
+    const open = levelUnlocked(save, mapWorld, n), st = starsOf(save, mapWorld, n);
+    const b = document.createElement('button');
+    b.className = (open ? '' : 'lock') + (n === LEVELS_PER_WORLD ? ' boss' : '') + (cur.zi === mapWorld && cur.n === n && !st ? ' cur' : '');
+    b.innerHTML = (open ? (n === LEVELS_PER_WORLD ? '👑' : String(n)) : '🔒') + `<small>${st ? '★'.repeat(st) : open ? LEVEL_WAVES[n - 1] + (lang === 'en' ? ' w' : ' ol') : ''}</small>`;
+    b.addEventListener('click', () => { if (!open) { sfx.click(); return; } start(false, { zi: mapWorld, n }); });
+    grid.appendChild(b);
+  }
+}
+
+/** Modo infinito: elegir mundo y jugar oleadas sin fin. */
+function buildEndless() {
   const list = $('maplist'); list.innerHTML = '';
   ZONES.forEach((z, i) => {
-    const op = zoneUnlocked(save, i), sel = z.id === save.zone;
+    const op = zoneUnlocked(save, i);
     const row = document.createElement('div');
-    row.className = 'card' + (sel ? ' sel' : '') + (op ? '' : ' lock');
-    row.innerHTML = `<div><b>${op ? '' : '🔒 '}${z.name}</b><span>${op ? z.desc + L(' · Récord ', ' · Best ') + (save.zoneBest[z.id] || 0) : L('Llega a la oleada ' + UNLOCK_WAVE + ' en ' + ZONES[i - 1].name, 'Reach wave ' + UNLOCK_WAVE + ' in ' + ZONES[i - 1].name)}</span></div>`;
+    row.className = 'card' + (op ? '' : ' lock');
+    row.innerHTML = `<div><b>${op ? '' : '🔒 '}${z.name}</b><span>${op ? z.desc + L(' · Récord ', ' · Best ') + (save.zoneBest[z.id] || 0) : L('Llega a este mundo en la campaña', 'Reach this world in the campaign')}</span></div>`;
     const b = document.createElement('button'); b.className = 'g';
-    b.textContent = sel ? 'ELEGIDA' : 'ELEGIR'; b.disabled = !op || sel;
-    b.addEventListener('click', () => { save.zone = z.id; persist(save); sfx.click(); buildMap(); });
+    b.textContent = t('JUGAR'); b.disabled = !op;
+    b.addEventListener('click', () => { save.zone = z.id; persist(save); start(false); });
     row.appendChild(b); list.appendChild(row);
   });
 }
@@ -845,7 +938,7 @@ function setPaused(p: boolean) {
 }
 
 /* ---------- Eventos ---------- */
-$('play').addEventListener('click', () => start(false));
+$('play').addEventListener('click', () => start(false, nextLevel(save)));
 // Idioma: se guarda y se recarga para que todo el texto quede en el idioma nuevo
 $('langbtn').textContent = lang.toUpperCase();
 $('langbtn').addEventListener('click', () => {
@@ -855,9 +948,15 @@ $('langbtn').addEventListener('click', () => {
   location.reload();
 });
 $('daily').addEventListener('click', () => start(true));
-$('again').addEventListener('click', () => start(false));
+$('again').addEventListener('click', () => start(false, runLevel));
+$('next').addEventListener('click', () => start(false, nextLevel(save)));
+$('endbtn').addEventListener('click', () => {
+  if (!endlessUnlocked(save)) { sfx.click(); toast('♾️ ' + t('INFINITO'), L('Se desbloquea al superar el nivel 1-10', 'Unlocks after beating level 1-10')); return; }
+  buildEndless(); open('endless');
+});
 $('tomenu').addEventListener('click', () => { sfx.click(); showMenu(); });
-$('mapbtn').addEventListener('click', () => { buildMap(); open('map'); });
+$('mapbtn').addEventListener('click', () => { mapWorld = -1; buildMap(); open('map'); });
+$('ready').addEventListener('click', () => { if (g) { g.skipPrep(); sfx.click(); } });
 $('shopbtn').addEventListener('click', () => { buildShop(); open('shop'); });
 $('misbtn').addEventListener('click', () => { buildMissions(); open('missions'); });
 $('achbtn').addEventListener('click', () => { buildAchs(); open('achs'); });
