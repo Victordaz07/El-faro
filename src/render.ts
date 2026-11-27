@@ -2078,8 +2078,8 @@ function drawWarship(ctx: CanvasRenderingContext2D, f: NonNullable<Game['fleet']
   ctx.fillStyle = 'rgba(235,247,255,.75)';
   for (const sg of [-1, 1]) { ctx.beginPath(); ctx.ellipse(fx * 16 - fy * sg * 6, fy * 16 + fx * sg * 6 + 3, 5 + wob, 2.2, f.hd + sg * 0.5, 0, TAU); ctx.fill(); }
   ctx.fillStyle = 'rgba(0,10,25,.35)'; ctx.beginPath(); ctx.ellipse(3, 6, 24, 15, 0, 0, TAU); ctx.fill();
-  const sp = boatSheet('jugador');
-  if (sp) blitSheet(ctx, sp, f.hd, Math.floor(t * sp.fps), (sp.len / sp.ppu) * 1.4, 5);
+  const own = boatSheet('guerra'), sp = own || boatSheet('jugador');
+  if (sp) blitSheet(ctx, sp, f.hd, Math.floor(t * sp.fps), (sp.len / sp.ppu) * (own ? 1 : 1.4), 5);
   else {
     ctx.rotate(f.hd);
     ctx.fillStyle = '#4a3220'; ctx.beginPath(); ctx.ellipse(0, 0, 26, 10, 0, 0, TAU); ctx.fill();
@@ -2087,7 +2087,8 @@ function drawWarship(ctx: CanvasRenderingContext2D, f: NonNullable<Game['fleet']
     ctx.fillStyle = '#2a2f3a'; for (const x of [-12, -4, 4, 12]) { ctx.fillRect(x - 1.5, -10, 3, 3); ctx.fillRect(x - 1.5, 7, 3, 3); }
     ctx.rotate(-f.hd);
   }
-  // Banderín turquesa en lo alto del mástil
+  // Banderín turquesa en lo alto del mástil (el modelo propio ya trae el suyo)
+  if (own) { ctx.restore(); return; }
   const my = -34, wv = Math.sin(t * 7) * 1.5;
   ctx.strokeStyle = '#2a2520'; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(0, my + 12); ctx.lineTo(0, my); ctx.stroke();
   ctx.fillStyle = '#3fd7c4'; ctx.beginPath(); ctx.moveTo(0, my); ctx.lineTo(-13, my + 2.5 + wv); ctx.lineTo(0, my + 5); ctx.closePath(); ctx.fill();

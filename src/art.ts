@@ -112,6 +112,7 @@ export function bossSheet(zone: string): Sheet | null {
 
 /* ---------- Barcos y objetos de los modos nuevos (desde modelos 3D, ver tools/glb-sprite/bake-barcos.py) ---------- */
 import barcosMeta from '../assets/art/barcos/meta.json';
+import bGuerraUrl from '../assets/art/barcos/barco-guerra.webp';
 import bJugadorUrl from '../assets/art/barcos/barco-jugador.webp';
 import bSuministrosUrl from '../assets/art/barcos/barco-suministros.webp';
 import bPirataUrl from '../assets/art/barcos/barco-pirata.webp';
@@ -132,6 +133,7 @@ const BARCOS: Record<string, Sheet> = {
   barril: mkB(oBarrilUrl, 'objeto-barril', 22, 1),
   restos: mkB(oRestosUrl, 'objeto-restos', 28, 2),
   cofre: mkB(oCofreUrl, 'objeto-cofre', 24, 5),
+  guerra: mkB(bGuerraUrl, 'barco-guerra', 64, 6),
 };
 /** Hoja de un barco u objeto, o null (dibujo por código) mientras la imagen no cargue. */
 export function boatSheet(k: string): Sheet | null {
@@ -209,3 +211,37 @@ import bBuque from '../assets/art/botones/boton-buque.webp';
 import bAndanada from '../assets/art/botones/boton-andanada.webp';
 /** Imágenes de los botones del Destello, el Buque y la Andanada. */
 export const BUTTON_ART: Record<string, string> = { flash: bDestello, fleetbtn: bBuque, volley: bAndanada };
+
+/* ---------- Íconos del Arsenal (ChatGPT, ver docs/arsenal-arte.md) ---------- */
+import gi_gear_ancla from '../assets/art/arsenal/gear-ancla.webp';
+import gi_gear_andanada from '../assets/art/arsenal/gear-andanada.webp';
+import gi_gear_barril from '../assets/art/arsenal/gear-barril.webp';
+import gi_gear_brea from '../assets/art/arsenal/gear-brea.webp';
+import gi_gear_brujula from '../assets/art/arsenal/gear-brujula.webp';
+import gi_gear_buque from '../assets/art/arsenal/gear-buque.webp';
+import gi_gear_caracola from '../assets/art/arsenal/gear-caracola.webp';
+import gi_gear_cofre from '../assets/art/arsenal/gear-cofre.webp';
+import gi_gear_escama_hielo from '../assets/art/arsenal/gear-escama-hielo.webp';
+import gi_gear_farol from '../assets/art/arsenal/gear-farol.webp';
+import gi_gear_lente from '../assets/art/arsenal/gear-lente.webp';
+import gi_gear_llama from '../assets/art/arsenal/gear-llama.webp';
+import gi_gear_nacar from '../assets/art/arsenal/gear-nacar.webp';
+import gi_gear_nucleo_magma from '../assets/art/arsenal/gear-nucleo-magma.webp';
+import gi_gear_ojo_kraken from '../assets/art/arsenal/gear-ojo-kraken.webp';
+import gi_gear_p_ballesta from '../assets/art/arsenal/gear-p-ballesta.webp';
+import gi_gear_p_canon from '../assets/art/arsenal/gear-p-canon.webp';
+import gi_gear_p_luz from '../assets/art/arsenal/gear-p-luz.webp';
+import gi_gear_p_mortero from '../assets/art/arsenal/gear-p-mortero.webp';
+import gi_gear_perla from '../assets/art/arsenal/gear-perla.webp';
+import gi_gear_perla_abismo from '../assets/art/arsenal/gear-perla-abismo.webp';
+import gi_gear_pinza_rey from '../assets/art/arsenal/gear-pinza-rey.webp';
+import gi_gear_red from '../assets/art/arsenal/gear-red.webp';
+import gi_gear_sacos from '../assets/art/arsenal/gear-sacos.webp';
+import gi_gear_timon from '../assets/art/arsenal/gear-timon.webp';
+import bBarril from '../assets/art/botones/boton-barril.webp';
+import bRed from '../assets/art/botones/boton-red.webp';
+BUTTON_ART.barril = bBarril; BUTTON_ART.red = bRed;
+/** Ícono de cada pieza de equipo (id → url). Si falta, el Arsenal usa el emoji. */
+export const GEAR_ART: Record<string, string> = { 'ancla': gi_gear_ancla, 'andanada': gi_gear_andanada, 'barril': gi_gear_barril, 'brea': gi_gear_brea, 'brujula': gi_gear_brujula, 'buque': gi_gear_buque, 'caracola': gi_gear_caracola, 'cofre': gi_gear_cofre, 'escama-hielo': gi_gear_escama_hielo, 'farol': gi_gear_farol, 'lente': gi_gear_lente, 'llama': gi_gear_llama, 'nacar': gi_gear_nacar, 'nucleo-magma': gi_gear_nucleo_magma, 'ojo-kraken': gi_gear_ojo_kraken, 'p-ballesta': gi_gear_p_ballesta, 'p-canon': gi_gear_p_canon, 'p-luz': gi_gear_p_luz, 'p-mortero': gi_gear_p_mortero, 'perla': gi_gear_perla, 'perla-abismo': gi_gear_perla_abismo, 'pinza-rey': gi_gear_pinza_rey, 'red': gi_gear_red, 'sacos': gi_gear_sacos, 'timon': gi_gear_timon };
+/** Etiqueta <img> del ícono de una pieza, o su emoji si no hay imagen. */
+export const gearIcon = (id: string, emoji: string, size = 36) => GEAR_ART[id] ? `<img src="${GEAR_ART[id]}" alt="" width="${size}" height="${size}" style="width:${size}px;height:${size}px;object-fit:contain;vertical-align:middle">` : emoji;

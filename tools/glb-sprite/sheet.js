@@ -40,6 +40,7 @@ const ANIM = {
   sardina(o, p) { rot(o, 'Tail', 'y', 0.6 * Math.sin(p * TAU)); rot(o, 'Body', 'y', 0.08 * Math.sin(p * TAU + 1)); },
   // ---- Barcos y objetos de los modos nuevos ----
   'barco-jugador'(o, p) { const s = Math.sin(p * TAU); rot(o, 'Sail', 'y', 0.05 * s); rot(o, 'Flag', 'y', 0.35 * Math.sin(p * TAU + 1)); bob(o, 'Hull', 0.006 * s); },
+  'barco-guerra'(o, p) { const s = Math.sin(p * TAU); rot(o, 'Sails', 'y', 0.05 * s); rot(o, 'Flag', 'y', 0.4 * Math.sin(p * TAU + 1)); bob(o, 'Hull', 0.006 * s); },
   'barco-suministros'(o, p) { const s = Math.sin(p * TAU); rot(o, 'Sail', 'y', 0.05 * s); rot(o, 'Flag', 'y', 0.35 * Math.sin(p * TAU + 1)); bob(o, 'Hull', 0.006 * s); },
   'barco-pirata'(o, p) { const s = Math.sin(p * TAU); rot(o, 'Sail_Fore', 'y', 0.05 * s); rot(o, 'Sail_Main', 'y', -0.05 * s); rot(o, 'Flag', 'y', 0.4 * Math.sin(p * TAU + 1)); },
   'barco-capitan'(o, p) { const s = Math.sin(p * TAU); rot(o, 'Sail_1', 'y', 0.04 * s); rot(o, 'Sail_2', 'y', -0.04 * s); rot(o, 'Sail_3', 'y', 0.04 * s); rot(o, 'Pennant', 'y', 0.4 * Math.sin(p * TAU + 1)); },

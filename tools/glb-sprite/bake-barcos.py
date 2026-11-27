@@ -11,7 +11,7 @@ TOOL = os.path.join(ROOT, 'tools', 'glb-sprite')
 OUT = os.path.join(ROOT, 'assets', 'art', 'barcos')
 # nombre: (px por cuadro, direcciones, cuadros, semilado de la cámara)
 KINDS = {
-    'barco-jugador': (128, 16, 4, 0.9), 'barco-suministros': (128, 16, 4, 0.9),
+    'barco-jugador': (128, 16, 4, 0.9), 'barco-guerra': (144, 16, 4, 0.9), 'barco-suministros': (128, 16, 4, 0.9),
     'barco-pirata': (128, 16, 4, 0.9), 'barco-capitan': (160, 16, 4, 0.95),
     'barco-abordador': (96, 16, 4, 0.8),
     'objeto-barril': (64, 8, 1, 0.72), 'objeto-restos': (64, 8, 2, 0.72), 'objeto-cofre': (64, 8, 4, 0.72),

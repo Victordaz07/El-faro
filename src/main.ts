@@ -12,7 +12,7 @@ import '@fontsource/nunito/latin-800.css';
 import '@fontsource/nunito/latin-900.css';
 import { draw, camFocus, view, lastCam, setBeam, setSkin, skinnedFaro } from './render';
 import { ICONS, TAB_ICONS } from './icons';
-import { menuArt, bossArt, BUTTON_ART } from './art';
+import { menuArt, bossArt, BUTTON_ART, gearIcon } from './art';
 import { GEAR, gearDef, RARITY, relicSlots, TOOL_SLOTS, gearRewards, Drop, ToolId, GearKind } from './gear';
 import { initAudio, setMuted, sfx } from './audio';
 import { startMusic, setMusicEnabled, setMusicLevel } from './music';
@@ -356,7 +356,7 @@ function endRun() {
   if (drops.length) {
     html += `<div style="margin-top:10px"><b style="color:#7ff0e0">${L('⚔️ Equipo conseguido', '⚔️ Gear earned')}</b></div><div class="drops">` + drops.map(d => {
       const D = gearDef(d.id)!, rc = D.rarity ? RARITY[D.rarity].col : '#7ff0e0';
-      return `<span style="--rc:${rc}">${D.icon} ${esc(D.name)}${D.kind === 'prov' ? ' ×' + (d.n || 1) : d.isNew ? `<i>${t('¡NUEVO!')}</i>` : ` <i>${L('Nv ', 'Lv ')}${d.lv}</i>`}</span>`;
+      return `<span style="--rc:${rc}">${gearIcon(D.id, D.icon, 22)} ${esc(D.name)}${D.kind === 'prov' ? ' ×' + (d.n || 1) : d.isNew ? `<i>${t('¡NUEVO!')}</i>` : ` <i>${L('Nv ', 'Lv ')}${d.lv}</i>`}</span>`;
     }).join('') + `</div><small>${L('Equípalo en ARSENAL', 'Equip it in ARSENAL')}</small>`;
   } else if (!g.daily && g.mode === 'campaign' && !g.won) html += L('<br><small>¿Atascado? Los modos de juego te dan equipo para el ARSENAL</small>', '<br><small>Stuck? Game modes give you gear for the ARSENAL</small>');
   $('overinfo').innerHTML = html;
@@ -1236,7 +1236,7 @@ function buildArsenal() {
     const d = id ? gearDef(id) : null, el = document.createElement('div');
     el.className = 'aslot' + (d ? ' on' : '');
     if (d?.rarity) el.style.setProperty('--rc', RARITY[d.rarity].col);
-    el.innerHTML = d ? `<em>${d.icon}</em>${esc(d.name)}` + (d.kind === 'prov' ? ` ×${gs.prov[d.id] || 0}` : ` · ${L('Nv ', 'Lv ')}${gs.own[d.id]}`) : `<em>＋</em>${label}`;
+    el.innerHTML = d ? `<em>${gearIcon(d.id, d.icon, 34)}</em>${esc(d.name)}` + (d.kind === 'prov' ? ` ×${gs.prov[d.id] || 0}` : ` · ${L('Nv ', 'Lv ')}${gs.own[d.id]}`) : `<em>＋</em>${label}`;
     sl.appendChild(el);
   };
   if (atab === 'relic') for (let i = 0; i < 3; i++) slot(i < slots ? gs.relics[i] || null : null, i < slots ? t('Libre') : L('Farero nivel 10', 'Keeper level 10'));
@@ -1261,7 +1261,7 @@ function buildArsenal() {
     const tag = `<small>${[d.rarity ? esc(RARITY[d.rarity].name) : '', lvTxt].filter(Boolean).join(' · ')}</small>`;
 
     const how = !has ? (d.boss !== undefined ? L(`🔒 Lo suelta el jefe de ${ZONES[d.boss].name}`, `🔒 Dropped by the boss of ${ZONES[d.boss].name}`) : '🔒 ' + L('Aún no lo tienes', 'Not found yet')) : '';
-    row.innerHTML = `<i class="gi">${d.icon}</i><div><b>${esc(d.name)}${tag}</b><span>${esc(d.desc)}${how ? '<br>' + how : ''}</span></div>`;
+    row.innerHTML = `<i class="gi">${gearIcon(d.id, d.icon, 40)}</i><div><b>${esc(d.name)}${tag}</b><span>${esc(d.desc)}${how ? '<br>' + how : ''}</span></div>`;
     if (has && d.kind !== 'plan') {
       const b = document.createElement('button');
       b.textContent = eq ? t('QUITAR') : t('EQUIPAR');
