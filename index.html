@@ -304,11 +304,29 @@ html[lang=en] .up.new::after{content:'NEW'}
 @keyframes abilpop{0%{transform:scale(1)}25%{transform:scale(1.18,.82)}55%{transform:scale(.9,1.1)}100%{transform:scale(1)}}
 .abil:active .face{transform:scale(.9)}
 #flash{right:0}
-#volley,#fleetbtn{right:66px;display:none}
+#volley,#tool0{right:66px;display:none}
+#tool1{right:132px;display:none}
 #volley{--ac:255,154,82}
-#fleetbtn{--ac:120,196,255;--pc:225,245,255}
-#volley.on,#fleetbtn.on{display:flex}
+#tool0,#tool1{--ac:120,196,255;--pc:225,245,255}
+#tool0.arm .face,#tool1.arm .face{animation:breath .7s ease-in-out infinite;filter:drop-shadow(0 0 12px #ffe27a)}
+#volley.on,#tool0.on,#tool1.on{display:flex}
 #volley.arm .face{animation:breath .7s ease-in-out infinite;filter:drop-shadow(0 0 12px #ffe27a)}
+
+/* Arsenal */
+.aslots{display:flex;gap:8px;justify-content:center;width:100%;max-width:350px}
+.aslot{flex:1;max-width:100px;min-height:64px;border-radius:14px;border:1.5px dashed rgba(255,255,255,.22);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 4px;font-size:10px;color:var(--txt2);text-align:center}
+.aslot.on{border-style:solid;border-color:var(--rc,var(--acc));background:rgba(255,255,255,.05);color:#e6fbff}
+.aslot em{font-style:normal;font-size:22px;line-height:1}
+.card .gi{font-style:normal;font-size:26px;flex:none;width:36px;text-align:center}
+.card.gear{gap:10px;align-items:center;border-left:3px solid var(--rc,transparent)}
+.card.gear b small{display:block;margin-top:1px;font-size:10.5px;font-weight:800;color:var(--rc)}
+#atabs button{font-size:10px;padding-left:2px;padding-right:2px;letter-spacing:0}
+.card.gear>div{flex:1;text-align:left}
+.card.gear.lock{opacity:.55}
+.card.gear.eq{background:rgba(63,215,196,.1)}
+.drops{margin:10px auto 0;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:330px}
+.drops span{padding:5px 9px;border-radius:10px;background:rgba(255,255,255,.07);border:1px solid var(--rc,var(--line));font-size:12px;font-weight:800}
+.drops span i{font-style:normal;color:#ffe27a;margin-left:4px}
 </style>
 </head>
 <body>
@@ -343,7 +361,8 @@ html[lang=en] .up.new::after{content:'NEW'}
       <button id="aim"><b>OBJETIVO</b><span>CERCANO</span></button>
       <button id="flash" class="abil"><i class="face"><svg class="b" viewBox="0 0 24 24"><path d="M13.8 1.2 3.6 13.6h6.6L8.6 22.8 20.4 9.4h-6.8z"/></svg><svg class="f" viewBox="0 0 24 24"><path d="M13.8 1.2 3.6 13.6h6.6L8.6 22.8 20.4 9.4h-6.8z"/></svg><img class="gray" alt=""><img class="col" alt=""><span class="shine"></span><b class="pt"></b><b class="pt"></b><b class="pt"></b><b class="pt"></b><em></em></i><small>DESTELLO</small></button>
       <button id="volley" class="abil"><i class="face"><svg class="b" viewBox="0 0 24 24"><path d="M12 1.5l2.1 5.2 5.3-2.3-2.3 5.3 5.4 2.3-5.4 2.3 2.3 5.3-5.3-2.3L12 22.5l-2.1-5.2-5.3 2.3 2.3-5.3L1.5 12l5.4-2.3-2.3-5.3 5.3 2.3z"/></svg><svg class="f" viewBox="0 0 24 24"><path d="M12 1.5l2.1 5.2 5.3-2.3-2.3 5.3 5.4 2.3-5.4 2.3 2.3 5.3-5.3-2.3L12 22.5l-2.1-5.2-5.3 2.3 2.3-5.3L1.5 12l5.4-2.3-2.3-5.3 5.3 2.3z"/></svg><img class="gray" alt=""><img class="col" alt=""><span class="shine"></span><b class="pt"></b><b class="pt"></b><b class="pt"></b><b class="pt"></b><em></em></i><small>ANDANADA</small></button>
-      <button id="fleetbtn" class="abil"><i class="face"><svg class="b" viewBox="0 0 24 24"><path d="M11.2 2.2h1.3v2.2l3.6 1.2-3.6 1.2V7.4l6.6 8.6h-6.6zM11.2 6.2v9.8H4.8zM1.4 17.2h21.2l-2.9 4.4c-.3.4-.7.6-1.2.6H5.5c-.5 0-.9-.2-1.2-.6z"/></svg><svg class="f" viewBox="0 0 24 24"><path d="M11.2 2.2h1.3v2.2l3.6 1.2-3.6 1.2V7.4l6.6 8.6h-6.6zM11.2 6.2v9.8H4.8zM1.4 17.2h21.2l-2.9 4.4c-.3.4-.7.6-1.2.6H5.5c-.5 0-.9-.2-1.2-.6z"/></svg><img class="gray" alt=""><img class="col" alt=""><span class="shine"></span><b class="pt"></b><b class="pt"></b><b class="pt"></b><b class="pt"></b><em></em></i><small>BUQUE</small></button>
+      <button id="tool0" class="abil"><i class="face"><svg class="b" viewBox="0 0 24 24"><path d="M11.2 2.2h1.3v2.2l3.6 1.2-3.6 1.2V7.4l6.6 8.6h-6.6zM11.2 6.2v9.8H4.8zM1.4 17.2h21.2l-2.9 4.4c-.3.4-.7.6-1.2.6H5.5c-.5 0-.9-.2-1.2-.6z"/></svg><svg class="f" viewBox="0 0 24 24"><path d="M11.2 2.2h1.3v2.2l3.6 1.2-3.6 1.2V7.4l6.6 8.6h-6.6zM11.2 6.2v9.8H4.8zM1.4 17.2h21.2l-2.9 4.4c-.3.4-.7.6-1.2.6H5.5c-.5 0-.9-.2-1.2-.6z"/></svg><img class="gray" alt=""><img class="col" alt=""><span class="shine"></span><b class="pt"></b><b class="pt"></b><b class="pt"></b><b class="pt"></b><em></em></i><small></small></button>
+      <button id="tool1" class="abil"><i class="face"><svg class="b" viewBox="0 0 24 24"><path d="M11.2 2.2h1.3v2.2l3.6 1.2-3.6 1.2V7.4l6.6 8.6h-6.6zM11.2 6.2v9.8H4.8zM1.4 17.2h21.2l-2.9 4.4c-.3.4-.7.6-1.2.6H5.5c-.5 0-.9-.2-1.2-.6z"/></svg><svg class="f" viewBox="0 0 24 24"><path d="M11.2 2.2h1.3v2.2l3.6 1.2-3.6 1.2V7.4l6.6 8.6h-6.6zM11.2 6.2v9.8H4.8zM1.4 17.2h21.2l-2.9 4.4c-.3.4-.7.6-1.2.6H5.5c-.5 0-.9-.2-1.2-.6z"/></svg><img class="gray" alt=""><img class="col" alt=""><span class="shine"></span><b class="pt"></b><b class="pt"></b><b class="pt"></b><b class="pt"></b><em></em></i><small></small></button>
     </div>
     <div id="hint"></div>
     <div id="bar" class="panel">
@@ -362,6 +381,7 @@ html[lang=en] .up.new::after{content:'NEW'}
     <button id="chest"><em>🎁</em><div style="flex:1"><b id="chesttxt"></b><small id="chestsub"></small><div class="prog"><div id="chestbar"></div></div></div></button>
     <button class="big" id="play">JUGAR</button>
     <button class="big gold" id="daily">DESAFÍO DIARIO<small id="dailyinfo"></small></button>
+    <div class="row2"><button class="big sec" id="arsbtn">⚔️ ARSENAL<span class="badge" id="arsbadge"></span></button></div>
     <div class="row3">
       <button class="big sec" id="mapbtn">NIVELES</button>
       <button class="big sec" id="shopbtn">INVESTIGAR</button>
@@ -380,6 +400,7 @@ html[lang=en] .up.new::after{content:'NEW'}
     <button class="big" id="again">OTRA VEZ</button>
     <div class="row3">
       <button class="big sec" id="overshop">INVESTIGAR</button>
+      <button class="big sec" id="overars">ARSENAL</button>
       <button class="big sec" id="overmis">MISIONES<span class="badge" id="misbadge2"></span></button>
       <button class="big sec" id="tomenu">MENÚ</button>
     </div>
@@ -405,6 +426,14 @@ html[lang=en] .up.new::after{content:'NEW'}
     <p>Para este hueco de la muralla.</p>
     <div class="blist" id="wlist"></div>
     <button class="big sec" id="wcancel">CANCELAR</button>
+  </div>
+  <div class="ov" id="arsenal">
+    <h2>ARSENAL</h2>
+    <p id="arsinfo" class="tiny"></p>
+    <div class="seg" id="atabs"></div>
+    <div class="aslots" id="aslots"></div>
+    <div class="list" id="arslist"></div>
+    <button class="big sec back">VOLVER</button>
   </div>
   <div class="ov" id="shop">
     <h2>INVESTIGACIÓN</h2>

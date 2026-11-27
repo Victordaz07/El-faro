@@ -1,3 +1,4 @@
+import { botGear, botTools } from './gearbot';
 // Comparación justa entre zonas: mismo nivel de investigación en todas y varias partidas al azar
 // (la mediana evita que una sola partida con suerte engañe).
 // Uso: npm run sim:zonas  (PERM=0,3 para elegir niveles de investigación)
@@ -10,6 +11,7 @@ const W: Record<string, number> = { dmg: 3, spd: 3, cc: 1, cf: 1, rng: 1, chain:
 function play(zoneIdx: number, permLv: number, smart: boolean, tapper = false) {
   const save = fresh();
   for (const k of ['dmg', 'spd', 'hull', 'flash', 'pearl', 'coral', 'start', 'pcrit', 'prep', 'pbar']) save.perm[k] = permLv;
+  botGear(save, permLv);
   const g = new Game(save, ZONES[zoneIdx]);
   if (smart) g.aim = 'peligro';
   let steps = 0;
@@ -28,7 +30,7 @@ function play(zoneIdx: number, permLv: number, smart: boolean, tapper = false) {
       }
     }
     if (steps % 30 === 0) {
-      if (smart) { g.useFlash(); if (g.enemies.length > 4) g.callFleet(); }
+      if (smart) { g.useFlash(); botTools(g); }
       for (let k = 0; k < 8; k++) {
         const ids = Object.keys(g.lv).filter(id => g.isOpen(id) && g.cost(id) <= g.pearls);
         if (!ids.length) break;

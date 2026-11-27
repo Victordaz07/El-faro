@@ -1,3 +1,4 @@
+import { botGear } from './gearbot';
 // Bot del Modo Costa: abre huecos, mejora armas y compra mejoras globales.
 // Uso: npm run sim:costa   (N=partidas, PERM=nivel de investigación, ARMAS=canon,ballesta,mortero,luz, BR=1|2 rama, EARLY=1 adelanta oleadas, VOLLEY=0 sin Andanada)
 import { Game } from '../src/game';
@@ -15,6 +16,7 @@ const ORDER = ((process.env.ARMAS || 'canon,ballesta,mortero,canon,ballesta,mort
 function play(perm: number) {
   const save = fresh();
   for (const k of ['dmg', 'spd', 'hull', 'flash', 'pearl', 'coral', 'start', 'pcrit', 'prep', 'pbar']) save.perm[k] = perm;
+  botGear(save, perm);
   const g = new Game(save, ZONES[0], () => {}, () => 330, { mode: 'costa' });
   g.aim = 'peligro';
   let steps = 0, minHp = 1;

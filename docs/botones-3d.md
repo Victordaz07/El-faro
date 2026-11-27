@@ -70,3 +70,19 @@ Asset: boton-andanada.png - a dramatic 3D cannon blast: a chunky black-iron cann
 ## Cuando lleguen
 
 Guardo los PNG en `assets/art/botones/` y los convierto a WebP de 256 px. En `index.html` reemplazan las siluetas SVG de los botones `.abil` (`#flash`, `#fleetbtn`, `#volley`), con las animaciones de arriba hechas en CSS y canvas. Si una imagen no carga, se usa la silueta SVG actual.
+
+---
+
+## Herramientas del Arsenal que faltan (`boton-barril.png`, `boton-red.png`)
+
+Usa el mismo prompt maestro. Mientras no lleguen, el juego usa una silueta.
+
+### Barril explosivo (`boton-barril.png`)
+```
+Asset: boton-barril.png - a chunky 3D wooden powder barrel floating slightly tilted, dark oak staves with thick iron hoops, a bright red band with a small white skull-free warning mark (just a simple white diamond), a short lit fuse on top throwing a few compact orange sparks, a little ring of white sea foam around its base. Transparent background.
+```
+
+### Red gigante (`boton-red.png`)
+```
+Asset: boton-red.png - a chunky 3D bundle of fishing net being thrown, spreading open in a rounded shape, thick cream-colored rope knots (#e8d9b0) with small turquoise floats (#3fd7c4) along the edge and two small dark iron weights hanging from corners. Dynamic, mid-throw, readable at small size. Transparent background.
+```

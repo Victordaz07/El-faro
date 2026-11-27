@@ -1,3 +1,4 @@
+import { botGear, botTools } from './gearbot';
 // Simulación de la campaña: el bot juega cada nivel de cada mundo y se mide cuántas veces gana.
 // Uso: npm run sim:camp
 import { Game } from '../src/game';
@@ -8,6 +9,7 @@ const W: Record<string, number> = { dmg: 3, spd: 3, cc: 1, cf: 1, rng: 1, chain:
 function play(zi: number, n: number, perm: number, smart: boolean) {
   const save = fresh();
   for (const k of ['dmg', 'spd', 'hull', 'flash', 'pearl', 'coral', 'start', 'pcrit', 'prep', 'pbar']) save.perm[k] = perm;
+  botGear(save, perm);
   const g = new Game(save, ZONES[zi], () => {}, () => 260, { level: { zi, n } });
   if (smart) g.aim = 'peligro';
   let steps = 0;
@@ -15,7 +17,7 @@ function play(zi: number, n: number, perm: number, smart: boolean) {
     g.update(1 / 60); steps++;
     if (g.state === 'cards') g.pickCard(g.cardOpts[0].id);
     if (steps % 30 === 0) {
-      if (smart) { g.useFlash(); if (g.enemies.length > 4) g.callFleet(); }
+      if (smart) { g.useFlash(); botTools(g); }
       for (let k = 0; k < 10; k++) {
         const ids = Object.keys(g.lv).filter(id => id !== 'tap' && g.isOpen(id) && g.cost(id) <= g.pearls);
         if (!ids.length) break;

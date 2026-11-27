@@ -445,8 +445,14 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
           ctx.restore();
         }
       }
+      ctx.globalCompositeOperation = 'lighter';
+    }
+    // Bombas en arco (mortero, Andanada) y barriles explosivos, en todos los modos
+    if (g.shells.length) {
+      ctx.globalCompositeOperation = 'source-over';
       for (const sh of g.shells) {
-        const p = g.shellPos(sh), k = Math.min(1, sh.t / sh.max);
+        const p = g.shellPos(sh), k = Math.max(0, Math.min(1, sh.t / sh.max));
+        if (sh.kind === 'barrel') { drawToolBarrel(ctx, sh, k, now); continue; }
         ctx.strokeStyle = `rgba(255,170,80,${0.25 + 0.4 * k})`; ctx.lineWidth = 1.4; ctx.setLineDash([3, 3]);
         ctx.beginPath(); ctx.ellipse(sh.tx, sh.ty, sh.R * (0.5 + 0.5 * k), sh.R * (0.5 + 0.5 * k) * 0.7, 0, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
         ctx.fillStyle = 'rgba(0,10,25,.3)'; ctx.beginPath(); ctx.ellipse(p.x, p.y, 4, 2, 0, 0, TAU); ctx.fill();
@@ -2149,4 +2155,24 @@ function drawWarshipLights(ctx: CanvasRenderingContext2D, f: NonNullable<Game['f
     ctx.fillStyle = radial(ctx, lx, ly, 10 * (fog ? 1.6 : 1), [[0, `rgba(${col},${blink})`], [1, `rgba(${col},0)`]]);
     ctx.beginPath(); ctx.arc(lx, ly, 10 * (fog ? 1.6 : 1), 0, TAU); ctx.fill();
   }
+}
+
+
+/** Barril explosivo (herramienta): flota con la mecha encendida y un anillo que avisa dónde va a estallar. */
+function drawToolBarrel(ctx: CanvasRenderingContext2D, sh: { tx: number; ty: number; R: number }, k: number, now: number) {
+  const x = sh.tx, y = sh.ty + Math.sin(now * 3) * 1.5, blink = (Math.sin(now * (8 + k * 20)) + 1) / 2;
+  ctx.strokeStyle = `rgba(255,${120 - 80 * k},70,${0.35 + 0.5 * blink})`; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.ellipse(sh.tx, sh.ty, sh.R, sh.R * 0.62, 0, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(0,10,25,.3)'; ctx.beginPath(); ctx.ellipse(x + 1, y + 4, 11, 4, 0, 0, TAU); ctx.fill();
+  const sp = boatSheet('barril');
+  if (sp) { ctx.save(); ctx.translate(x, y); blitSheet(ctx, sp, now * 0.6, 0, (sp.len / sp.ppu) * 1.2, 0); ctx.restore(); }
+  else {
+    ctx.fillStyle = '#7a4a2a'; ctx.beginPath(); ctx.ellipse(x, y - 4, 8, 9, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#3b2a1c'; ctx.lineWidth = 1.5; for (const dy of [-9, 1]) { ctx.beginPath(); ctx.moveTo(x - 8, y + dy); ctx.lineTo(x + 8, y + dy); ctx.stroke(); }
+    ctx.fillStyle = '#c0392b'; ctx.fillRect(x - 5, y - 6, 10, 4);
+  }
+  // Mecha que chispea
+  const fx = x + 2, fy = y - 16;
+  ctx.fillStyle = `rgba(255,230,150,${0.6 + 0.4 * blink})`; ctx.beginPath(); ctx.arc(fx, fy, 2 + blink * 1.5, 0, TAU); ctx.fill();
+  for (let i = 0; i < 3; i++) { const a = now * 9 + i * 2.1; ctx.fillStyle = 'rgba(255,190,90,.8)'; ctx.fillRect(fx + Math.cos(a) * 4, fy + Math.sin(a) * 4 - 2, 1.5, 1.5); }
 }

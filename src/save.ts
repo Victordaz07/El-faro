@@ -1,4 +1,5 @@
 // Guardado local, misiones diarias y desbloqueo de zonas.
+import { GearSave, freshGear } from './gear';
 import { MPOOL, MKind, ZONES, UNLOCK_WAVE, ACHIEVEMENTS, PERM, LifeStats, LEVELS_PER_WORLD } from './data';
 
 export interface Mission {
@@ -39,6 +40,8 @@ export interface Save {
   camp?: Record<string, number>;
   /** Récords de los modos: mejor resultado y estrellas. */
   modes?: Record<string, { best: number; stars: number }>;
+  /** Arsenal: equipo conseguido y puesto (ver gear.ts). */
+  gear?: GearSave;
 }
 
 const KEY = 'faro_tormenta_v2';
@@ -103,6 +106,7 @@ export function load(): Save {
   } catch { /* sin almacenamiento: se juega igual */ }
   ensureDaily(s);
   if (!s.chestFrom) s.chestFrom = Date.now();
+  s.gear = Object.assign(freshGear(), s.gear || {});
   if (!s.camp) {
     // Jugadores que ya tenían récords: los mundos donde llegaron a la oleada 15 cuentan como superados
     s.camp = {};

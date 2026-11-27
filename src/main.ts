@@ -13,6 +13,7 @@ import '@fontsource/nunito/latin-900.css';
 import { draw, camFocus, view, lastCam, setBeam, setSkin, skinnedFaro } from './render';
 import { ICONS, TAB_ICONS } from './icons';
 import { menuArt, bossArt, BUTTON_ART } from './art';
+import { GEAR, gearDef, RARITY, relicSlots, TOOL_SLOTS, gearRewards, Drop, ToolId, GearKind } from './gear';
 import { initAudio, setMuted, sfx } from './audio';
 import { startMusic, setMusicEnabled, setMusicLevel } from './music';
 import { getBoard, Row } from './leaderboard';
@@ -202,11 +203,20 @@ function start(daily = false, level: { zi: number; n: number } | null = null, mo
     runZone = zone();
     g = new Game(save, runZone, onEvent, spawnR);
   }
+  // Arsenal: la provisión puesta se gasta al empezar
+  if (g.gear.prov && save.gear && !g.daily) {
+    const pv = g.gear.prov;
+    save.gear.prov[pv] = Math.max(0, (save.gear.prov[pv] || 0) - 1);
+    if (!save.gear.prov[pv]) save.gear.use = null;
+    persist(save);
+    const d = gearDef(pv)!;
+    setTimeout(() => toast(d.icon + ' ' + d.name, d.desc), 900);
+  }
   // En Aguante y Travesía no hay tienda
   $('bar').style.display = g.mode === 'aguante' || g.mode === 'travesia' ? 'none' : '';
   for (const id of ['flash', 'aim', 'taps']) $(id).style.display = '';
   $('volley').classList.toggle('on', g.mode === 'costa');
-  $('fleetbtn').classList.toggle('on', g.fleetOk); volleyArm = false; $('volley').classList.remove('arm');
+  setupTools(); volleyArm = false; $('volley').classList.remove('arm');
   $('frostw').style.display = 'none';
   $('aim').querySelector('span')!.textContent = AIMS[0].name;
   tab = g.mode === 'costa' ? 3 : 0;
@@ -253,13 +263,19 @@ function endRun() {
     save.challenge.score = g.score; save.challenge.wave = g.wave;
     S.dailyDone++;
   }
+  // Arsenal: cada modo fabrica su tipo de equipo; el jefe de cada mundo suelta su reliquia legendaria
+  let drops: Drop[] = [];
+  if (!g.daily && save.gear) drops = gearRewards(save.gear, {
+    mode: g.mode, won: g.won, wave: g.wave, progress: g.missionProgress, deliveries: g.deliveries, chests: g.chests,
+    boss: g.level && g.level.boss ? g.level.zi : undefined, firstBoss: firstClear,
+  });
   persist(save);
   if (g.won) { sfx.bossdown(); vibrate(80); } else sfx.over();
   setMusicLevel(0);
   $('flash').style.display = 'none';
   $('aim').style.display = 'none';
   $('taps').style.display = 'none';
-  $('volley').classList.remove('on'); $('fleetbtn').classList.remove('on'); $('cnext').classList.remove('on');
+  $('volley').classList.remove('on'); hideTools(); $('cnext').classList.remove('on');
   $('frostw').style.display = 'none';
   let html: string;
   $('next').style.display = 'none';
@@ -337,6 +353,12 @@ function endRun() {
     html += L(`<br><br><b style="color:#ffe27a">🗺️ ¡Desbloqueaste ${ZONES[zi + 1].name}!</b>`, `<br><br><b style="color:#ffe27a">🗺️ You unlocked ${ZONES[zi + 1].name}!</b>`);
   const ready = readyMissions(save);
   if (ready) html += L(`<br><br>🎯 ${ready} misión${ready > 1 ? 'es' : ''} lista${ready > 1 ? 's' : ''} para reclamar`, `<br><br>🎯 ${ready} mission${ready > 1 ? 's' : ''} ready to claim`);
+  if (drops.length) {
+    html += `<div style="margin-top:10px"><b style="color:#7ff0e0">${L('⚔️ Equipo conseguido', '⚔️ Gear earned')}</b></div><div class="drops">` + drops.map(d => {
+      const D = gearDef(d.id)!, rc = D.rarity ? RARITY[D.rarity].col : '#7ff0e0';
+      return `<span style="--rc:${rc}">${D.icon} ${esc(D.name)}${D.kind === 'prov' ? ' ×' + (d.n || 1) : d.isNew ? `<i>${t('¡NUEVO!')}</i>` : ` <i>${L('Nv ', 'Lv ')}${d.lv}</i>`}</span>`;
+    }).join('') + `</div><small>${L('Equípalo en ARSENAL', 'Equip it in ARSENAL')}</small>`;
+  } else if (!g.daily && g.mode === 'campaign' && !g.won) html += L('<br><small>¿Atascado? Los modos de juego te dan equipo para el ARSENAL</small>', '<br><small>Stuck? Game modes give you gear for the ARSENAL</small>');
   $('overinfo').innerHTML = html;
   setTimeout(() => {
     const oc = document.getElementById('overcoral'); if (oc) countUp(oc, g ? g.earned : 0);
@@ -485,12 +507,17 @@ cv.addEventListener('pointerdown', ev => {
   const r = cv.getBoundingClientRect();
   const x = (ev.clientX - r.left - lastCam.x) / lastCam.s, y = (ev.clientY - r.top - lastCam.y) / lastCam.s;
   audio();
+  if (toolArm) {
+    const id = toolArm; hideToolArm();
+    if (g.useTool(id, x, y)) return;
+  }
   if (volleyArm && g.mode === 'costa') {
     volleyArm = false; $('volley').classList.remove('arm');
     if (y < -6 && g.volley(x, y)) return;
   }
   g.tapAt(x, y);
 });
+function hideToolArm() { toolArm = null; for (const j of [0, 1]) $('tool' + j).classList.remove('arm'); }
 // Modo Costa: Andanada (el siguiente toque en el mar elige dónde caen todos los disparos)
 let volleyArm = false;
 $('volley').addEventListener('click', () => {
@@ -888,12 +915,12 @@ function updateHud() {
   $('boss').classList.toggle('on', !!boss);
   if (boss) { $('bossname').textContent = bossName() + (boss.enraged ? L(' · FURIOSO', ' · ENRAGED') : ''); $('bossfill').style.width = Math.max(0, (boss.hp / boss.max) * 100) + '%'; }
   setMusicLevel(boss ? 2 : 1);
-  if (g.fleetOk) {
-    const sb = $('fleetbtn'), busy = !!g.fleet;
-    sb.style.setProperty('--p', busy ? '0' : String(1 - g.fleetCd / FLEET.recharge));
-    sb.classList.toggle('cd', busy || g.fleetCd > 0);
-    sb.querySelector('em')!.textContent = busy ? '⚓' : g.fleetCd > 0 ? String(Math.ceil(g.fleetCd)) : '';
-  }
+  g.toolList.slice(0, TOOL_SLOTS).forEach((id, i) => {
+    const sb = $('tool' + i), busy = id === 'buque' && !!g!.fleet, cd = g!.toolCds[id] || 0;
+    sb.style.setProperty('--p', busy ? '0' : String(1 - cd / g!.toolMax(id)));
+    sb.classList.toggle('cd', busy || cd > 0);
+    sb.querySelector('em')!.textContent = busy ? '⚓' : cd > 0 ? String(Math.ceil(cd)) : '';
+  });
   const fb = $('flash');
   fb.style.setProperty('--p', String(1 - g.flashCd / g.flashMax));
   fb.classList.toggle('cd', g.flashCd > 0);
@@ -901,7 +928,7 @@ function updateHud() {
 }
 
 /* ---------- Pantallas ---------- */
-const OVS = ['menu', 'over', 'shop', 'map', 'missions', 'pauseov', 'cards', 'achs', 'rank', 'coll', 'dailyrw', 'endless', 'modes'];
+const OVS = ['arsenal', 'menu', 'over', 'shop', 'map', 'missions', 'pauseov', 'cards', 'achs', 'rank', 'coll', 'dailyrw', 'endless', 'modes'];
 let backTo = 'menu';
 function hideAll() { OVS.forEach(i => $(i).classList.remove('on')); }
 function open(id: string, from = 'menu') { audio(); sfx.click(); hideAll(); backTo = from; $(id).classList.add('on'); }
@@ -911,7 +938,7 @@ function showMenu() {
   introT = 0; camFocus.x = camFocus.y = 0; camFocus.z = 1; stage.classList.remove('cine');
   setMusicLevel(0);
   for (const id of ['flash', 'aim', 'taps', 'frostw', 'mod', 'boss']) $(id).style.display = 'none';
-  $('fleetbtn').classList.remove('on'); $('volley').classList.remove('on');
+  hideTools(); $('volley').classList.remove('on');
   const z = zone();
   void z;
   const nl = nextLevel(save);
@@ -1170,6 +1197,12 @@ $('endbtn').addEventListener('click', () => {
   buildModes(); open('modes');
 });
 /** Pantalla de modos: aventuras distintas que se abren con la campaña. */
+/** Qué tipo de equipo fabrica cada modo (se muestra en la lista de modos y en el Arsenal). */
+const MODE_GEAR: Record<string, string> = {
+  get travesia() { return '🧭 ' + t('Reliquias'); }, get asedio() { return '⛵ ' + t('Herramientas'); },
+  get escolta() { return '🧰 ' + t('Provisiones'); }, get costa() { return '💣 ' + t('Planos'); },
+};
+const KIND_SRC: Record<GearKind, string> = { relic: 'travesia', tool: 'asedio', prov: 'escolta', plan: 'costa' };
 function buildModes() {
   const list = $('modelist'); list.innerHTML = '';
   for (const m of MODES) {
@@ -1177,13 +1210,80 @@ function buildModes() {
     const row = document.createElement('div');
     row.className = 'card mode' + (open ? '' : ' lock');
     const recTxt = m.id === 'endless' ? '' : rec ? (rec.stars ? ' · ' + '★'.repeat(rec.stars) : '') + (m.id === 'aguante' ? L(' · Récord ', ' · Best ') + rec.best : '') : '';
-    row.innerHTML = `<em>${m.icon}</em><div><b>${open ? '' : '🔒 '}${esc(m.name)}<small style="color:#ffd166">${recTxt}</small></b><span>${open ? esc(m.desc) : L('Supera el nivel ', 'Beat level ') + MODE_RULES[m.id].unlock.split('-').map((v, i) => (i ? v : String(+v + 1))).join('-') + L(' para abrirlo', ' to unlock it')}</span></div>`;
+    const rw = MODE_GEAR[m.id];
+    row.innerHTML = `<em>${m.icon}</em><div><b>${open ? '' : '🔒 '}${esc(m.name)}<small style="color:#ffd166">${recTxt}</small></b><span>${rw ? `<i style="font-style:normal;color:#7ff0e0;font-weight:800">${L('Fabrica: ', 'Makes: ')}${rw}</i><br>` : ''}${open ? esc(m.desc) : L('Supera el nivel ', 'Beat level ') + MODE_RULES[m.id].unlock.split('-').map((v, i) => (i ? v : String(+v + 1))).join('-') + L(' para abrirlo', ' to unlock it')}</span></div>`;
     const b = document.createElement('button'); b.className = 'g';
     b.textContent = t('JUGAR'); b.disabled = !open;
     b.addEventListener('click', () => { if (m.id === 'endless') { buildEndless(); open2('endless'); } else start(false, null, m.id); });
     row.appendChild(b); list.appendChild(row);
   }
 }
+/* ---------- Arsenal ---------- */
+let atab: GearKind = 'relic';
+function buildArsenal() {
+  const gs = save.gear!, far = levelOf(save.xp || 0).lv, slots = relicSlots(far);
+  $('arsinfo').innerHTML = L('Equipo para la campaña y los modos. Cada modo fabrica un tipo de equipo.', 'Gear for the campaign and modes. Each mode makes one kind of gear.');
+  const tabs = $('atabs'); tabs.innerHTML = '';
+  const names: [GearKind, string][] = [['relic', t('RELIQUIAS')], ['tool', t('HERRAMIENTAS')], ['prov', t('PROVISIONES')], ['plan', t('PLANOS')]];
+  for (const [k, nm] of names) {
+    const b = document.createElement('button'); b.textContent = nm; b.className = k === atab ? 'on' : '';
+    b.addEventListener('click', () => { atab = k; sfx.click(); buildArsenal(); });
+    tabs.appendChild(b);
+  }
+  // Ranuras de lo que llevas puesto
+  const sl = $('aslots'); sl.innerHTML = '';
+  const slot = (id: string | null, label: string) => {
+    const d = id ? gearDef(id) : null, el = document.createElement('div');
+    el.className = 'aslot' + (d ? ' on' : '');
+    if (d?.rarity) el.style.setProperty('--rc', RARITY[d.rarity].col);
+    el.innerHTML = d ? `<em>${d.icon}</em>${esc(d.name)}` + (d.kind === 'prov' ? ` ×${gs.prov[d.id] || 0}` : ` · ${L('Nv ', 'Lv ')}${gs.own[d.id]}`) : `<em>＋</em>${label}`;
+    sl.appendChild(el);
+  };
+  if (atab === 'relic') for (let i = 0; i < 3; i++) slot(i < slots ? gs.relics[i] || null : null, i < slots ? t('Libre') : L('Farero nivel 10', 'Keeper level 10'));
+  else if (atab === 'tool') for (let i = 0; i < TOOL_SLOTS; i++) slot(gs.tools[i] || null, t('Libre'));
+  else if (atab === 'prov') slot(gs.use && (gs.prov[gs.use] || 0) > 0 ? gs.use : null, L('Ninguna', 'None'));
+  sl.style.display = atab === 'plan' ? 'none' : '';
+  // Lista: lo que tienes y lo que falta (con dónde se consigue)
+  const list = $('arslist'); list.innerHTML = '';
+  const src = MODES.find(m => m.id === KIND_SRC[atab])!;
+  const note = document.createElement('p'); note.className = 'tiny';
+  note.innerHTML = atab === 'plan' ? L('Los planos siempre están activos.', 'Plans are always active.') + ' ' : '';
+  note.innerHTML += L(`Se consiguen en ${src.icon} <b>${esc(src.name)}</b>`, `Found in ${src.icon} <b>${esc(src.name)}</b>`) + (atab === 'relic' ? L(' · las legendarias las sueltan los jefes', ' · legendaries drop from bosses') : '');
+  list.appendChild(note);
+  for (const d of GEAR.filter(x => x.kind === atab)) {
+    const lv = gs.own[d.id] || 0, cnt = gs.prov[d.id] || 0, has = d.kind === 'prov' ? cnt > 0 : lv > 0;
+    const eq = d.kind === 'relic' ? gs.relics.includes(d.id) : d.kind === 'tool' ? gs.tools.includes(d.id) : d.kind === 'prov' ? gs.use === d.id : has;
+    const row = document.createElement('div');
+    row.className = 'card gear' + (has ? '' : ' lock') + (eq && has ? ' eq' : '');
+    const rc = d.rarity ? RARITY[d.rarity].col : '#7ff0e0';
+    row.style.setProperty('--rc', rc);
+    const lvTxt = d.kind === 'prov' ? `×${cnt}` : has ? `${L('Nv ', 'Lv ')}${lv}/3` : '';
+    const tag = `<small>${[d.rarity ? esc(RARITY[d.rarity].name) : '', lvTxt].filter(Boolean).join(' · ')}</small>`;
+
+    const how = !has ? (d.boss !== undefined ? L(`🔒 Lo suelta el jefe de ${ZONES[d.boss].name}`, `🔒 Dropped by the boss of ${ZONES[d.boss].name}`) : '🔒 ' + L('Aún no lo tienes', 'Not found yet')) : '';
+    row.innerHTML = `<i class="gi">${d.icon}</i><div><b>${esc(d.name)}${tag}</b><span>${esc(d.desc)}${how ? '<br>' + how : ''}</span></div>`;
+    if (has && d.kind !== 'plan') {
+      const b = document.createElement('button');
+      b.textContent = eq ? t('QUITAR') : t('EQUIPAR');
+      b.className = eq ? '' : 'g';
+      b.addEventListener('click', () => {
+        if (d.kind === 'prov') gs.use = eq ? null : d.id;
+        else {
+          const arr = d.kind === 'relic' ? gs.relics : gs.tools, max = d.kind === 'relic' ? slots : TOOL_SLOTS;
+          const i = arr.indexOf(d.id);
+          if (i >= 0) arr.splice(i, 1);
+          else { if (arr.length >= max) arr.shift(); arr.push(d.id); }
+        }
+        persist(save); sfx.buy(); buildArsenal();
+      });
+      row.appendChild(b);
+    }
+    list.appendChild(row);
+  }
+}
+$('arsbtn').addEventListener('click', () => { buildArsenal(); open('arsenal'); });
+$('overars').addEventListener('click', () => { buildArsenal(); open('arsenal', 'over'); });
+
 function open2(id: string) { hideAll(); $(id).classList.add('on'); }
 $('tomenu').addEventListener('click', () => { sfx.click(); showMenu(); });
 $('mapbtn').addEventListener('click', () => { mapWorld = -1; buildMap(); open('map'); });
@@ -1207,7 +1307,7 @@ $('pause').addEventListener('click', () => setPaused(!paused));
 $('resume').addEventListener('click', () => setPaused(false));
 $('quit').addEventListener('click', () => { if (!g) return; $('pauseov').classList.remove('on'); paused = false; g.abandon(); });
 // Botones de habilidad en 3D: imagen a color y en gris; si no carga, queda la silueta SVG
-for (const [id, url] of Object.entries(BUTTON_ART)) {
+for (const [id, url] of Object.entries(BUTTON_ART).filter(([k]) => k === 'flash' || k === 'volley')) {
   const b = $(id), imgs = b.querySelectorAll('img'), sh = b.querySelector('.shine') as HTMLElement;
   imgs.forEach(im => { im.src = url; });
   (imgs[1] as HTMLImageElement).onload = () => b.classList.add('img');
@@ -1215,7 +1315,45 @@ for (const [id, url] of Object.entries(BUTTON_ART)) {
   b.addEventListener('pointerdown', () => { b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); });
 }
 $('flash').addEventListener('click', () => { audio(); if (g && !paused) g.useFlash(); });
-$('fleetbtn').addEventListener('click', () => { audio(); if (g && !paused && !g.callFleet()) sfx.click(); });
+/* ---------- Herramientas del Arsenal: hasta 2 botones junto al Destello ---------- */
+const TOOL_SVG: Record<string, string> = {
+  buque: 'M11.2 2.2h1.3v2.2l3.6 1.2-3.6 1.2V7.4l6.6 8.6h-6.6zM11.2 6.2v9.8H4.8zM1.4 17.2h21.2l-2.9 4.4c-.3.4-.7.6-1.2.6H5.5c-.5 0-.9-.2-1.2-.6z',
+  andanada: 'M12 1.5l2.1 5.2 5.3-2.3-2.3 5.3 5.4 2.3-5.4 2.3 2.3 5.3-5.3-2.3L12 22.5l-2.1-5.2-5.3 2.3 2.3-5.3L1.5 12l5.4-2.3-2.3-5.3 5.3 2.3z',
+  barril: 'M7 3h10c1.5 2.5 2.2 5.5 2.2 9S18.5 18.5 17 21H7c-1.5-2.5-2.2-5.5-2.2-9S5.5 5.5 7 3zm-1.6 5h13.2v1.6H5.4zm0 6.4h13.2V16H5.4zM12 0l1.2 2.4h-2.4z',
+  red: 'M2 4l20 0-2 16H4zM6 4l2 16M10 4l.7 16M14 4l-.7 16M18 4l-2 16M3 8.5h18M3.5 12.5h17M4 16.5h16',
+};
+const TOOL_AC: Record<string, string> = { buque: '120,196,255', andanada: '255,154,82', barril: '255,120,90', red: '232,217,176' };
+let toolArm: ToolId | null = null;
+function hideTools() { for (const i of [0, 1]) $('tool' + i).classList.remove('on', 'arm'); toolArm = null; }
+function setupTools() {
+  hideTools();
+  if (!g) return;
+  g.toolList.slice(0, TOOL_SLOTS).forEach((id, i) => {
+    const b = $('tool' + i), url = BUTTON_ART[id === 'buque' ? 'fleetbtn' : id === 'andanada' ? 'volley' : id] || '';
+    b.dataset.tool = id;
+    b.style.setProperty('--ac', TOOL_AC[id]); b.style.setProperty('--pc', TOOL_AC[id]);
+    b.querySelectorAll('svg path').forEach(pth => pth.setAttribute('d', TOOL_SVG[id]));
+    b.querySelector('small')!.textContent = ({ buque: t('BUQUE'), andanada: t('ANDANADA'), barril: t('BARRIL'), red: t('RED') } as Record<string, string>)[id];
+    const imgs = b.querySelectorAll('img'), sh = b.querySelector('.shine') as HTMLElement;
+    b.classList.toggle('img', !!url);
+    if (url) { imgs.forEach(im => { im.src = url; }); sh.style.setProperty('-webkit-mask-image', `url(${url})`); sh.style.setProperty('mask-image', `url(${url})`); }
+    b.classList.add('on');
+  });
+}
+for (const i of [0, 1]) {
+  const b = $('tool' + i);
+  b.addEventListener('pointerdown', () => { b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); });
+  b.addEventListener('click', () => {
+    audio();
+    const id = b.dataset.tool as ToolId;
+    if (!g || paused || !id) return;
+    if (!Game.toolAims(id)) { if (!g.useTool(id)) sfx.click(); return; }
+    if ((g.toolCds[id] || 0) > 0) { sfx.click(); return; }
+    toolArm = toolArm === id ? null : id; sfx.click();
+    for (const j of [0, 1]) $('tool' + j).classList.toggle('arm', toolArm !== null && $('tool' + j).dataset.tool === toolArm);
+    if (toolArm) banner(t('Toca dónde usarla'), 1.1);
+  });
+}
 $('aim').addEventListener('click', () => {
   if (!g) return;
   g.cycleAim(); sfx.click();

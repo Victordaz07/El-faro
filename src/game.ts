@@ -1,4 +1,5 @@
 // Lógica pura de una partida (sin DOM): se puede simular en Node.
+import { Loadout, loadoutOf, gearBonus, emptyLoadout, TOOLS, ToolId, toolCd, toolPow } from './gear';
 import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing, ZONES, CREATURES, LEVEL_WAVES, LEVEL_START, levelPearls, levelOf, MODE_RULES, COSTA, WEAPONS, WeaponId, costaKind, WEAK, KIND_POOL, CostaKind, DIFFICULTY, FLEET } from './data';
 import { localize, t, L } from './i18n';
 import type { Save } from './save';
@@ -61,7 +62,7 @@ export interface Bolt {
 /** Hueco de la muralla (Modo Costa): arma, nivel y estado para dibujarla. */
 export interface Slot { x: number; open: boolean; w: WeaponId | null; lv: number; cd: number; aim: number; fire: number; on: boolean; tx: number; ty: number; /** Rama elegida en el nivel 4 (0 = ninguna). */ br: number; pulse: number; /** Para no llenar de textos: último aviso de eficaz/resiste. */ say: number; }
 /** Bomba de mortero en el aire: cae en (tx, ty) y explota en área. */
-export interface Shell { sx: number; sy: number; tx: number; ty: number; t: number; max: number; R: number; d: number; gone?: boolean; /** mortar = mortero, volley = Andanada, bomblet = racimo. */ kind?: 'mortar' | 'volley' | 'bomblet'; burn?: boolean; cluster?: boolean; }
+export interface Shell { sx: number; sy: number; tx: number; ty: number; t: number; max: number; R: number; d: number; gone?: boolean; /** mortar = mortero, volley = Andanada, bomblet = racimo. */ kind?: 'mortar' | 'volley' | 'bomblet' | 'barrel'; burn?: boolean; cluster?: boolean; }
 export interface EShot { x: number; y: number; d: number; c: string; gone?: boolean; }
 export interface Fx {
   kind: 'p' | 'ring' | 'nova' | 'wake' | 'splash' | 'boom' | 'net' | 'slam' | 'warn' | 'strike' | 'sink'
@@ -147,7 +148,9 @@ export function mulberry(seed: number) {
 }
 
 /** Nivel de la campaña: mundo (0-4) y número (1-10). Sin nivel = modo infinito. */
-export interface GameOpts { seed?: number; daily?: boolean; level?: { zi: number; n: number }; mode?: Mode; }
+export interface GameOpts { seed?: number; daily?: boolean; level?: { zi: number; n: number }; mode?: Mode; /** Equipo del Arsenal; si falta se toma del guardado. */ gear?: Loadout; }
+/** La investigación pesa un 28% menos desde que existe el Arsenal: el equipo llena ese hueco. */
+export const RESEARCH_W = 0.72;
 export interface LevelInfo { zi: number; n: number; start: number; waves: number; boss: boolean; g: number; }
 
 export class Game {
@@ -169,7 +172,7 @@ export class Game {
   /** Criaturas especiales vistas en esta partida (para mostrar su ficha una vez). */
   seenRun = new Set<string>();
   /** Redes en el aire: se aplican al caer. */
-  nets: { x: number; y: number; R: number; t: number }[] = [];
+  nets: { x: number; y: number; R: number; t: number; hold?: number }[] = [];
   fx: Fx[] = [];
   texts: Txt[] = [];
   hazards: Hazard[] = [];
@@ -230,17 +233,59 @@ export class Game {
   fleetAt = -1;
   /** Recarga del botón del buque (no hay buque en la Costa ni en la Travesía, que no tienen faro en el centro). */
   fleetCd: number = FLEET.first;
-  get fleetOk() { return this.mode !== 'costa' && this.mode !== 'travesia'; }
+  /** Equipo del Arsenal que trae esta partida. */
+  gear: Loadout = emptyLoadout();
+  private gb = gearBonus(emptyLoadout());
+  /** Herramientas puestas y su recarga (s). */
+  toolCds: Record<string, number> = {};
+  /** Provisión "Llama de repuesto": revive una vez. */
+  spareLife = false;
+  get fleetOk() { return this.mode !== 'costa' && this.mode !== 'travesia' && !!this.gear.tools.buque; }
+  /** Herramientas que se pueden usar en esta partida (no en la Costa, que tiene su propia Andanada). */
+  get toolList(): ToolId[] { return this.mode === 'costa' ? [] : (Object.keys(this.gear.tools) as ToolId[]).filter(id => id !== 'buque' || this.mode !== 'travesia'); }
+  toolMax(id: ToolId) { return toolCd(id, this.gear.tools[id] || 1); }
+  /** ¿La herramienta necesita que toques un punto del mar? */
+  static toolAims(id: ToolId) { return id !== 'buque'; }
   /** Botón del barquito: llama al buque de guerra. */
   callFleet() {
     if (!this.fleetOk || this.over || this.fleet || this.fleetCd > 0) return false;
-    this.fleetAt = this.t; this.fleetCd = FLEET.recharge;
+    this.fleetAt = this.t; this.fleetCd = this.toolMax('buque'); this.toolCds.buque = this.fleetCd;
+    return true;
+  }
+  /** Usa una herramienta del Arsenal (x, y = punto tocado para las que apuntan). */
+  useTool(id: ToolId, x = 0, y = -120) {
+    if (this.over || !this.toolList.includes(id)) return false;
+    if (id === 'buque') return this.callFleet();
+    if ((this.toolCds[id] || 0) > 0) return false;
+    const P = toolPow(this.gear.tools[id] || 1);
+    if (id === 'andanada') {
+      const A = TOOLS.andanada;
+      for (let i = 0; i < A.n; i++) {
+        const jx = (Math.random() - 0.5) * 46, jy = (Math.random() - 0.5) * 30, fly = 0.6 + Math.hypot(x, y) / 700;
+        this.shells.push({ sx: (i - 2.5) * 6, sy: -12, tx: x + jx, ty: y + jy, t: -i * 0.1, max: fly, R: A.R, d: this.st.dmg * A.dmg * P, kind: 'volley' });
+      }
+      this.fx.push({ kind: 'cannon', x: 0, y: -12, vx: 0, vy: 0, t: 0.4, max: 0.4, c: 'big', r: 6, h: Math.atan2(y + 12, x) });
+      this.shake = Math.max(this.shake, 0.12);
+      this.emit('volley');
+    } else if (id === 'barril') {
+      const B = TOOLS.barril;
+      this.shells.push({ sx: x, sy: y, tx: x, ty: y, t: 0, max: B.fuse, R: B.R, d: this.st.dmg * B.dmg * P, kind: 'barrel' });
+      this.fx.push({ kind: 'splash', x, y, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#bfe8ff', r: 12 });
+      this.emit('net');
+    } else if (id === 'red') {
+      const fly = 0.35, R = TOOLS.red.R;
+      this.nets.push({ x, y, R, t: fly, hold: TOOLS.red.hold * P });
+      this.fx.push({ kind: 'netfly', x: 0, y: -10, tx: x, ty: y, vx: 0, vy: 0, t: fly, max: fly, c: '#e8d9b0', r: R });
+      this.emit('net');
+    }
+    this.toolCds[id] = this.toolMax(id);
     return true;
   }
   shells: Shell[] = [];
   pickT = 3;
-  /** Mejoras conseguidas en la Travesía (para la pantalla final). */
+  /** Mejoras conseguidas en la Travesía (para la pantalla final) y cofres recogidos (dan reliquias). */
   found = 0;
+  chests = 0;
   private nid = 1;
   private wr: () => number = Math.random; // azar de la oleada (sembrado)
 
@@ -254,13 +299,19 @@ export class Game {
     this.daily = !!opts.daily;
     this.seed = opts.seed ?? Math.floor(Math.random() * 1e9);
     this.perm = this.daily ? {} : save.perm;
+    // Arsenal: el desafío diario se juega sin equipo para que sea igual para todos
+    this.gear = this.daily ? emptyLoadout() : opts.gear || loadoutOf(save.gear, levelOf(save.xp || 0).lv);
+    this.gb = gearBonus(this.gear);
+    for (const id of Object.keys(this.gear.tools)) this.toolCds[id] = TOOLS[id as ToolId]?.first ?? 10;
+    if (this.gear.tools.buque) this.fleetCd = TOOLS.buque.first;
+    this.spareLife = this.gear.prov === 'llama';
     DEFS.forEach(d => (this.lv[d.id] = 0));
     BLESSINGS.forEach(b => (this.bl[b.id] = 0));
     if (this.perm.turret) this.lv.tA = 1;
     this.rerolls = this.perm.reroll || 0;
     this.st = this.stats();
     this.hp = this.st.hp;
-    this.pearls = 20 + 25 * (this.perm.start || 0);
+    this.pearls = 20 + Math.round(25 * (this.perm.start || 0) * RESEARCH_W);
     this.mode = opts.level ? 'campaign' : opts.mode || 'endless';
     const R0 = MODE_RULES[this.mode as keyof typeof MODE_RULES];
     if (this.mode === 'aguante') {
@@ -283,37 +334,38 @@ export class Game {
       this.pearls += levelPearls(n);
       this.pauseT = this.pearls > 60 ? 6 : 1.2; // tiempo para comprar antes de la primera oleada
     }
+    if (this.gear.prov === 'cofre') this.pearls = opts.level ? Math.round(this.pearls * 1.3) : this.pearls + 60;
     this.pearlsStart = this.pearls;
   }
 
   stats(lv: Record<string, number> = this.lv): Stats {
-    const Q = (k: string) => this.perm[k] || 0, B = this.bl;
+    const Q = (k: string) => (this.perm[k] || 0) * RESEARCH_W, B = this.bl, G = this.gb || gearBonus(emptyLoadout());
     const a = lv.arm * 0.04;
-    const dmg = (12 + 3.5 * lv.dmg) * (1 + 0.1 * Q('dmg'));
-    const tm = 1 + 0.4 * B.torretas;
+    const dmg = (12 + 3.5 * lv.dmg) * (1 + 0.1 * Q('dmg')) * (1 + G.dmg);
+    const tm = (1 + 0.4 * B.torretas) * (1 + G.tur);
     const turret = (l: number, k: number) => (l > 0 ? dmg * k * (1 + 0.35 * (l - 1)) * tm : 0);
     return {
       dmg,
-      spd: (1.2 + 0.1 * lv.spd) * (1 + 0.05 * Q('spd')) * (1 + 0.2 * B.furia),
-      cc: Math.min(0.75, 0.02 + 0.02 * lv.cc + 0.02 * Q('pcrit')),
+      spd: (1.2 + 0.1 * lv.spd) * (1 + 0.05 * Q('spd')) * (1 + 0.2 * B.furia) * (1 + G.spd),
+      cc: Math.min(0.75, 0.02 + 0.02 * lv.cc + 0.02 * Q('pcrit') + G.cc),
       cf: 1.5 + 0.12 * lv.cf,
-      rng: Math.min(340, 200 + 12 * lv.rng) * (1 + 0.2 * B.gigante),
+      rng: Math.min(340, 200 + 12 * lv.rng) * (1 + 0.2 * B.gigante) * (1 + G.rng),
       chain: Math.min(0.8, 0.07 * lv.chain + 0.2 * B.prisma),
       twin: Math.min(0.7, 0.05 * Q('twin') + 0.2 * B.doble),
-      hp: (120 + 16 * lv.hp) * (1 + 0.1 * Q('hull')) * Math.max(0.5, 1 - 0.15 * B.avaricia),
-      rep: 0.3 * lv.rep + 0.3 * Q('prep'),
-      arm: Math.min(0.75, a / (1 + a) + 0.12 * B.coral),
-      bar: 10 * lv.bar + 15 * Q('pbar') + 30 * B.escudo,
+      hp: (120 + 16 * lv.hp) * (1 + 0.1 * Q('hull')) * Math.max(0.5, 1 - 0.15 * B.avaricia) * (1 + G.hp),
+      rep: 0.3 * lv.rep + 0.3 * Q('prep') + G.rep,
+      arm: Math.min(0.75, a / (1 + a) + 0.12 * B.coral + G.arm),
+      bar: 10 * lv.bar + 15 * Q('pbar') + 30 * B.escudo + (this.gear?.prov === 'sacos' ? 40 : 0),
       thorn: 0.4 * lv.thorn,
       vamp: 0.5 * lv.vamp + 1.5 * B.vampiro,
-      pk: (1 + 0.12 * lv.pk) * (1 + 0.1 * Q('pearl')) * (1 + 0.35 * B.avaricia),
+      pk: (1 + 0.12 * lv.pk) * (1 + 0.1 * Q('pearl')) * (1 + 0.35 * B.avaricia) * (1 + G.pk),
       pw: 3 * lv.pw * (1 + 0.1 * Q('pearl')),
       int: Math.min(0.25, 0.02 * lv.int + 0.01 * Q('interest')),
       ck: (1 + 0.15 * lv.ck) * (1 + 0.1 * Q('coral')),
       cw: 0.3 * lv.cw * (1 + 0.1 * Q('coral')),
-      fcd: 25 * Math.pow(0.92, Q('flash')) * Math.max(0.5, 1 - 0.06 * lv.fcd),
+      fcd: 25 * Math.pow(0.92, Q('flash')) * Math.max(0.5, 1 - 0.06 * lv.fcd) * Math.max(0.5, 1 - G.fcd),
       tA: turret(lv.tA, 1.1), tR: turret(lv.tR, 0.35), tN: turret(lv.tN, 0.7),
-      tap: dmg * (0.8 + 0.25 * (lv.tap || 0)),
+      tap: dmg * (0.8 + 0.25 * (lv.tap || 0)) * (1 + G.tap),
       tapCd: Math.max(0.35, 0.75 - 0.04 * (lv.tap || 0)),
     };
   }
@@ -701,7 +753,8 @@ export class Game {
       // Los primeros 3 niveles de la Bahía son la entrada al juego: sin la dificultad extra global
       if (this.level.zi === 0 && n <= 3) hs /= DIFFICULTY.hp;
     }
-    if (this.mode === 'asedio') hs *= 1.25;
+    if (this.gear?.prov === 'brea') hs *= 0.88;
+    if (this.mode === 'asedio') hs *= 1.1;
     if (this.mode === 'travesia') hs *= 1.2;
     if (this.mode === 'costa') hs *= 1 + COSTA.hp * Math.pow(Math.min(1, (w - 1) / 14), 2);
     return { hs: hs * DIFFICULTY.hp, ds: Math.pow(1.05, w - 1) * this.zone.dmg * DIFFICULTY.dmg };
@@ -884,7 +937,7 @@ export class Game {
       this.burst(attacker.x, attacker.y, '#7dd3fc', 3, 50);
     }
     if (this.hp <= 0 && !this.over) {
-      if (this.perm.revive && !this.revived) {
+      if ((this.perm.revive || this.spareLife) && !this.revived) {
         this.revived = true;
         this.hp = this.st.hp * 0.4;
         for (const e of this.enemies) { e.stun = 2; const dd = Math.hypot(e.x, e.y) || 1; if (e.type !== 'boss') { if (this.mode === 'costa') e.y -= 40; else { e.x += (e.x / dd) * 40; e.y += (e.y / dd) * 40; } } }
@@ -913,6 +966,7 @@ export class Game {
       this.fx.push({ kind: 'splash', x: n.x, y: n.y, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#bfe8ff', r: n.R * 0.6 });
       for (const e of this.enemies) {
         if (e.dead || (e.x - n.x) ** 2 + (e.y - n.y) ** 2 > n.R * n.R) continue;
+        if (n.hold) { if (e.type !== 'boss') e.stun = Math.max(e.stun, n.hold); e.slowT = Math.max(e.slowT, n.hold + 1.5); continue; }
         e.slowT = 2.5 + 0.3 * (this.lv.tR - 1);
         this.damage(e, this.st.tR, true, 'turret');
       }
@@ -1001,6 +1055,7 @@ export class Game {
     const n = p.kind === 'restos' ? 2 : 1;
     const got: string[] = [];
     for (let i = 0; i < n; i++) { const id = pool[Math.floor(Math.random() * pool.length)]; this.lv[id]++; got.push(DEFS.find(d => d.id === id)!.name); }
+    if (p.kind === 'cofre') this.chests++;
     if (p.kind === 'cofre') { this.lv.dmg++; got.push(DEFS.find(d => d.id === 'dmg')!.name); }
     this.refresh();
     if (p.kind === 'cofre') this.hp = Math.min(this.st.hp, this.hp + this.st.hp * 0.35);
@@ -1154,6 +1209,8 @@ export class Game {
   get fleetLen() { return FLEET.startY * 2 + Math.PI * FLEET.R; }
   private fleetUpdate(dt: number) {
     if (!this.fleet) this.fleetCd = Math.max(0, this.fleetCd - dt);
+    this.toolCds.buque = this.fleetCd;
+    for (const k of Object.keys(this.toolCds)) if (k !== 'buque') this.toolCds[k] = Math.max(0, this.toolCds[k] - dt);
     if (!this.fleet && this.fleetAt >= 0 && this.t >= this.fleetAt) {
       this.fleetAt = -1;
       const p = this.fleetPath(0);
@@ -1179,7 +1236,7 @@ export class Game {
       const a = Math.atan2(e.y - f.y, e.x - f.x);
       f.side = Math.sin(a - f.hd) >= 0 ? 1 : -1;
       const ox = f.x + Math.cos(f.hd + f.side * Math.PI / 2) * 8, oy = f.y + Math.sin(f.hd + f.side * Math.PI / 2) * 8;
-      this.bolts.push({ x: ox, y: oy, px: ox, py: oy, t: e, d: this.st.dmg * FLEET.dmg, crit: false, bounce: false, kind: 'cball', speed: 380, straight: true });
+      this.bolts.push({ x: ox, y: oy, px: ox, py: oy, t: e, d: this.st.dmg * FLEET.dmg * toolPow(this.gear.tools.buque || 1), crit: false, bounce: false, kind: 'cball', speed: 380, straight: true });
       this.fx.push({ kind: 'cannon', x: ox, y: oy, vx: 0, vy: 0, t: 0.4, max: 0.4, c: 'big', r: 6, h: a });
       this.fx.push({ kind: 'smoke', x: ox + Math.cos(a) * 14, y: oy + Math.sin(a) * 14, vx: Math.cos(a) * 22, vy: Math.sin(a) * 22 - 6, t: 1.2, max: 1.2, c: '', r: 8 });
       this.fx.push({ kind: 'smoke', x: ox + Math.cos(a) * 8, y: oy + Math.sin(a) * 8, vx: Math.cos(a) * 12, vy: Math.sin(a) * 12 - 4, t: 0.9, max: 0.9, c: '', r: 6 });
@@ -1297,7 +1354,7 @@ export class Game {
   /** Posición de una bomba de mortero (en el aire describe un arco). */
   shellPos(sh: Shell) {
     const k = Math.max(0, Math.min(1, sh.t / sh.max));
-    return { x: sh.sx + (sh.tx - sh.sx) * k, y: sh.sy + (sh.ty - sh.sy) * k, h: Math.sin(k * Math.PI) * 70 };
+    return { x: sh.sx + (sh.tx - sh.sx) * k, y: sh.sy + (sh.ty - sh.sy) * k, h: sh.kind === 'barrel' ? 0 : Math.sin(k * Math.PI) * 70 };
   }
 
   /* ---------- Mecánicas de zona ---------- */
@@ -1484,7 +1541,10 @@ export class Game {
       this.shake = Math.max(this.shake, sh.kind === 'bomblet' ? 0.04 : 0.08);
       for (const e of this.enemies) {
         if (e.dead || (e.x - sh.tx) ** 2 + (e.y - sh.ty) ** 2 >= (sh.R + e.r) ** 2) continue;
-        if (sh.kind === 'volley') { const d = this.damage(e, sh.d, true, 'area'); if (d > 0.5) this.text(e.x, e.y - 12, String(Math.round(d)), '#ffd27a', true, 0.6); }
+        if (sh.kind === 'volley' || sh.kind === 'barrel') {
+          const d = this.damage(e, sh.d, true, 'area'); if (d > 0.5) this.text(e.x, e.y - 12, String(Math.round(d)), '#ffd27a', true, 0.6);
+          if (sh.kind === 'barrel' && !e.dead && e.type !== 'boss') e.stun = Math.max(e.stun, TOOLS.barril.stun);
+        }
         else {
           this.hitW(e, sh.d, 'mortero', sh.burn ? 1 : sh.cluster ? 2 : 0, false, sh.kind !== 'bomblet');
           if (sh.burn && !e.dead) { e.burn = Math.max(e.burn, sh.d * 0.3); e.burnT = 3; }
