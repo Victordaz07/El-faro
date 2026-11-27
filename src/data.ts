@@ -128,7 +128,9 @@ export const LEVEL_START = [1, 2, 4, 6, 8, 10, 12, 14, 17, 20];
 /** Perlas que junta un buen jugador hasta el inicio de cada oleada (medido con el bot de la simulación). */
 const PEARL_CURVE = [0, 0, 16, 37, 62, 106, 160, 253, 383, 566, 743, 960, 1177, 1570, 1872, 2308, 2949, 3542, 4414, 5254, 6285, 6985];
 /** Perlas iniciales de un nivel: una parte de lo que habrías juntado hasta ahí, para no empezar de cero. */
-export const levelPearls = (n: number) => Math.round(1.0 * (PEARL_CURVE[LEVEL_START[n - 1]] || 0));
+/** Ajuste fino por nivel (medido con `npm run sim:camp`): los primeros niveles son más generosos para enseñar y el 9 menos para que no sea un paseo. */
+export const LEVEL_PEARL_MULT = [1, 1.55, 2.2, 1.75, 1.3, 1.15, 1, 1, 0.5, 0.9];
+export const levelPearls = (n: number) => Math.round(LEVEL_PEARL_MULT[n - 1] * (PEARL_CURVE[LEVEL_START[n - 1]] || 0));
 /** Coral por superar un nivel por primera vez (índice global 1-50). */
 export const levelClearCoral = (g: number) => 8 + 4 * g;
 /** Estrellas según la vida que quede al ganar. */

@@ -26,9 +26,12 @@ function play(zi: number, n: number, perm: number, smart: boolean) {
   }
   return g.won ? 1 : 0;
 }
-const N = 4;
-for (const [zi, perm] of [[0, 0], [0, 3], [1, 3], [1, 6], [2, 6], [3, 8], [4, 10]]) {
-  const row = LEVEL_WAVES.map((_, i) => { let w = 0; for (let k = 0; k < N; k++) w += play(zi, i + 1, perm, true); return w; });
+const N = +(process.env.N || 4);
+// CASOS="0:0,1:3" (mundo:investigación) para correr solo algunos
+const CASOS: number[][] = process.env.CASOS ? process.env.CASOS.split(',').map(c => c.split(':').map(Number)) : [[0, 0], [0, 3], [1, 3], [1, 6], [2, 6], [3, 8], [4, 10]];
+for (const [zi, perm] of CASOS) {
+  const SOLO = process.env.NIVELES ? process.env.NIVELES.split(',').map(Number) : null;
+  const row = LEVEL_WAVES.map((_, i) => { if (SOLO && !SOLO.includes(i + 1)) return -1; let w = 0; for (let k = 0; k < N; k++) w += play(zi, i + 1, perm, true); return w; });
   const rnd = [1, 2, 3, 4].map(n => play(zi, n, perm, false));
-  console.log(`${ZONES[zi].name.padEnd(16)} taller Nv${String(perm).padEnd(2)} | bot gana (de ${N}): ${row.map((w, i) => `${i + 1}:${w}`).join(' ')} | al azar niveles 1-4: ${rnd.join('')}`);
+  console.log(`${ZONES[zi].name.padEnd(16)} taller Nv${String(perm).padEnd(2)} | bot gana (de ${N}): ${row.map((w, i) => (w < 0 ? '' : `${i + 1}:${w}`)).filter(Boolean).join(' ')} | al azar niveles 1-4: ${rnd.join('')}`);
 }

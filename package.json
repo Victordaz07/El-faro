@@ -10,6 +10,8 @@
     "sim": "esbuild tests/sim.ts --bundle --platform=node --outfile=tests/.sim.cjs --log-level=warning && node tests/.sim.cjs",
     "android:sync": "npm run build && npx cap sync android",
     "android:open": "npx cap open android",
+    "sim:zonas": "esbuild tests/zonas.ts --bundle --platform=node --outfile=tests/.zonas.cjs --log-level=warning && node tests/.zonas.cjs",
+    "sim:tune": "esbuild tests/tune.ts --bundle --platform=node --outfile=tests/.tune.cjs --log-level=warning && node tests/.tune.cjs",
     "sim:camp": "esbuild tests/campaign.ts --bundle --platform=node --outfile=tests/.camp.cjs --log-level=warning && node tests/.camp.cjs",
     "sim:modes": "esbuild tests/modes.ts --bundle --platform=node --outfile=tests/.modes.cjs --log-level=warning && node tests/.modes.cjs",
     "test": "esbuild tests/pearls.ts --bundle --platform=node --outfile=tests/.pearls.cjs --log-level=warning && node tests/.pearls.cjs && esbuild tests/i18n.ts --bundle --platform=node --outfile=tests/.i18n.cjs --log-level=warning && node tests/.i18n.cjs && esbuild tests/smoke.ts --bundle --platform=node --outfile=tests/.smoke.cjs --log-level=warning && node tests/.smoke.cjs"

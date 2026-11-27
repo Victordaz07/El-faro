@@ -8,7 +8,9 @@ Idiomas del juego: **español e inglés** (`src/i18n.ts`). Comentarios del códi
 - `npm run dev` — servidor local (con `--host` para probar desde el celular)
 - `npm run build` — typecheck + `dist/index.html` en un solo archivo
 - `npm run sim` — bot que juega el modo infinito en todas las zonas; úsalo después de cualquier cambio de balance
-- `npm run sim:camp` — bot que juega cada nivel de la campaña y cuenta cuántas veces gana
+- `npm run sim:camp` — bot que juega cada nivel de la campaña y cuenta cuántas veces gana (`N=30` partidas por nivel, `CASOS="0:0,1:3"` mundo:investigación, `NIVELES="3,9"`)
+- `npm run sim:zonas` — compara las 5 zonas con el mismo nivel de investigación (`PERM=0,3`); **no compares zonas con distinta investigación ni con una sola partida al azar: engaña**
+- `npm run sim:tune` — busca por nivel el multiplicador de perlas iniciales (`LEVEL_PEARL_MULT` en data.ts) para que el bot sin investigación gane un % objetivo en Bahía (`OBJ=...`)
 - `npm run sim:modes` — bot que juega Aguante, Escolta, Travesía y Asedio
 - `npm test` — verifica que las perlas cuadren (iniciales + ganadas − gastadas) en partidas completas y que todo texto tenga traducción al inglés (`tests/i18n.ts`)
 - `npm run android:sync` / `npm run android:open` — Capacitor
@@ -56,4 +58,5 @@ Idiomas del juego: **español e inglés** (`src/i18n.ts`). Comentarios del códi
 - El azar de oleadas y cartas usa la semilla (`mulberry`) para que el desafío diario sea igual para todos.
 - Arte, nombres y mecánicas son propios: no copiar recursos de otros juegos. El arte con IA (ChatGPT) es original y se guarda en `assets/art/`.
 - Retratos de jefes: los 5 son ilustraciones pintadas con ChatGPT (originales de 1024 px en `assets/art/originales/`, WebP de 512 px en `assets/art/`). Un retrato nuevo sigue el estilo del Kraken, con la cabeza al centro porque se recorta en círculo. `bake-fase2.py` no los toca si existe el original.
+- Campaña, Bahía sin investigación (bot, 100 partidas, tras `sim:tune`): niveles 1-10 ganan ≈ 100, 96, 78, 56, 71, 54, 41, 53, 85, 16 %. `LEVEL_PEARL_MULT` ajusta las perlas iniciales por nivel; el nivel 9 es muy sensible (0.45 → 70 %, 0.55 → 92 %).
 - Objetivo de dificultad: en el infinito, comprando al azar se muere ~oleada 6 y un bot perfecto sin investigación llega a ~26-31. En la campaña, sin investigación el bot gana casi siempre los niveles 1-3 de Bahía y desde el 4 empieza a perder; con investigación media gana los mundos hasta su nivel 9, y el nivel 10 (jefe) de cada mundo pide subir la investigación.
