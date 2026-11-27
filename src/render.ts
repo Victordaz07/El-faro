@@ -223,7 +223,7 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
   // Profundidad: lo que está "detrás" del faro se dibuja antes
   const layers: { y: number; draw: () => void }[] = [{ y: 2, draw: () => drawTower(ctx, t, g) }];
   // Adornos de la Bahía: fijos, sin colisión; se ordenan por profundidad con las criaturas
-  if (zone.id === 'bahia' && !(g && (g.mode === 'travesia' || g.mode === 'escolta' || g.mode === 'asedio')))
+  if (SHOW_DECO && zone.id === 'bahia' && !(g && (g.mode === 'travesia' || g.mode === 'escolta' || g.mode === 'asedio')))
     for (const d of BAHIA_DECO) layers.push({ y: d.y, draw: () => drawDeco(ctx, d, t) });
   if (g?.ship && g.ship.phase !== 'gap') { const sh = g.ship; layers.push({ y: sh.y, draw: () => drawSupplyShip(ctx, sh, t) }); }
   if (g) {
@@ -1186,6 +1186,8 @@ function drawSupplyShip(ctx: CanvasRenderingContext2D, s: Ship, t: number) {
 /** Travesía: barriles, restos de naufragios y cofres a la deriva (se recogen tocándolos). */
 /** Adornos de la Bahía: tipo, posición y rumbo (0-7) fijos para que todos vean lo mismo.
  *  Las rocas con algas (deco-rocas) están horneadas pero fuera: de lejos parecen una criatura. */
+/** Apagado: en partida estorba y confunde. Los sprites, modelos y el código quedan para usarlos de otra forma. */
+const SHOW_DECO = false;
 const BAHIA_DECO = [
   { k: 'muelle', x: -66, y: 30, d: 1 }, { k: 'nasa', x: -34, y: 62, d: 6 }, { k: 'bote', x: 128, y: 22, d: 5 },
   { k: 'boya', x: -152, y: 64, d: 0 },
