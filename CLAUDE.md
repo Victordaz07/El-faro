@@ -21,12 +21,15 @@ Idioma de la interfaz y de los comentarios: **español**.
 - `src/leaderboard.ts` — ranking: Claude DB (artifact) → Firebase (`src/firebase.config.ts`) → local.
 - `src/main.ts` — interfaz, pantallas, tutorial y bucle.
 - `src/icons.ts` — íconos SVG propios de mejoras y pestañas.
-- `assets/` — `icon.png` (ícono de la app, 1024) y `thumb.png` (portada 1200×630), ambos renderizados desde el propio juego.
+- `assets/` — `icon.png` (ícono de la app) y `thumb.png` (portada). `assets/art/`: arte en WebP que se incrusta en el build (fondo del menú, retratos de jefes por zona, sprite del faro renderizado desde `assets/models/faro-isla.glb`); originales en `assets/art/originales/`.
+- `src/art.ts` — carga ese arte; si una imagen no carga, se usa el dibujo por código.
+- `tools/glb-sprite/` — convierte modelos 3D (.glb) en sprites alineados al juego.
 
 ## Reglas
 - Las perlas solo entran por `gain()` y solo salen por `buy()` en game.ts; nunca modificar `pearls` directamente.
 - Comprar manteniendo presionado usa una sola repetición global (`holdStop` en main.ts) que se detiene al soltar, al fallar una compra o con otro toque.
 - La lógica de juego no toca el DOM (para que `npm run sim` siga funcionando).
 - El azar de oleadas y cartas usa la semilla (`mulberry`) para que el desafío diario sea igual para todos.
-- Arte, nombres y mecánicas son propios: no copiar recursos de otros juegos.
+- Arte, nombres y mecánicas son propios: no copiar recursos de otros juegos. El arte con IA (ChatGPT) es original y se guarda en `assets/art/`.
+- Faltan retratos para Mar Helado, Volcán y Abismo: agrégalos en `bossArt` de art.ts con el mismo estilo.
 - Objetivo de dificultad: comprando al azar se muere ~oleada 6; un bot perfecto sin investigación llega a ~26-31.

@@ -66,8 +66,17 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .ov.on{display:flex}
 .ov{justify-content:flex-start}.ov>:first-child{margin-top:auto}.ov>:last-child{margin-bottom:auto}
 #menu>#mus,#menu>#mute{margin:0}
-#menu{background:linear-gradient(180deg,rgba(4,10,20,.35),rgba(4,10,20,.85) 45%)}
-#menu h1{margin-top:26vh}
+#menu{background:#04101c;isolation:isolate;justify-content:flex-end;padding-bottom:calc(26px + env(safe-area-inset-bottom))}
+#menu>:first-child{margin-top:0}#menu>:last-child{margin-bottom:0}
+#menu::before{content:'';position:absolute;inset:-4%;z-index:-2;background:var(--art,none) center 16%/cover no-repeat;animation:kb 26s ease-in-out infinite alternate}
+#menu::after{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(4,10,20,0) 0%,rgba(4,10,20,.05) 38%,rgba(4,10,20,.78) 62%,rgba(4,10,20,.96) 100%)}
+@keyframes kb{from{transform:scale(1) translateY(0)}to{transform:scale(1.07) translateY(-1.5%)}}
+#bossart{position:absolute;left:50%;top:13%;width:min(46%,200px);aspect-ratio:1;transform:translateX(-50%) scale(.85);border-radius:50%;overflow:hidden;opacity:0;z-index:5;pointer-events:none;
+  box-shadow:0 0 0 3px rgba(255,210,122,.85),0 0 40px rgba(255,120,80,.55);transition:opacity .45s,transform .6s cubic-bezier(.2,.9,.3,1.3)}
+#bossart.on{opacity:1;transform:translateX(-50%) scale(1)}
+#bossart img{width:100%;height:100%;object-fit:cover;display:block}
+#stage.cine.art #banner{top:calc(13% + min(46vw,200px) + 14px)}
+#menu h1{margin-top:0}
 .ov h1{margin:0;font-size:34px;letter-spacing:.06em;line-height:1.05;text-shadow:0 0 24px rgba(255,226,122,.35)}
 .ov h1 em{font-style:normal;color:#ffe27a}
 .ov h2{margin:0;font-size:22px;letter-spacing:.04em}
@@ -154,6 +163,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
     <div id="boss"><span id="bossname"></span><div><div id="bossfill"></div></div></div>
     <div id="mod"></div>
     <div id="frostw">❄ ESCARCHA</div>
+    <div id="bossart"><img alt=""></div>
     <div id="banner"></div>
     <button id="aim"><b>OBJETIVO</b><span>CERCANO</span></button>
     <button id="flash"><span>⚡</span><small>DESTELLO</small></button>

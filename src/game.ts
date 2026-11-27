@@ -57,7 +57,7 @@ export const COLORS: Record<EType, string> = {
   crab: '#ff7a5c', jelly: '#d28bff', mini: '#e3b3ff', sardine: '#cfe3f2', eel: '#4ade80',
   puffer: '#ffd166', turtle: '#9be15d', hermit: '#e8c39e', boss: '#ffd27a',
 };
-export const LAMP_Y = -52;
+export const LAMP_Y = -64;
 /** Posición de cada torreta sobre la isla. */
 export const TURRET_POS: Record<'tA' | 'tR' | 'tN', { x: number; y: number }> = {
   tA: { x: -24, y: 10 }, tR: { x: 24, y: 10 }, tN: { x: 0, y: 24 },

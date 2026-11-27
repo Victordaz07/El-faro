@@ -5,5 +5,6 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 export default defineConfig({
   base: './',
   plugins: [viteSingleFile()],
-  build: { target: 'es2019' },
+  // Las imágenes se incrustan como data URI para que el juego siga siendo un solo archivo
+  build: { target: 'es2019', assetsInlineLimit: 100_000_000 },
 });

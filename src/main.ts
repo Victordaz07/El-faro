@@ -7,6 +7,7 @@ import {
 import { Game, GEvent, AIMS } from './game';
 import { draw, camFocus } from './render';
 import { ICONS, TAB_ICONS } from './icons';
+import { menuArt, bossArt } from './art';
 import { initAudio, setMuted, sfx } from './audio';
 import { startMusic, setMusicEnabled, setMusicLevel } from './music';
 import { getBoard, Row } from './leaderboard';
@@ -609,6 +610,9 @@ function loop(nowMs: number) {
     if (boss && introWave !== g.wave) {
       introWave = g.wave; introT = 2.6;
       stage.classList.add('cine');
+      const art = bossArt[runZone.id];
+      stage.classList.toggle('art', !!art);
+      if (art) { $<HTMLImageElement>('bossart').querySelector('img')!.src = art; $('bossart').classList.add('on'); }
       banner(runZone.boss + '\n' + runZone.bossTitle, 2.6);
     }
     let slow = 1;
@@ -619,7 +623,8 @@ function loop(nowMs: number) {
       const bx = boss ? boss.x : camFocus.x / 0.75, by = boss ? boss.y : camFocus.y / 0.75;
       camFocus.x = bx * 0.75 * e; camFocus.y = by * 0.75 * e; camFocus.z = 1 + 0.75 * e;
       slow = 0.25 + 0.75 * (1 - e);
-      if (introT <= 0) { stage.classList.remove('cine'); camFocus.x = camFocus.y = 0; camFocus.z = 1; }
+      if (introT <= 0.5) $('bossart').classList.remove('on');
+      if (introT <= 0) { stage.classList.remove('cine', 'art'); camFocus.x = camFocus.y = 0; camFocus.z = 1; }
     }
     let acc = dt * speed * slow;
     while (acc > 0) { const h = Math.min(acc, 1 / 60); g.update(h); acc -= h; if (g.over || g.state === 'cards') break; }
@@ -635,6 +640,7 @@ function loop(nowMs: number) {
 (window as unknown as { __cam: typeof camFocus }).__cam = camFocus;
 (window as unknown as { __zone: (id: string) => void }).__zone = (id: string) => { runZone = ZONES.find(z => z.id === id)!; if (g) g.zone = runZone; };
 
+$('menu').style.setProperty('--art', `url(${menuArt})`);
 buildPanel();
 showMenu();
 resize();

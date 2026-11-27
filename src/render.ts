@@ -2,6 +2,7 @@
 import { Game, Enemy, LAMP_Y, TURRET_POS } from './game';
 import type { Zone } from './data';
 import { Water } from './water';
+import { faroSprite, ready } from './art';
 
 let water: Water | null | undefined;
 
@@ -348,7 +349,7 @@ function drawIsland(ctx: CanvasRenderingContext2D, t: number) {
 }
 
 function drawTower(ctx: CanvasRenderingContext2D, t: number, g: Game | null) {
-  const tw = sprite('tower', 40, c => {
+  const tw = sprite('tower', 72, c => {
     const top = LAMP_Y + 9, bot = 4;
     // sombra proyectada
     c.fillStyle = 'rgba(0,0,0,.3)';
@@ -384,7 +385,13 @@ function drawTower(ctx: CanvasRenderingContext2D, t: number, g: Game | null) {
     c.beginPath(); c.ellipse(0, LAMP_Y - 4, 7, 6, 0, Math.PI, TAU); c.fill();
     c.fillStyle = '#2a2f3a'; c.beginPath(); c.arc(0, LAMP_Y - 10.5, 1.4, 0, TAU); c.fill();
   });
-  blit(ctx, tw, 40, 1);
+  if (ready(faroSprite.img)) {
+    // Faro renderizado desde el modelo 3D: la base cae en (0, 4) y la linterna en LAMP_Y
+    const f = faroSprite, k = (4 - LAMP_Y) / (f.oy - f.ly);
+    ctx.fillStyle = 'rgba(0,0,0,.28)';
+    ctx.beginPath(); ctx.ellipse(12, 7, 24, 8, -0.3, 0, TAU); ctx.fill();
+    ctx.drawImage(f.img, -f.ox * k, 4 - f.oy * k, f.w * k, f.h * k);
+  } else blit(ctx, tw, 72, 1);
   // resplandor de la linterna
   const pulse = 0.75 + 0.25 * Math.sin(t * 6);
   ctx.globalCompositeOperation = 'lighter';
