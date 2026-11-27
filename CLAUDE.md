@@ -22,12 +22,13 @@ Idioma de la interfaz y de los comentarios: **español**.
 - `src/main.ts` — interfaz, pantallas, tutorial y bucle.
 - `src/icons.ts` — íconos SVG propios de mejoras y pestañas.
 - Interfaz: tema de vidrio marino oscuro con acento turquesa (`--acc`) en index.html; sin dorado. Tipografías incrustadas Lilita One y Nunito. El mar ocupa toda la pantalla; HUD y barra inferior flotan encima. Barra inferior compacta (`#bar`): 4 pestañas en cuadrícula 2×2 + fila deslizable de mejoras (`#sheet`); tocar la pestaña activa la cierra. Compra: toque = 1, dedo quieto 0.38 s = repetida, deslizar = mover la fila. `view.offY` en render.ts centra el faro en la zona visible.
-- `assets/` — `icon.png` (ícono de la app) y `thumb.png` (portada). `assets/art/`: arte en WebP que se incrusta en el build (fondo del menú, retratos de jefes por zona, sprite del faro renderizado desde `assets/models/faro-isla.glb`); originales en `assets/art/originales/`.
+- `assets/` — `icon.png` (ícono de la app) y `thumb.png` (portada). `assets/art/`: arte en WebP que se incrusta en el build (fondo del menú y retratos de jefes por zona); originales en `assets/art/originales/`. `assets/art/fase2/`: isla, faro, torretas, red, arpón y jefes renderizados desde `assets/models/` + `meta.json` con anclas.
 - `src/art.ts` — carga ese arte; si una imagen no carga, se usa el dibujo por código.
 - `tools/glb-sprite/` — convierte modelos 3D (.glb) en sprites. `bake-enemies.py` genera las hojas de enemigos (16 direcciones × 4 cuadros, cámara a 32°) desde `assets/models/enemigo-*.glb`; las animaciones por pieza están en `sheet.js` (`ANIM`). Resultado en `assets/art/enemigos/` (+ `meta.json`).
-- Enemigos: si hay hoja de sprites se usa `drawFromSheet` en render.ts; si no, el dibujo por código. Emergen al aparecer, se hunden al morir (fx `sink`) y se tiñen por zona (`tinted`, tabla `TINT`). Los jefes siguen dibujados por código.
+- Enemigos: si hay hoja de sprites se usa `drawFromSheet` en render.ts; si no, el dibujo por código. Emergen al aparecer, se hunden al morir (fx `sink`) y se tiñen por zona (`tinted`, tabla `TINT`). Los jefes usan su propia hoja por zona (`bossSheet`, sin tinte).
+- Fase 2 (`tools/glb-sprite/fase2.js` + `bake-fase2.py`): isla (`isla-base.glb`, recortada al nivel del agua) y faro (`faro-solo.glb` en Y=0.22) por separado para que las criaturas pasen detrás del faro; escala 1 unidad = 40 px del juego. `LAMP_Y` y `TURRET_POS` salen de las anclas de ese render: si se cambia la isla, hay que recalcularlos. Torretas: base fija + cabeza en 16 direcciones × 4 cuadros (0 = reposo, 1-3 = disparo; `g.tFire`, `g.slamT`); se ordenan por profundidad junto con criaturas y faro. Red y arpón usan sus modelos. Si una imagen no carga, se usa el dibujo por código.
 - Ataques: la anguila se carga (`chargeT`, 0.5 s) y lanza una descarga instantánea (`zap()`, fx `zap` en zigzag); cuerpo a cuerpo con embestida (`lungeT`) y fx `bite`/`sting`/`bash`; la red vuela en arco (`nets` + fx `netfly`) y se aplica al caer; el ancla y el pez globo lanzan `spray` con gravedad. `eshots` ya no se usa.
-- Pendiente de modelos (fase 2 de la guía): isla con 3 plataformas (`isla-base.glb`), torretas con nodos Base/Head (`torreta-arponero/lanzarredes/ancla.glb`), `red.glb`, `arpon.glb` y los 5 jefes. Medidas y nombres de nodos están en la guía; las plataformas corresponden a `TURRET_POS` (mundo ÷ 40).
+- Modelos de la fase 2 ya integrados (paquete TODO_3D). Serpiente de hielo: `Spikes` es un solo nodo, por eso sus espiras no se animan por separado.
 - Guía para pedir modelos a ChatGPT: https://claude.ai/artifact/AGMa1dhbwEqj1UVswy85cL (prompt maestro + prompt por criatura).
 
 ## Reglas
@@ -36,5 +37,5 @@ Idioma de la interfaz y de los comentarios: **español**.
 - La lógica de juego no toca el DOM (para que `npm run sim` siga funcionando).
 - El azar de oleadas y cartas usa la semilla (`mulberry`) para que el desafío diario sea igual para todos.
 - Arte, nombres y mecánicas son propios: no copiar recursos de otros juegos. El arte con IA (ChatGPT) es original y se guarda en `assets/art/`.
-- Faltan retratos para Mar Helado, Volcán y Abismo: agrégalos en `bossArt` de art.ts con el mismo estilo.
+- Retratos de Mar Helado, Volcán y Abismo: son renders provisionales del modelo 3D (`bake-fase2.py`). Si llegan versiones pintadas como las del Kraken y el Rey Cangrejo, reemplaza `assets/art/jefe-*.webp`.
 - Objetivo de dificultad: comprando al azar se muere ~oleada 6; un bot perfecto sin investigación llega a ~26-31.

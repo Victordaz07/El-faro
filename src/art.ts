@@ -1,11 +1,11 @@
-// Arte pintado e importado: sprite del faro (renderizado desde un modelo 3D),
-// fondo del menú y retratos de jefes. Si una imagen no carga, el juego usa el
-// dibujo por código de siempre.
-import faroUrl from '../assets/art/faro-sprite.webp';
-import faroMeta from '../assets/art/faro-sprite.json';
+// Arte importado: isla, faro, torretas y jefes renderizados desde modelos 3D, fondo del
+// menú y retratos de jefes. Si una imagen no carga, el juego usa el dibujo por código.
 import menuUrl from '../assets/art/menu-fondo.webp';
 import krakenUrl from '../assets/art/jefe-kraken.webp';
 import reyUrl from '../assets/art/jefe-rey-cangrejo.webp';
+import serpienteUrl from '../assets/art/jefe-serpiente-hielo.webp';
+import titanUrl from '../assets/art/jefe-titan-magma.webp';
+import leviatanUrl from '../assets/art/jefe-leviatan.webp';
 
 function img(src: string) {
   const i = new Image();
@@ -14,12 +14,14 @@ function img(src: string) {
   return i;
 }
 
-export const faroSprite = { img: img(faroUrl), ...faroMeta };
 export const menuArt = menuUrl;
 /** Retrato por zona (id de zona → imagen). Las zonas sin retrato no lo muestran. */
 export const bossArt: Record<string, string> = {
   bahia: krakenUrl,
   arrecife: reyUrl,
+  helado: serpienteUrl,
+  volcan: titanUrl,
+  abismo: leviatanUrl,
 };
 export const ready = (i: HTMLImageElement) => i.complete && i.naturalWidth > 0;
 
@@ -56,4 +58,54 @@ const SHEETS: Record<string, Sheet> = {
 export function sheetFor(type: string): Sheet | null {
   const s = SHEETS[type];
   return s && ready(s.img) ? s : null;
+}
+
+/* ---------- Fase 2: isla, faro, torretas, red, arpón y jefes (desde modelos 3D) ---------- */
+import f2 from '../assets/art/fase2/meta.json';
+import islaUrl from '../assets/art/fase2/isla.webp';
+import faroUrl from '../assets/art/fase2/faro.webp';
+import redUrl from '../assets/art/fase2/red.webp';
+import arponUrl from '../assets/art/fase2/arpon.webp';
+import tABaseUrl from '../assets/art/fase2/torreta-arponero-base.webp';
+import tAUrl from '../assets/art/fase2/torreta-arponero.webp';
+import tRBaseUrl from '../assets/art/fase2/torreta-lanzarredes-base.webp';
+import tRUrl from '../assets/art/fase2/torreta-lanzarredes.webp';
+import tNBaseUrl from '../assets/art/fase2/torreta-ancla-base.webp';
+import tNUrl from '../assets/art/fase2/torreta-ancla.webp';
+import bKraken from '../assets/art/fase2/jefe-kraken.webp';
+import bRey from '../assets/art/fase2/jefe-rey-cangrejo.webp';
+import bSerpiente from '../assets/art/fase2/jefe-serpiente-hielo.webp';
+import bTitan from '../assets/art/fase2/jefe-titan-magma.webp';
+import bLeviatan from '../assets/art/fase2/jefe-leviatan.webp';
+
+/** Imagen fija con su punto de anclaje (o = origen del mundo) en píxeles y su escala:
+ *  k = píxeles del juego por píxel de imagen. */
+export interface Still { img: HTMLImageElement; w: number; h: number; ox: number; oy: number; k: number; lamp?: number[] }
+const still = (url: string, m: { w: number; h: number; o: number[]; lamp?: number[] }, k: number): Still => ({ img: img(url), w: m.w, h: m.h, ox: m.o[0], oy: m.o[1], k, lamp: m.lamp });
+export const islaArt = still(islaUrl, f2.isla, 1 / f2.ppu);
+export const faroArt = still(faroUrl, f2.faro, 1 / f2.ppu);
+/** Red: k para un diámetro de 1 px del juego (se multiplica por el diámetro deseado). */
+export const redArt = still(redUrl, f2.red, 1 / f2.red.ppu);
+/** Arpón: k para un largo de 1 px del juego. */
+export const arponArt = still(arponUrl, f2.arpon, 1 / f2.arpon.ppu);
+
+export interface TurretArt { base: HTMLImageElement; head: HTMLImageElement; px: number; dirs: number; frames: number; ox: number; oy: number; k: number }
+const tur = (b: string, h: string, m: typeof f2.tA): TurretArt => ({ base: img(b), head: img(h), px: m.px, dirs: m.dirs, frames: m.frames, ox: m.ox, oy: m.oy, k: (40 * m.scale) / m.ppu });
+const TURRET_ART = { tA: tur(tABaseUrl, tAUrl, f2.tA), tR: tur(tRBaseUrl, tRUrl, f2.tR), tN: tur(tNBaseUrl, tNUrl, f2.tN) };
+export function turretArt(k: 'tA' | 'tR' | 'tN'): TurretArt | null {
+  const t = TURRET_ART[k];
+  return ready(t.base) && ready(t.head) ? t : null;
+}
+
+const BOSS_URL: Record<string, string> = { bahia: bKraken, arrecife: bRey, helado: bSerpiente, volcan: bTitan, abismo: bLeviatan };
+const BOSS_SHEETS: Record<string, Sheet> = {};
+/** Hoja de sprites del jefe de una zona (se carga solo cuando hace falta). */
+export function bossSheet(zone: string): Sheet | null {
+  let s = BOSS_SHEETS[zone];
+  if (!s) {
+    const m = (f2.jefes as Record<string, { px: number; dirs: number; frames: number; ox: number; oy: number; ppu: number }>)[zone];
+    if (!m || !BOSS_URL[zone]) return null;
+    s = BOSS_SHEETS[zone] = { img: img(BOSS_URL[zone]), ...m, len: 2.7, fps: 5 };
+  }
+  return ready(s.img) ? s : null;
 }

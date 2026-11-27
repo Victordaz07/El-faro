@@ -2,7 +2,7 @@
 import { Game, Enemy, LAMP_Y, TURRET_POS } from './game';
 import type { Zone } from './data';
 import { Water } from './water';
-import { faroSprite, ready, sheetFor, Sheet } from './art';
+import { ready, sheetFor, Sheet, islaArt, faroArt, redArt, arponArt, turretArt, bossSheet, Still } from './art';
 
 let water: Water | null | undefined;
 
@@ -150,7 +150,7 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
       ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.quadraticCurveTo((f.x + nx) / 2, Math.min(f.y, ny) - 20, nx, ny); ctx.stroke();
       ctx.fillStyle = `rgba(0,10,25,${0.25 * p})`;
       ctx.beginPath(); ctx.ellipse(f.x + (tx - f.x) * p, f.y + (ty - f.y) * p, (f.r || 40) * (0.2 + 0.7 * p), (f.r || 40) * (0.15 + 0.5 * p), 0, 0, TAU); ctx.fill();
-      drawNet(ctx, nx, ny, (f.r || 40) * (0.2 + 0.8 * p), f.c);
+      drawNet(ctx, nx, ny, (f.r || 40) * (0.2 + 0.8 * p), f.c, (1 - p) * 2.5);
     } else if (f.kind === 'net') {
       ctx.globalAlpha = Math.min(1, k * 2.5);
       drawNet(ctx, f.x, f.y, f.r || 40, f.c);
@@ -199,14 +199,16 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
   drawIsland(ctx, t);
 
   // Profundidad: lo que está "detrás" del faro se dibuja antes
-  const enemies = g ? [...g.enemies].sort((a, b) => a.y - b.y) : [];
-  for (const e of enemies) if (e.y < 2) drawEnemy(ctx, e, t, zone, g!);
-  drawTower(ctx, t, g);
-  if (g) drawTurrets(ctx, g, t);
-  for (const e of enemies) if (e.y >= 2) drawEnemy(ctx, e, t, zone, g!);
+  const layers: { y: number; draw: () => void }[] = [{ y: 2, draw: () => drawTower(ctx, t, g) }];
+  if (g) {
+    for (const e of g.enemies) layers.push({ y: e.y, draw: () => drawEnemy(ctx, e, t, zone, g) });
+    for (const k of ['tA', 'tR', 'tN'] as const) if (g.lv[k] > 0) layers.push({ y: TURRET_POS[k].y + 0.5, draw: () => drawTurret(ctx, g, k, t) });
+  }
+  layers.sort((a, b) => a.y - b.y);
+  for (const l of layers) l.draw();
   if (g && g.frozen > 0) {
     ctx.fillStyle = `rgba(190,235,255,${Math.min(0.32, g.frozen * 0.2)})`;
-    ctx.beginPath(); ctx.ellipse(0, -18, 26, 44, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, -24, 20, 36, 0, 0, TAU); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 1.2;
     for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 6, LAMP_Y + Math.sin(a) * 6); ctx.lineTo(Math.cos(a) * 14, LAMP_Y + Math.sin(a) * 14); ctx.stroke(); }
   }
@@ -217,8 +219,13 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
     ctx.strokeStyle = 'rgba(201,164,106,.75)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(tp.x, tp.y - 8); ctx.quadraticCurveTo(mx, my, b.x, b.y); ctx.stroke();
     ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(a);
-    ctx.strokeStyle = '#6b4a2c'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(0, 0); ctx.stroke();
-    ctx.fillStyle = '#d9d2c3'; ctx.beginPath(); ctx.moveTo(5, 0); ctx.lineTo(-2, -3.5); ctx.lineTo(-2, 3.5); ctx.closePath(); ctx.fill();
+    if (ready(arponArt.img)) {
+      const k = arponArt.k * 22; // 22 px de largo
+      ctx.drawImage(arponArt.img, -6 - arponArt.ox * k, -arponArt.oy * k, arponArt.w * k, arponArt.h * k);
+    } else {
+      ctx.strokeStyle = '#6b4a2c'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(0, 0); ctx.stroke();
+      ctx.fillStyle = '#d9d2c3'; ctx.beginPath(); ctx.moveTo(5, 0); ctx.lineTo(-2, -3.5); ctx.lineTo(-2, 3.5); ctx.closePath(); ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -389,7 +396,26 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
 /* ---------- Isla y faro ---------- */
 const rockShape = Array.from({ length: 14 }, (_, i) => 33 + Math.sin(i * 2.7) * 4 + hash(i + 5) * 4);
 
+/** Dibuja una imagen fija con su origen en (x, y); k extra multiplica la escala. */
+function drawStill(ctx: CanvasRenderingContext2D, a: Still, x: number, y: number, k = 1) {
+  const s = a.k * k;
+  ctx.drawImage(a.img, x - a.ox * s, y - a.oy * s, a.w * s, a.h * s);
+}
+
 function drawIsland(ctx: CanvasRenderingContext2D, t: number) {
+  if (ready(islaArt.img)) {
+    // Isla renderizada desde isla-base.glb: espuma que rompe en la orilla y la roca encima
+    for (let i = 0; i < 3; i++) {
+      const ph = (t * 0.5 + i / 3) % 1;
+      ctx.strokeStyle = `rgba(230,245,255,${(1 - ph) * 0.35})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(0, 3, 41 + ph * 20, (41 + ph * 20) * 0.6, 0, 0, TAU); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(0,10,25,.3)';
+    ctx.beginPath(); ctx.ellipse(3, 6, 42, 25, 0, 0, TAU); ctx.fill();
+    drawStill(ctx, islaArt, 0, 0);
+    return;
+  }
   // Espuma
   for (let i = 0; i < 3; i++) {
     const ph = (t * 0.5 + i / 3) % 1;
@@ -455,12 +481,11 @@ function drawTower(ctx: CanvasRenderingContext2D, t: number, g: Game | null) {
     c.beginPath(); c.ellipse(0, LAMP_Y - 4, 7, 6, 0, Math.PI, TAU); c.fill();
     c.fillStyle = '#2a2f3a'; c.beginPath(); c.arc(0, LAMP_Y - 10.5, 1.4, 0, TAU); c.fill();
   });
-  if (ready(faroSprite.img)) {
-    // Faro renderizado desde el modelo 3D: la base cae en (0, 4) y la linterna en LAMP_Y
-    const f = faroSprite, k = (4 - LAMP_Y) / (f.oy - f.ly);
-    ctx.fillStyle = 'rgba(0,0,0,.28)';
-    ctx.beginPath(); ctx.ellipse(12, 7, 24, 8, -0.3, 0, TAU); ctx.fill();
-    ctx.drawImage(f.img, -f.ox * k, 4 - f.oy * k, f.w * k, f.h * k);
+  if (ready(faroArt.img)) {
+    // Faro renderizado desde faro-solo.glb, parado en el claro de la isla (linterna en LAMP_Y)
+    ctx.fillStyle = 'rgba(0,0,0,.25)';
+    ctx.beginPath(); ctx.ellipse(9, -3, 17, 6, -0.3, 0, TAU); ctx.fill();
+    drawStill(ctx, faroArt, 0, 0);
   } else blit(ctx, tw, 72, 1);
   // resplandor de la linterna
   const pulse = 0.75 + 0.25 * Math.sin(t * 6);
@@ -473,7 +498,7 @@ function drawTower(ctx: CanvasRenderingContext2D, t: number, g: Game | null) {
     const k = g.shield / Math.max(1, g.st.bar);
     ctx.strokeStyle = `rgba(125,211,252,${0.25 + 0.55 * k})`;
     ctx.lineWidth = 2.5; ctx.setLineDash([7, 5]); ctx.lineDashOffset = -t * 20;
-    ctx.beginPath(); ctx.ellipse(0, -18, 46, 52, 0, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.ellipse(0, -20, 44, 46, 0, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = `rgba(125,211,252,${0.06 * k})`; ctx.fill();
   }
 }
@@ -577,7 +602,7 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, zone: 
     ctx.fillStyle = `rgba(255,60,90,${0.25 + 0.2 * Math.sin(t * 10)})`;
     ctx.beginPath(); ctx.arc(0, 0, e.r + 22, 0, TAU); ctx.fill();
   }
-  const sheet = e.type === 'boss' ? null : sheetFor(e.type);
+  const sheet = e.type === 'boss' ? bossSheet(zone.id) : sheetFor(e.type);
   if (sheet) drawFromSheet(ctx, e, sheet, t, dist, a, zone);
   else {
   ctx.rotate(a);
@@ -688,8 +713,8 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, zone: 
     ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 4, t * 2, t * 2 + 4.5); ctx.stroke();
   }
   if (e.slowT > 0) {
-    ctx.globalAlpha = Math.min(1, e.slowT);
-    drawNet(ctx, e.x, e.y, e.r + 3, '#e8d9b0');
+    ctx.globalAlpha = Math.min(1, e.slowT) * 0.6;
+    drawNet(ctx, e.x, e.y, e.type === 'boss' ? e.r * 0.75 : e.r + 3, '#e8d9b0');
     ctx.globalAlpha = 1;
   }
   if (e.stun > 0) {
@@ -706,7 +731,14 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, zone: 
 }
 
 /* ---------- Extras ---------- */
-function drawNet(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, c: string) {
+function drawNet(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, c: string, spin = 0) {
+  if (ready(redArt.img)) {
+    // Red renderizada desde red.glb (diámetro 2r)
+    ctx.save(); ctx.translate(x, y); if (spin) ctx.rotate(spin);
+    drawStill(ctx, redArt, 0, 0, 2 * r);
+    ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.translate(x, y);
   ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.8, 0, 0, TAU); ctx.clip();
@@ -719,7 +751,35 @@ function drawNet(ctx: CanvasRenderingContext2D, x: number, y: number, r: number,
   ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.8, 0, 0, TAU); ctx.stroke();
 }
 
-function drawTurrets(ctx: CanvasRenderingContext2D, g: Game, t: number) {
+/** Una torreta: base fija en su plataforma y cabeza que gira hacia el blanco (16 direcciones)
+ *  con 4 cuadros: reposo y disparo. Sin arte, se dibuja la versión por código. */
+function drawTurret(ctx: CanvasRenderingContext2D, g: Game, key: 'tA' | 'tR' | 'tN', t: number) {
+  const p = TURRET_POS[key], art = turretArt(key);
+  if (!art) { drawTurretOld(ctx, g, key, t); return; }
+  let aim: number, fire: number;
+  if (key === 'tN') {
+    // El ancla mira a la criatura más cercana; su golpe dura 0.5 s
+    let best: Enemy | null = null, bd = 1e9;
+    for (const e of g.enemies) { const d = Math.hypot(e.x - p.x, e.y - p.y); if (!e.dead && d < bd) { bd = d; best = e; } }
+    aim = best ? Math.atan2(best.y - p.y, best.x - p.x) : Math.PI / 2;
+    fire = g.slamT > 0 ? 1 - g.slamT / 0.5 : -1;
+  } else {
+    aim = g.tAim[key];
+    fire = g.tFire[key] > 0 ? 1 - g.tFire[key] / (key === 'tA' ? 0.3 : 0.36) : -1;
+  }
+  const dir = Math.round((((aim % TAU) + TAU) % TAU) / (TAU / art.dirs)) % art.dirs;
+  const frame = fire < 0 ? 0 : Math.min(art.frames - 1, 1 + Math.floor(fire * (art.frames - 1)));
+  const k = art.k, w = art.px * k;
+  ctx.fillStyle = 'rgba(0,10,25,.3)';
+  ctx.beginPath(); ctx.ellipse(p.x + 2, p.y + 2, 8, 3.5, 0, 0, TAU); ctx.fill();
+  ctx.drawImage(art.base, p.x - art.ox * k, p.y - art.oy * k, w, w);
+  ctx.drawImage(art.head, frame * art.px, dir * art.px, art.px, art.px, p.x - art.ox * k, p.y - art.oy * k, w, w);
+  // Nivel: puntitos bajo la plataforma
+  ctx.fillStyle = '#7ff0e0';
+  for (let i = 0, n = Math.min(g.lv[key], 5); i < n; i++) { ctx.beginPath(); ctx.arc(p.x - (n - 1) * 1.5 + i * 3, p.y + 6, 0.9, 0, TAU); ctx.fill(); }
+}
+
+function drawTurretOld(ctx: CanvasRenderingContext2D, g: Game, key: 'tA' | 'tR' | 'tN', t: number) {
   const dots = (x: number, y: number, n: number) => {
     ctx.fillStyle = '#ffe27a';
     for (let i = 0; i < Math.min(n, 5); i++) { ctx.beginPath(); ctx.arc(x - 6 + i * 3, y + 9, 1.1, 0, TAU); ctx.fill(); }
@@ -730,7 +790,7 @@ function drawTurrets(ctx: CanvasRenderingContext2D, g: Game, t: number) {
     ctx.fillStyle = top; ctx.beginPath(); ctx.ellipse(x, y - 4, 7, 3, 0, 0, TAU); ctx.fill();
     ctx.fillStyle = '#3a414e'; ctx.beginPath(); ctx.ellipse(x, y + 3, 7, 3, 0, 0, Math.PI); ctx.fill();
   };
-  if (g.lv.tA > 0) {
+  if (key === 'tA') {
     const p = TURRET_POS.tA, a = g.tAim.tA;
     base(p.x, p.y, '#6c7586');
     ctx.save(); ctx.translate(p.x, p.y - 6); ctx.rotate(a);
@@ -740,7 +800,7 @@ function drawTurrets(ctx: CanvasRenderingContext2D, g: Game, t: number) {
     ctx.restore();
     dots(p.x, p.y, g.lv.tA);
   }
-  if (g.lv.tR > 0) {
+  if (key === 'tR') {
     const p = TURRET_POS.tR, a = g.tAim.tR;
     base(p.x, p.y, '#7a5a3a');
     ctx.save(); ctx.translate(p.x, p.y - 6); ctx.rotate(a);
@@ -750,7 +810,7 @@ function drawTurrets(ctx: CanvasRenderingContext2D, g: Game, t: number) {
     ctx.restore();
     dots(p.x, p.y, g.lv.tR);
   }
-  if (g.lv.tN > 0) {
+  if (key === 'tN') {
     const p = TURRET_POS.tN, k = g.slamT > 0 ? Math.sin((g.slamT / 0.5) * Math.PI) : 0;
     base(p.x, p.y, '#5c6679');
     ctx.save(); ctx.translate(p.x, p.y - 10 + k * 5); ctx.rotate(Math.sin(t * 2) * 0.1);
@@ -941,7 +1001,7 @@ function drawFromSheet(ctx: CanvasRenderingContext2D, e: Enemy, sh: Sheet, t: nu
   const born = Math.min(1, e.age / 0.35);
   if (born < 1) { k *= 0.5 + 0.5 * born; ctx.globalAlpha = born; }
   const sx = frame * sh.px, sy = dir * sh.px, w = sh.px * k;
-  ctx.drawImage(tinted(sh, zone), sx, sy, sh.px, sh.px, -sh.ox * k, -sh.oy * k, w, w);
+  ctx.drawImage(e.type === 'boss' ? sh.img : tinted(sh, zone), sx, sy, sh.px, sh.px, -sh.ox * k, -sh.oy * k, w, w);
   ctx.globalAlpha = 1;
   if (e.hitT > 0) {
     ctx.globalCompositeOperation = 'lighter';

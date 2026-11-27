@@ -65,10 +65,11 @@ export const COLORS: Record<EType, string> = {
   crab: '#ff7a5c', jelly: '#d28bff', mini: '#e3b3ff', sardine: '#cfe3f2', eel: '#4ade80',
   puffer: '#ffd166', turtle: '#9be15d', hermit: '#e8c39e', boss: '#ffd27a',
 };
-export const LAMP_Y = -64;
+export const LAMP_Y = -48;
 /** Posición de cada torreta sobre la isla. */
 export const TURRET_POS: Record<'tA' | 'tR' | 'tN', { x: number; y: number }> = {
-  tA: { x: -24, y: 10 }, tR: { x: 24, y: 10 }, tN: { x: 0, y: 24 },
+  // Centros de las plataformas de isla-base.glb (mundo × 40, vistas con la cámara de 32°)
+  tA: { x: -24, y: -2 }, tR: { x: 24, y: -2 }, tN: { x: 0, y: 5 },
 };
 const BOSS_ENRAGE = 40;
 
@@ -125,6 +126,8 @@ export class Game {
   tcd = { tA: 0, tR: 2, tN: 1 };
   tAim = { tA: -2.4, tR: -0.7 };
   slamT = 0;
+  /** Solo para dibujar: tiempo desde el último disparo de cada torreta. */
+  tFire = { tA: 0, tR: 0 };
   // estadísticas de la partida
   kills = 0; crits = 0; buys = 0; bosses = 0; flashes = 0; earned = 0; elites = 0; puffers = 0; cards = 0;
   hpLost10 = 0;
@@ -519,6 +522,7 @@ export class Game {
     // Arponero: al de más vida a su alcance
     if (st.tA > 0) {
       this.tcd.tA -= dt;
+      this.tFire.tA = Math.max(0, this.tFire.tA - dt);
       const p = TURRET_POS.tA;
       let best: Enemy | null = null;
       for (const e of this.enemies) if (!e.dead && Math.hypot(e.x - p.x, e.y - p.y) < 250 && (!best || e.hp > best.hp)) best = e;
@@ -526,6 +530,7 @@ export class Game {
         this.tAim.tA = Math.atan2(best.y - p.y, best.x - p.x);
         if (this.tcd.tA <= 0) {
           this.tcd.tA = 1 / (0.6 * (1 + 0.08 * (this.lv.tA - 1)));
+          this.tFire.tA = 0.3;
           this.bolts.push({ x: p.x, y: p.y, px: p.x, py: p.y, t: best, d: st.tA, crit: false, bounce: true, kind: 'harpoon', speed: 380 });
           this.emit('harpoon');
         }
@@ -534,6 +539,7 @@ export class Game {
     // Lanzarredes: al grupo más denso
     if (st.tR > 0) {
       this.tcd.tR -= dt;
+      this.tFire.tR = Math.max(0, this.tFire.tR - dt);
       if (this.tcd.tR <= 0) {
         const R = 45 + 5 * (this.lv.tR - 1);
         let best: Enemy | null = null, bn = 0;
@@ -547,6 +553,7 @@ export class Game {
           this.tcd.tR = Math.max(2.2, 4 - 0.2 * (this.lv.tR - 1));
           const p = TURRET_POS.tR;
           this.tAim.tR = Math.atan2(best.y - p.y, best.x - p.x);
+          this.tFire.tR = 0.36;
           const fly = 0.38;
           this.fx.push({ kind: 'netfly', x: p.x, y: p.y - 6, tx: best.x, ty: best.y, vx: 0, vy: 0, t: fly, max: fly, c: '#e8d9b0', r: R });
           this.nets.push({ x: best.x, y: best.y, R, t: fly });
