@@ -1,5 +1,5 @@
 // Lógica pura de una partida (sin DOM): se puede simular en Node.
-import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing, ZONES, CREATURES, LEVEL_WAVES, LEVEL_START, levelPearls, levelOf, MODE_RULES, COSTA, WEAPONS, WeaponId, costaKind, WEAK, KIND_POOL, CostaKind, DIFFICULTY } from './data';
+import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing, ZONES, CREATURES, LEVEL_WAVES, LEVEL_START, levelPearls, levelOf, MODE_RULES, COSTA, WEAPONS, WeaponId, costaKind, WEAK, KIND_POOL, CostaKind, DIFFICULTY, FLEET } from './data';
 import { localize, t, L } from './i18n';
 import type { Save } from './save';
 
@@ -55,6 +55,8 @@ export interface Bolt {
   w?: WeaponId; br?: number;
   /** Modo Costa: dirección fija (las balas y virotes vuelan en línea recta) y distancia que les queda. */
   vx?: number; vy?: number; left?: number;
+  /** Vuela en línea recta aunque no sea de la Costa (balas del buque de guerra). */
+  straight?: boolean;
 }
 /** Hueco de la muralla (Modo Costa): arma, nivel y estado para dibujarla. */
 export interface Slot { x: number; open: boolean; w: WeaponId | null; lv: number; cd: number; aim: number; fire: number; on: boolean; tx: number; ty: number; /** Rama elegida en el nivel 4 (0 = ninguna). */ br: number; pulse: number; /** Para no llenar de textos: último aviso de eficaz/resiste. */ say: number; }
@@ -74,7 +76,7 @@ export interface Txt { x: number; y: number; s: string; c: string; t: number; ma
 export interface Hazard { x: number; y: number; t: number; r: number; }
 export type GEvent = 'shot' | 'crit' | 'kill' | 'hurt' | 'wave' | 'boss' | 'bossdown' | 'over' | 'flash' | 'buy'
   | 'thunder' | 'boom' | 'enrage' | 'elite' | 'cards' | 'revive' | 'frostwarn' | 'frost' | 'erupt' | 'harpoon' | 'net' | 'slam'
-  | 'zap' | 'charge' | 'bite' | 'combo' | 'reveal' | 'win' | 'delivery' | 'sunk' | 'pickup' | 'cannon' | 'tap' | 'tapmiss' | 'heal' | 'crack' | 'fire' | 'poison' | 'newtype' | 'early' | 'volley' | 'blind';
+  | 'zap' | 'charge' | 'bite' | 'combo' | 'reveal' | 'win' | 'delivery' | 'sunk' | 'pickup' | 'cannon' | 'tap' | 'tapmiss' | 'heal' | 'crack' | 'fire' | 'poison' | 'newtype' | 'early' | 'volley' | 'blind' | 'fleet';
 
 interface Proto { hp: number; spd: number; r: number; dmg: number; rew: number; stop: number; atk: number; armor: number; }
 const P: Record<EType, Proto> = {
@@ -223,6 +225,9 @@ export class Game {
   costaXs: number[] = [];
   /** Andanada: recarga en segundos. */
   volleyCd = 6;
+  /** Buque de guerra aliado: recorrido en U (s = metros recorridos) y cuándo llega el próximo. */
+  fleet: { s: number; x: number; y: number; hd: number; cd: number; fire: number; side: number } | null = null;
+  fleetAt = -1;
   shells: Shell[] = [];
   pickT = 3;
   /** Mejoras conseguidas en la Travesía (para la pantalla final). */
@@ -649,6 +654,8 @@ export class Game {
       this.wr = p.rng;
     }
     this.queue = q;
+    // Buque de guerra aliado cada FLEET.every oleadas (no en la Costa ni en la Travesía, que no tienen faro en el centro)
+    if (this.mode !== 'costa' && this.mode !== 'travesia' && this.shownWave >= 2 && this.shownWave % FLEET.every === 0 && !this.fleet) this.fleetAt = this.t + FLEET.delay;
     this.waveTotal = q.reduce((s, t) => s + (t === 'sardine' ? 4 : 1), 0);
     this.waveDone = 0;
     this.spawnT = 0.4;
@@ -1129,6 +1136,48 @@ export class Game {
     return best;
   }
 
+  /** Punto del recorrido en U del buque: sube por la derecha, rodea el faro por detrás y baja por la izquierda. */
+  fleetPath(s: number) {
+    const { leg, R, startY } = FLEET, up = startY, arc = Math.PI * R;
+    if (s < up) return { x: leg, y: startY - s, hd: -Math.PI / 2 };
+    if (s < up + arc) { const a = (s - up) / R; return { x: Math.cos(a) * R, y: -Math.sin(a) * R, hd: -Math.PI / 2 - a }; }
+    const k = s - up - arc;
+    return { x: -leg, y: k, hd: Math.PI / 2 };
+  }
+  get fleetLen() { return FLEET.startY * 2 + Math.PI * FLEET.R; }
+  private fleetUpdate(dt: number) {
+    if (!this.fleet && this.fleetAt >= 0 && this.t >= this.fleetAt) {
+      this.fleetAt = -1;
+      const p = this.fleetPath(0);
+      this.fleet = { s: 0, x: p.x, y: p.y, hd: p.hd, cd: 1.2, fire: 0, side: 1 };
+      this.emit('fleet');
+    }
+    const f = this.fleet;
+    if (!f) return;
+    f.s += FLEET.speed * dt;
+    if (f.s >= this.fleetLen) { this.fleet = null; return; }
+    const p = this.fleetPath(f.s);
+    f.x = p.x; f.y = p.y; f.hd = p.hd;
+    f.fire = Math.max(0, f.fire - dt);
+    f.cd -= dt;
+    if (f.cd > 0) return;
+    // Andanada de costado: a las criaturas más cercanas dentro del alcance
+    const tgs: Enemy[] = [];
+    for (let i = 0; i < FLEET.shots; i++) { const e = this.nearestTo(f.x, f.y, FLEET.range, ...tgs); if (e) tgs.push(e); }
+    if (!tgs.length) { f.cd = 0.25; return; }
+    f.cd = FLEET.cd;
+    f.fire = 0.25;
+    for (const e of tgs) {
+      const a = Math.atan2(e.y - f.y, e.x - f.x);
+      f.side = Math.sin(a - f.hd) >= 0 ? 1 : -1;
+      const ox = f.x + Math.cos(f.hd + f.side * Math.PI / 2) * 8, oy = f.y + Math.sin(f.hd + f.side * Math.PI / 2) * 8;
+      this.bolts.push({ x: ox, y: oy, px: ox, py: oy, t: e, d: this.st.dmg * FLEET.dmg, crit: false, bounce: false, kind: 'cball', speed: 380, straight: true });
+      this.fx.push({ kind: 'cannon', x: ox, y: oy, vx: 0, vy: 0, t: 0.35, max: 0.35, c: '', r: 12, h: a });
+      this.fx.push({ kind: 'smoke', x: ox + Math.cos(a) * 8, y: oy + Math.sin(a) * 8, vx: Math.cos(a) * 12, vy: Math.sin(a) * 12 - 4, t: 0.9, max: 0.9, c: '', r: 6 });
+    }
+    this.emit('cannon');
+  }
+
   /** Bala o virote de la Costa: sale apuntando adelantado al objetivo y sigue recto; golpea a la primera criatura que cruza. */
   private costaBolt(b: Bolt, dt: number) {
     if (b.vx === undefined) {
@@ -1156,7 +1205,8 @@ export class Game {
     if (hit) {
       const e = hit, br = b.br || 0;
       b.gone = true;
-      this.hitW(e, b.d, b.w!, br, b.crit, b.w === 'canon' || b.crit || Math.random() < 0.35);
+      if (b.w) this.hitW(e, b.d, b.w, br, b.crit, b.w === 'canon' || b.crit || Math.random() < 0.35);
+      else { const d = this.damage(e, b.d, false, 'turret'); if (d > 0.5) this.text(e.x, e.y - 12, String(Math.round(d)), '#bfe8ff', false, 0.5); }
       if (b.crit) { this.crits++; this.emit('crit'); }
       if (b.kind === 'cball') {
         this.burst(e.x, e.y, '#9aa3b2', 7, 90);
@@ -1352,7 +1402,7 @@ export class Game {
     this.mechanics(dt);
     if (this.over) return;
     if (this.mode === 'costa') this.costaUpdate(dt);
-    else { this.turrets(dt); this.landNets(dt); }
+    else { this.turrets(dt); this.landNets(dt); this.fleetUpdate(dt); }
 
     // Apuntar y disparar desde la linterna (en la costa disparan los huecos de la muralla)
     const tg = this.mode === 'costa' ? null : this.target();
@@ -1375,7 +1425,7 @@ export class Game {
 
     // Proyectiles del faro y arpones
     for (const b of this.bolts) {
-      if (b.w) { this.costaBolt(b, dt); continue; }
+      if (b.w || b.straight) { this.costaBolt(b, dt); continue; }
       if (!b.t || b.t.dead) { b.t = this.nearestTo(b.x, b.y, 400); if (!b.t) { b.gone = true; continue; } }
       const e = b.t, dx = e.x - b.x, dy = e.y - b.y, d = Math.hypot(dx, dy) || 1, s = b.speed * dt;
       b.px = b.x; b.py = b.y;

@@ -231,12 +231,14 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
   if (SHOW_DECO && zone.id === 'bahia' && !(g && (g.mode === 'travesia' || g.mode === 'escolta' || g.mode === 'asedio')))
     for (const d of BAHIA_DECO) layers.push({ y: d.y, draw: () => drawDeco(ctx, d, t) });
   if (g?.ship && g.ship.phase !== 'gap') { const sh = g.ship; layers.push({ y: sh.y, draw: () => drawSupplyShip(ctx, sh, t) }); }
+  if (g?.fleet) { const fl = g.fleet; layers.push({ y: fl.y, draw: () => drawWarship(ctx, fl, t) }); }
   if (g) {
     for (const e of g.enemies) layers.push({ y: e.y, draw: () => drawEnemy(ctx, e, t, zone, g) });
     for (const k of ['tA', 'tR', 'tN'] as const) if (g.lv[k] > 0) layers.push({ y: TURRET_POS[k].y + 0.5, draw: () => drawTurret(ctx, g, k, t) });
   }
   layers.sort((a, b) => a.y - b.y);
   for (const l of layers) l.draw();
+  if (g && !costa && g.fleet) drawCostaFx(ctx, g);
   if (costa) { drawCostaFront(ctx, g!, t, now); drawCostaArrows(ctx, g!, cam, now); }
   if (g && g.frozen > 0) {
     ctx.fillStyle = `rgba(190,235,255,${Math.min(0.32, g.frozen * 0.2)})`;
@@ -1388,6 +1390,7 @@ function lighting(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, vw:
     for (const f of g.fireballs) { if (f.ball || f.t < 0) continue; const p = g.fireballPos(f); light(p.x, p.y - p.h, 40, '255,140,50', 0.6); }
     for (const p of g.pickups) light(p.x, p.y, 30, '255,220,140', 0.4);
     if (g.ship && g.ship.phase !== 'gap') light(g.ship.x, g.ship.y, 46, '255,220,160', 0.45);
+    if (g.fleet) { light(g.fleet.x, g.fleet.y, 60, '255,214,150', 0.55); if (g.fleet.fire > 0) light(g.fleet.x, g.fleet.y, 90, '255,190,110', g.fleet.fire * 3); }
     for (const e of g.enemies) {
       if (e.type === 'angler') { const aa = Math.atan2(-e.y, -e.x); light(e.x + Math.cos(aa) * 16, e.y + Math.sin(aa) * 16 - 8, 34, '94,231,255', 0.55); }
       else if (e.type === 'firefish' || e.type === 'lavacrab' || e.type === 'volturtle') light(e.x, e.y, e.type === 'volturtle' ? 34 : 26, '255,120,40', 0.4);
@@ -2023,4 +2026,32 @@ function drawCostaArrows(ctx: CanvasRenderingContext2D, g: Game, cam: { x: numbe
     ctx.beginPath(); ctx.moveTo(a.x - 9, y); ctx.lineTo(a.x + 9, y); ctx.lineTo(a.x, y + 11); ctx.closePath(); ctx.stroke(); ctx.fill();
     ctx.beginPath(); ctx.moveTo(a.x - 6, y - 7); ctx.lineTo(a.x + 6, y - 7); ctx.lineTo(a.x, y + 1); ctx.closePath(); ctx.globalAlpha = 0.5; ctx.fill(); ctx.globalAlpha = 1;
   });
+}
+
+
+/** Buque de guerra aliado: barco con estela, banderín turquesa y fogonazos al disparar. */
+function drawWarship(ctx: CanvasRenderingContext2D, f: NonNullable<Game['fleet']>, t: number) {
+  ctx.save(); ctx.translate(f.x, f.y);
+  // Estela detrás del barco
+  const bx = -Math.cos(f.hd), by = -Math.sin(f.hd), px = -by, py = bx;
+  ctx.strokeStyle = 'rgba(225,242,255,.4)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  for (const sg of [-1, 1]) {
+    ctx.beginPath(); ctx.moveTo(bx * 14 + px * sg * 6, by * 14 + py * sg * 6);
+    ctx.quadraticCurveTo(bx * 40 + px * sg * 14, by * 40 + py * sg * 14, bx * 72 + px * sg * 26, by * 72 + py * sg * 26); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(0,10,25,.35)'; ctx.beginPath(); ctx.ellipse(3, 6, 24, 15, 0, 0, TAU); ctx.fill();
+  const sp = boatSheet('jugador');
+  if (sp) blitSheet(ctx, sp, f.hd, Math.floor(t * sp.fps), (sp.len / sp.ppu) * 1.4, 5);
+  else {
+    ctx.rotate(f.hd);
+    ctx.fillStyle = '#4a3220'; ctx.beginPath(); ctx.ellipse(0, 0, 26, 10, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#8a5a34'; ctx.beginPath(); ctx.ellipse(0, 0, 21, 7, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#2a2f3a'; for (const x of [-12, -4, 4, 12]) { ctx.fillRect(x - 1.5, -10, 3, 3); ctx.fillRect(x - 1.5, 7, 3, 3); }
+    ctx.rotate(-f.hd);
+  }
+  // Banderín turquesa en lo alto del mástil
+  const my = -34, wv = Math.sin(t * 7) * 1.5;
+  ctx.strokeStyle = '#2a2520'; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(0, my + 12); ctx.lineTo(0, my); ctx.stroke();
+  ctx.fillStyle = '#3fd7c4'; ctx.beginPath(); ctx.moveTo(0, my); ctx.lineTo(-13, my + 2.5 + wv); ctx.lineTo(0, my + 5); ctx.closePath(); ctx.fill();
+  ctx.restore();
 }

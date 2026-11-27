@@ -79,22 +79,6 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #taps{position:absolute;left:6px;bottom:52px;display:flex;gap:4px;pointer-events:none}
 #taps i{width:9px;height:9px;border-radius:50%;background:rgba(230,251,255,.92);box-shadow:0 0 6px rgba(63,215,196,.7);transition:opacity .15s,transform .15s}
 #taps i.off{opacity:.22;transform:scale(.7);box-shadow:none}
-#flash{position:absolute;right:2px;bottom:6px;width:60px;height:60px;border-radius:50%;border:0;padding:0;display:grid;place-items:center;
-  background:conic-gradient(var(--acc) calc(var(--p,1)*360deg),rgba(255,255,255,.12) 0);box-shadow:0 6px 18px rgba(0,0,0,.45)}
-#flash::before{content:'';position:absolute;inset:4px;border-radius:50%;background:radial-gradient(circle at 50% 35%,#163049,#0a1626)}
-#flash span{position:relative;font-size:22px;line-height:1;filter:drop-shadow(0 0 6px rgba(63,215,196,.7))}
-#flash small{position:absolute;bottom:9px;left:0;right:0;font-family:var(--fd);font-size:9px;letter-spacing:.03em;color:var(--txt2)}
-#flash:not(.cd){box-shadow:0 0 0 2px rgba(63,215,196,.5),0 0 22px rgba(63,215,196,.45)}
-#flash:active{transform:scale(.94)}
-#volley{position:absolute;right:66px;bottom:8px;width:52px;height:52px;border-radius:50%;border:0;padding:0;display:none;place-items:center;
-  background:conic-gradient(#ff9a52 calc(var(--p,1)*360deg),rgba(255,255,255,.12) 0);box-shadow:0 6px 18px rgba(0,0,0,.45)}
-#volley::before{content:'';position:absolute;inset:4px;border-radius:50%;background:radial-gradient(circle at 50% 35%,#3a2614,#160e08)}
-#volley span{position:relative;font-size:19px;line-height:1;filter:drop-shadow(0 0 6px rgba(255,154,82,.7))}
-#volley small{position:absolute;bottom:7px;left:0;right:0;font-family:var(--fd);font-size:7.5px;letter-spacing:.02em;color:#f3d2b5}
-#volley.on{display:grid}
-#volley:not(.cd){box-shadow:0 0 0 2px rgba(255,154,82,.55),0 0 20px rgba(255,154,82,.45)}
-#volley.arm{animation:breath .7s ease-in-out infinite;box-shadow:0 0 0 3px #ffe27a,0 0 26px rgba(255,200,80,.8)}
-#volley:active{transform:scale(.94)}
 #cnext{position:absolute;left:50%;top:calc(118px + env(safe-area-inset-top));transform:translateX(-50%);z-index:3;display:none;flex-direction:column;align-items:center;gap:6px;pointer-events:none;width:max-content;max-width:92vw}
 #cnext.on{display:flex}
 #cnexttxt{padding:6px 11px;border-radius:12px;background:var(--glass);border:1px solid var(--line);font-size:12px;font-weight:800;text-align:center;line-height:1.35}
@@ -280,6 +264,25 @@ html[lang=en] .up.new::after{content:'NEW'}
 #aim::after{content:'';position:absolute;inset:-3px -4px -3px -2px}
 .row3 .big,.row2 .big{min-height:44px}
 #ready{padding:13px 26px}
+/* Botones de habilidad (Destello, Andanada): vidrio con ícono; la recarga oscurece la cara como un reloj */
+.abil{position:absolute;bottom:4px;width:60px;height:76px;border:0;padding:0;background:none;display:flex;flex-direction:column;align-items:center;gap:3px;--ac:63,215,196}
+.abil .face{position:relative;width:56px;height:56px;border-radius:50%;display:grid;place-items:center;overflow:hidden;
+  background:radial-gradient(circle at 50% 28%,rgba(var(--ac),.28),rgba(10,24,40,.92) 62%);
+  border:1.5px solid rgba(var(--ac),.75);box-shadow:inset 0 2px 0 rgba(255,255,255,.12),0 8px 20px rgba(0,0,0,.45)}
+.abil .face::after{content:'';position:absolute;inset:0;border-radius:50%;pointer-events:none;
+  background:conic-gradient(transparent calc(var(--p,1)*360deg),rgba(3,10,20,.74) 0)}
+.abil svg{position:relative;width:28px;height:28px;filter:drop-shadow(0 0 6px rgba(var(--ac),.75));transition:opacity .2s}
+.abil em{position:absolute;inset:0;display:grid;place-items:center;font-style:normal;font-family:var(--fd);font-size:17px;color:#e6fbff;z-index:1;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+.abil small{font-family:var(--fd);font-size:9.5px;letter-spacing:.06em;color:#e6fbff;padding:1px 7px;border-radius:7px;background:rgba(6,16,28,.72);border:1px solid rgba(var(--ac),.35);white-space:nowrap}
+.abil.cd .face{border-color:rgba(255,255,255,.18)}
+.abil.cd svg{opacity:.28;filter:none}
+.abil:not(.cd) .face{animation:abilglow 2.4s ease-in-out infinite}
+@keyframes abilglow{0%,100%{box-shadow:inset 0 2px 0 rgba(255,255,255,.12),0 8px 20px rgba(0,0,0,.45),0 0 0 0 rgba(var(--ac),0)}50%{box-shadow:inset 0 2px 0 rgba(255,255,255,.12),0 8px 20px rgba(0,0,0,.45),0 0 18px 2px rgba(var(--ac),.45)}}
+.abil:active .face{transform:scale(.93)}
+#flash{right:2px}
+#volley{right:66px;display:none;--ac:255,154,82}
+#volley.on{display:flex}
+#volley.arm .face{border-color:#ffe27a;animation:breath .7s ease-in-out infinite;box-shadow:0 0 0 3px rgba(255,226,122,.6),0 0 26px rgba(255,200,80,.8)}
 </style>
 </head>
 <body>
@@ -312,8 +315,8 @@ html[lang=en] .up.new::after{content:'NEW'}
       <div id="taps"></div>
       <button id="ready">¡LISTO!</button>
       <button id="aim"><b>OBJETIVO</b><span>CERCANO</span></button>
-      <button id="flash"><span>⚡</span><small>DESTELLO</small></button>
-      <button id="volley"><span>💥</span><small>ANDANADA</small></button>
+      <button id="flash" class="abil"><i class="face"><svg viewBox="0 0 24 24"><defs><linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eafffb"/><stop offset="1" stop-color="#3fd7c4"/></linearGradient></defs><path fill="url(#gb)" d="M13.6 2 5 13.2h5.6L9.4 22 19 9.8h-5.8z"/></svg><em></em></i><small>DESTELLO</small></button>
+      <button id="volley" class="abil"><i class="face"><svg viewBox="0 0 24 24"><defs><radialGradient id="gv" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff3d6"/><stop offset=".55" stop-color="#ffb35c"/><stop offset="1" stop-color="#ff7a3d"/></radialGradient></defs><path fill="url(#gv)" d="M12 1.5l2.1 5.2 5.3-2.3-2.3 5.3 5.4 2.3-5.4 2.3 2.3 5.3-5.3-2.3L12 22.5l-2.1-5.2-5.3 2.3 2.3-5.3L1.5 12l5.4-2.3-2.3-5.3 5.3 2.3z"/><circle cx="12" cy="12" r="3.2" fill="#3a1d0b"/></svg><em></em></i><small>ANDANADA</small></button>
     </div>
     <div id="hint"></div>
     <div id="bar" class="panel">

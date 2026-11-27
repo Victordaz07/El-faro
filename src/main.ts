@@ -105,6 +105,7 @@ function onEvent(e: GEvent, d?: number) {
     case 'flash': sfx.flash(); vibrate(40); break;
     case 'buy': sfx.buy(); break;
     case 'early': sfx.coin(); sfx.wave(); vibrate(40); break;
+    case 'fleet': sfx.wave(); banner(t('¡Llega el buque de guerra!'), 1.6); break;
     case 'volley': sfx.boom(); vibrate(70); break;
     case 'blind': sfx.flash(); break;
     case 'thunder': sfx.thunder(); break;
@@ -851,6 +852,7 @@ function updateHud() {
     const vb = $('volley'), vm = 24;
     vb.style.setProperty('--p', String(1 - g.volleyCd / vm));
     vb.classList.toggle('cd', g.volleyCd > 0);
+    vb.querySelector('em')!.textContent = g.volleyCd > 0 ? String(Math.ceil(g.volleyCd)) : '';
     const pv = g.costaPreview;
     $('cnext').classList.toggle('on', !!pv && g.wave >= 1);
     if (pv) {
@@ -888,7 +890,7 @@ function updateHud() {
   const fb = $('flash');
   fb.style.setProperty('--p', String(1 - g.flashCd / g.flashMax));
   fb.classList.toggle('cd', g.flashCd > 0);
-  fb.querySelector('small')!.textContent = g.flashCd > 0 ? Math.ceil(g.flashCd) + 's' : 'DESTELLO';
+  fb.querySelector('em')!.textContent = g.flashCd > 0 ? String(Math.ceil(g.flashCd)) : '';
 }
 
 /* ---------- Pantallas ---------- */
