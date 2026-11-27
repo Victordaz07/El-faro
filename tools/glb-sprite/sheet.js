@@ -38,6 +38,14 @@ const ANIM = {
     bob(o, 'Shell', 0.012 * Math.abs(s));
   },
   sardina(o, p) { rot(o, 'Tail', 'y', 0.6 * Math.sin(p * TAU)); rot(o, 'Body', 'y', 0.08 * Math.sin(p * TAU + 1)); },
+  // ---- Barcos y objetos de los modos nuevos ----
+  'barco-jugador'(o, p) { const s = Math.sin(p * TAU); rot(o, 'Sail', 'y', 0.05 * s); rot(o, 'Flag', 'y', 0.35 * Math.sin(p * TAU + 1)); bob(o, 'Hull', 0.006 * s); },
+  'barco-suministros'(o, p) { const s = Math.sin(p * TAU); rot(o, 'Sail', 'y', 0.05 * s); rot(o, 'Flag', 'y', 0.35 * Math.sin(p * TAU + 1)); bob(o, 'Hull', 0.006 * s); },
+  'barco-pirata'(o, p) { const s = Math.sin(p * TAU); rot(o, 'Sail_Fore', 'y', 0.05 * s); rot(o, 'Sail_Main', 'y', -0.05 * s); rot(o, 'Flag', 'y', 0.4 * Math.sin(p * TAU + 1)); },
+  'barco-capitan'(o, p) { const s = Math.sin(p * TAU); rot(o, 'Sail_1', 'y', 0.04 * s); rot(o, 'Sail_2', 'y', -0.04 * s); rot(o, 'Sail_3', 'y', 0.04 * s); rot(o, 'Pennant', 'y', 0.4 * Math.sin(p * TAU + 1)); },
+  'barco-abordador'(o, p) { const s = Math.sin(p * TAU); rot(o, 'Oar_L1', 'y', 0.35 * s); rot(o, 'Oar_L2', 'y', 0.35 * s); rot(o, 'Oar_R1', 'y', -0.35 * s); rot(o, 'Oar_R2', 'y', -0.35 * s); bob(o, 'Crew', 0.008 * Math.abs(s)); },
+  'objeto-cofre'(o, p) { const s = Math.sin(p * TAU); scl(o, 'Glow', 1, 1 + 0.25 * s, 1); bob(o, 'Coins', 0.01 * s); rot(o, 'Lid', 'x', -0.04 * s); },
+  'objeto-restos'(o, p) { bob(o, 'Cloth', 0.006 * Math.sin(p * TAU)); },
 };
 const base = new Map();
 function rest(n) { if (!base.has(n)) base.set(n, { r: n.rotation.clone(), p: n.position.clone(), s: n.scale.clone() }); return base.get(n); }
@@ -46,7 +54,7 @@ function rot(o, name, ax, v) { const n = node(o, name); if (n) n.rotation[ax] = 
 function bob(o, name, v) { const n = node(o, name); if (n) n.position.y = base.get(n).p.y + v; }
 function scl(o, name, x, y, z) { const n = node(o, name); if (n) { const b = base.get(n).s; n.scale.set(b.x * x, b.y * y, b.z * z); } }
 
-window.makeSheet = async (url, kind, px, dirs = 16, frames = 4, elevDeg = 32) => {
+window.makeSheet = async (url, kind, px, dirs = 16, frames = 4, elevDeg = 32, half = 0.72) => {
   base.clear();
   const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
   r.setPixelRatio(1); r.setSize(px, px); r.outputColorSpace = THREE.SRGBColorSpace; r.setClearColor(0, 0);
@@ -57,7 +65,6 @@ window.makeSheet = async (url, kind, px, dirs = 16, frames = 4, elevDeg = 32) =>
   scene.add(new THREE.HemisphereLight(0xe6eeff, 0x40485a, 1.5));
   const key = new THREE.DirectionalLight(0xfff4e6, 1.7); key.position.set(-3, 6, 4); scene.add(key);
   const rim = new THREE.DirectionalLight(0xa8c4ff, 0.7); rim.position.set(3, 2.5, -4); scene.add(rim);
-  const half = 0.72;
   const cam = new THREE.OrthographicCamera(-half, half, half, -half, 0.01, 50);
   const e = elevDeg * Math.PI / 180;
   cam.position.set(0, Math.sin(e) * 10 + 0.18, Math.cos(e) * 10);
@@ -78,6 +85,6 @@ window.makeSheet = async (url, kind, px, dirs = 16, frames = 4, elevDeg = 32) =>
   const o = new THREE.Vector3(0, 0, 0).project(cam);
   return {
     png: sheet.toDataURL('image/png'),
-    meta: { px, dirs, frames, ox: (o.x + 1) / 2 * px, oy: (1 - o.y) / 2 * px, ppu: px / (2 * half) },
+    meta: { px, dirs, frames, half, ox: (o.x + 1) / 2 * px, oy: (1 - o.y) / 2 * px, ppu: px / (2 * half) },
   };
 };

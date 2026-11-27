@@ -3,7 +3,7 @@ import { Game, Enemy, EType, LAMP_Y, TURRET_POS, Ship, Pickup } from './game';
 import type { Zone, SkinDef } from './data';
 import { MODE_RULES } from './data';
 import { Water } from './water';
-import { ready, sheetFor, Sheet, islaArt, faroArt, redArt, arponArt, turretArt, bossSheet, Still } from './art';
+import { ready, sheetFor, Sheet, islaArt, faroArt, redArt, arponArt, turretArt, bossSheet, boatSheet, Still } from './art';
 
 let water: Water | null | undefined;
 
@@ -1084,6 +1084,8 @@ function drawTurretOld(ctx: CanvasRenderingContext2D, g: Game, key: 'tA' | 'tR' 
 
 /** Travesía: tu barco, con el farol en lo alto del mástil (donde estaría la linterna del faro). */
 function drawPlayerShip(ctx: CanvasRenderingContext2D, t: number) {
+  const sp = boatSheet('jugador');
+  if (sp) { drawPlayerShipSprite(ctx, sp, t); return; }
   const rock = Math.sin(t * 1.4) * 0.04;
   ctx.save(); ctx.rotate(rock);
   // estela
@@ -1114,9 +1116,40 @@ function drawPlayerShip(ctx: CanvasRenderingContext2D, t: number) {
   ctx.restore();
 }
 
+/** Dibuja una imagen de la hoja: dirección (rumbo en radianes del juego) y cuadro de animación. */
+function blitSheet(ctx: CanvasRenderingContext2D, sp: Sheet, heading: number, frame: number, k: number, dy = 0) {
+  const dir = Math.round((((heading % TAU) + TAU) % TAU) / (TAU / sp.dirs)) % sp.dirs;
+  const w = sp.px * k;
+  ctx.drawImage(sp.img, (frame % sp.frames) * sp.px, dir * sp.px, sp.px, sp.px, -sp.ox * k, -sp.oy * k + dy, w, w);
+}
+
+/** Travesía: el barco visto desde atrás; el faro de la proa queda en LAMP_Y, de donde sale la luz. */
+function drawPlayerShipSprite(ctx: CanvasRenderingContext2D, sp: Sheet, t: number) {
+  const rock = Math.sin(t * 1.4) * 0.04;
+  ctx.save(); ctx.rotate(rock);
+  ctx.strokeStyle = 'rgba(225,242,255,.35)'; ctx.lineWidth = 2;
+  for (const sg of [-1, 1]) { ctx.beginPath(); ctx.moveTo(sg * 10, 14); ctx.quadraticCurveTo(sg * 20, 40, sg * 34, 80); ctx.stroke(); }
+  ctx.fillStyle = 'rgba(0,10,25,.35)'; ctx.beginPath(); ctx.ellipse(3, 6, 19, 26, 0, 0, TAU); ctx.fill();
+  blitSheet(ctx, sp, -Math.PI / 2, Math.floor(t * sp.fps), sp.len / sp.ppu, 4);
+  // asta con el farol en lo alto (de ahí sale el haz)
+  ctx.strokeStyle = '#3b2a1c'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(0, LAMP_Y + 14); ctx.lineTo(0, LAMP_Y + 6); ctx.stroke();
+  ctx.fillStyle = '#2a2f3a'; ctx.fillRect(-4, LAMP_Y - 3, 8, 8);
+  ctx.fillStyle = '#ffe58a'; ctx.fillRect(-3, LAMP_Y - 2, 6, 6);
+  ctx.restore();
+}
+
 /** Escolta: barco de suministros con su barra de vida y la descarga. */
 function drawSupplyShip(ctx: CanvasRenderingContext2D, s: Ship, t: number) {
   const h = s.phase === 'out' ? s.ang : s.ang + Math.PI;
+  const sp = boatSheet('suministros');
+  if (sp) {
+    ctx.save(); ctx.translate(s.x, s.y + Math.sin(t * 1.5) * 0.8);
+    ctx.fillStyle = 'rgba(0,10,25,.35)'; ctx.beginPath(); ctx.ellipse(2, 5, 26, 11, 0, 0, TAU); ctx.fill();
+    const k = sp.len / sp.ppu, fr = Math.floor(t * sp.fps);
+    blitSheet(ctx, sp, h, fr, k, 3);
+    if (s.hitT > 0) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.min(1, s.hitT * 3); blitSheet(ctx, sp, h, fr, k, 3); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
+    ctx.restore();
+  } else {
   ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(h + Math.sin(t * 1.5) * 0.03);
   ctx.fillStyle = 'rgba(0,10,25,.35)'; ctx.beginPath(); ctx.ellipse(2, 3, 26, 11, 0, 0, TAU); ctx.fill();
   ctx.fillStyle = '#5a3a22'; ctx.beginPath(); ctx.moveTo(26, 0); ctx.quadraticCurveTo(16, -12, -20, -10); ctx.lineTo(-24, 0); ctx.lineTo(-20, 10); ctx.quadraticCurveTo(16, 12, 26, 0); ctx.fill();
@@ -1131,6 +1164,7 @@ function drawSupplyShip(ctx: CanvasRenderingContext2D, s: Ship, t: number) {
   ctx.strokeStyle = '#3b2a1c'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(3, -13); ctx.lineTo(3, 13); ctx.stroke();
   if (s.hitT > 0) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(255,120,100,${s.hitT * 3})`; ctx.beginPath(); ctx.ellipse(0, 0, 24, 11, 0, 0, TAU); ctx.fill(); ctx.globalCompositeOperation = 'source-over'; }
   ctx.restore();
+  }
   // barra de vida y descarga
   const w = 46, x0 = s.x - w / 2, y0 = s.y - 30;
   ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x0 - 1, y0 - 1, w + 2, 6);
@@ -1154,7 +1188,11 @@ function drawPickup(ctx: CanvasRenderingContext2D, p: Pickup, t: number) {
   ctx.beginPath(); ctx.ellipse(0, 3, 15, 8, 0, 0, TAU); ctx.stroke();
   ctx.strokeStyle = 'rgba(225,242,255,.4)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.ellipse(0, 4, 11, 5, 0, 0.2, Math.PI - 0.2); ctx.stroke();
-  if (p.kind === 'barril') {
+  const sp = boatSheet(p.kind);
+  if (sp) {
+    const k = sp.len / sp.ppu;
+    blitSheet(ctx, sp, t * 0.35 + p.id * 1.7, Math.floor(t * sp.fps + p.id), k, 3);
+  } else if (p.kind === 'barril') {
     ctx.rotate(0.5 + Math.sin(t + p.id) * 0.2);
     ctx.fillStyle = '#8a5a30'; ctx.beginPath(); ctx.ellipse(0, 0, 9, 6, 0, 0, TAU); ctx.fill();
     ctx.strokeStyle = '#3b2a1c'; ctx.lineWidth = 1.4;
@@ -1361,7 +1399,7 @@ function drawFromSheet(ctx: CanvasRenderingContext2D, e: Enemy, sh: Sheet, t: nu
   const a0 = ctx.globalAlpha;
   if (born < 1) { k *= 0.5 + 0.5 * born; ctx.globalAlpha = born * a0; }
   const sx = frame * sh.px, sy = dir * sh.px, w = sh.px * k;
-  ctx.drawImage(e.type === 'boss' ? sh.img : borrow ? tintedWith(sh, borrow[1], borrow[2]) : tinted(sh, zone), sx, sy, sh.px, sh.px, -sh.ox * k, -sh.oy * k, w, w);
+  ctx.drawImage(e.type === 'boss' || e.type === 'pirate' || e.type === 'captain' || e.type === 'raider' ? sh.img : borrow ? tintedWith(sh, borrow[1], borrow[2]) : tinted(sh, zone), sx, sy, sh.px, sh.px, -sh.ox * k, -sh.oy * k, w, w);
   ctx.globalAlpha = a0;
   if (e.hitT > 0) {
     ctx.globalCompositeOperation = 'lighter';

@@ -56,7 +56,7 @@ const SHEETS: Record<string, Sheet> = {
 };
 /** Hoja de sprites lista para un tipo de criatura, o null para usar el dibujo por código. */
 export function sheetFor(type: string): Sheet | null {
-  const s = SHEETS[type];
+  const s = SHEETS[type] || (type === 'pirate' || type === 'captain' || type === 'raider' ? BARCOS[type] : undefined);
   return s && ready(s.img) ? s : null;
 }
 
@@ -108,4 +108,33 @@ export function bossSheet(zone: string): Sheet | null {
     s = BOSS_SHEETS[zone] = { img: img(BOSS_URL[zone]), ...m, len: 2.7, fps: 5 };
   }
   return ready(s.img) ? s : null;
+}
+
+/* ---------- Barcos y objetos de los modos nuevos (desde modelos 3D, ver tools/glb-sprite/bake-barcos.py) ---------- */
+import barcosMeta from '../assets/art/barcos/meta.json';
+import bJugadorUrl from '../assets/art/barcos/barco-jugador.webp';
+import bSuministrosUrl from '../assets/art/barcos/barco-suministros.webp';
+import bPirataUrl from '../assets/art/barcos/barco-pirata.webp';
+import bCapitanUrl from '../assets/art/barcos/barco-capitan.webp';
+import bAbordadorUrl from '../assets/art/barcos/barco-abordador.webp';
+import oBarrilUrl from '../assets/art/barcos/objeto-barril.webp';
+import oRestosUrl from '../assets/art/barcos/objeto-restos.webp';
+import oCofreUrl from '../assets/art/barcos/objeto-cofre.webp';
+
+const mkB = (url: string, key: keyof typeof barcosMeta, len: number, fps: number): Sheet => ({ img: img(url), ...barcosMeta[key], len, fps });
+/** Barcos y objetos sueltos: len = largo del modelo en píxeles del juego (no en radios). */
+const BARCOS: Record<string, Sheet> = {
+  jugador: mkB(bJugadorUrl, 'barco-jugador', 52, 6),
+  suministros: mkB(bSuministrosUrl, 'barco-suministros', 54, 6),
+  pirate: mkB(bPirataUrl, 'barco-pirata', 2.35, 6),
+  captain: mkB(bCapitanUrl, 'barco-capitan', 2.05, 5),
+  raider: mkB(bAbordadorUrl, 'barco-abordador', 2.6, 8),
+  barril: mkB(oBarrilUrl, 'objeto-barril', 22, 1),
+  restos: mkB(oRestosUrl, 'objeto-restos', 28, 2),
+  cofre: mkB(oCofreUrl, 'objeto-cofre', 24, 5),
+};
+/** Hoja de un barco u objeto, o null (dibujo por código) mientras la imagen no cargue. */
+export function boatSheet(k: string): Sheet | null {
+  const s = BARCOS[k];
+  return s && ready(s.img) ? s : null;
 }
