@@ -160,6 +160,23 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
     }
   }
 
+  // Criaturas hundiéndose al morir
+  if (g) for (const f of g.fx) {
+    if (f.kind !== 'sink' || !f.et) continue;
+    const sh = sheetFor(f.et);
+    if (!sh) continue;
+    const k = f.t / f.max, sc2 = (f.r || 10) * sh.len * 1.18 / sh.ppu * (0.55 + 0.45 * k);
+    const dir = Math.round(((((f.h || 0) % TAU) + TAU) % TAU) / (TAU / sh.dirs)) % sh.dirs;
+    ctx.save();
+    ctx.translate(f.x, f.y + (1 - k) * 5);
+    ctx.rotate((1 - k) * 0.9);
+    ctx.globalAlpha = k * k;
+    ctx.drawImage(tinted(sh, zone), 0, dir * sh.px, sh.px, sh.px, -sh.ox * sc2, -sh.oy * sc2, sh.px * sc2, sh.px * sc2);
+    ctx.restore();
+    ctx.fillStyle = `rgba(210,240,255,${k * 0.6})`;
+    for (let i = 0; i < 4; i++) { const a = i * 1.7 + f.x; ctx.beginPath(); ctx.arc(f.x + Math.cos(a) * (f.r || 8) * (1.4 - k), f.y + Math.sin(a) * (f.r || 8) * 0.6 * (1.4 - k), 1.2 + (1 - k) * 1.5, 0, TAU); ctx.fill(); }
+  }
+
   if (g) for (const h of g.hazards) {
     const k = 1 - h.t / 1.3, pulse = 0.5 + 0.5 * Math.sin(now * 20);
     ctx.fillStyle = `rgba(255,90,30,${0.12 + 0.2 * k})`;
@@ -509,7 +526,7 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, zone: 
     ctx.beginPath(); ctx.arc(0, 0, e.r + 22, 0, TAU); ctx.fill();
   }
   const sheet = e.type === 'boss' ? null : sheetFor(e.type);
-  if (sheet) drawFromSheet(ctx, e, sheet, t, dist, a);
+  if (sheet) drawFromSheet(ctx, e, sheet, t, dist, a, zone);
   else {
   ctx.rotate(a);
   ctx.scale(k, k);
@@ -847,14 +864,18 @@ function drawGulls(ctx: CanvasRenderingContext2D, now: number) {
 }
 
 /** Dibuja una criatura desde su hoja de sprites: fila = dirección (16), columna = cuadro de animación. */
-function drawFromSheet(ctx: CanvasRenderingContext2D, e: Enemy, sh: Sheet, t: number, dist: number, heading: number) {
+function drawFromSheet(ctx: CanvasRenderingContext2D, e: Enemy, sh: Sheet, t: number, dist: number, heading: number, zone: Zone) {
   const dir = Math.round((((heading % TAU) + TAU) % TAU) / (TAU / sh.dirs)) % sh.dirs;
   const moving = e.stun <= 0;
   const frame = moving ? Math.floor(t * sh.fps * (e.slowT > 0 ? 0.5 : 1)) % sh.frames : 0;
   let k = (e.r * sh.len * 1.18) / sh.ppu; // unidades del mundo por píxel de la hoja
   if (e.type === 'puffer' && dist < 95) k *= 1 + ((95 - dist) / 95) * 0.45 + 0.04 * Math.sin(t * 20);
+  // Al aparecer: crece y se vuelve opaca en 0.35 s
+  const born = Math.min(1, e.age / 0.35);
+  if (born < 1) { k *= 0.5 + 0.5 * born; ctx.globalAlpha = born; }
   const sx = frame * sh.px, sy = dir * sh.px, w = sh.px * k;
-  ctx.drawImage(sh.img, sx, sy, sh.px, sh.px, -sh.ox * k, -sh.oy * k, w, w);
+  ctx.drawImage(tinted(sh, zone), sx, sy, sh.px, sh.px, -sh.ox * k, -sh.oy * k, w, w);
+  ctx.globalAlpha = 1;
   if (e.hitT > 0) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = Math.min(1, e.hitT * 6);
@@ -862,4 +883,28 @@ function drawFromSheet(ctx: CanvasRenderingContext2D, e: Enemy, sh: Sheet, t: nu
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
   }
+}
+
+/* Tinte por zona: escarcha en Mar Helado, brasas en Volcán, frío violeta en el Abismo.
+   Se calcula una vez por hoja y zona, y se guarda. */
+const TINT: Record<string, [string, number] | undefined> = {
+  ice: ['200,235,255', 0.28], lava: ['255,120,50', 0.2], dark: ['130,100,220', 0.18],
+};
+const tintCache = new Map<string, HTMLCanvasElement>();
+function tinted(sh: Sheet, zone: Zone): CanvasImageSource {
+  const t = TINT[zone.mech];
+  if (!t) return sh.img;
+  const key = sh.img.src.length + ':' + sh.img.src.slice(-40) + zone.mech;
+  let c = tintCache.get(key);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = sh.img.naturalWidth; c.height = sh.img.naturalHeight;
+    const x = c.getContext('2d')!;
+    x.drawImage(sh.img, 0, 0);
+    x.globalCompositeOperation = 'source-atop';
+    x.fillStyle = `rgba(${t[0]},${t[1]})`;
+    x.fillRect(0, 0, c.width, c.height);
+    tintCache.set(key, c);
+  }
+  return c;
 }

@@ -25,7 +25,8 @@ Idioma de la interfaz y de los comentarios: **español**.
 - `assets/` — `icon.png` (ícono de la app) y `thumb.png` (portada). `assets/art/`: arte en WebP que se incrusta en el build (fondo del menú, retratos de jefes por zona, sprite del faro renderizado desde `assets/models/faro-isla.glb`); originales en `assets/art/originales/`.
 - `src/art.ts` — carga ese arte; si una imagen no carga, se usa el dibujo por código.
 - `tools/glb-sprite/` — convierte modelos 3D (.glb) en sprites. `bake-enemies.py` genera las hojas de enemigos (16 direcciones × 4 cuadros, cámara a 32°) desde `assets/models/enemigo-*.glb`; las animaciones por pieza están en `sheet.js` (`ANIM`). Resultado en `assets/art/enemigos/` (+ `meta.json`).
-- Enemigos: si hay hoja de sprites se usa `drawFromSheet` en render.ts; si no, el dibujo por código. Los jefes siguen dibujados por código.
+- Enemigos: si hay hoja de sprites se usa `drawFromSheet` en render.ts; si no, el dibujo por código. Emergen al aparecer, se hunden al morir (fx `sink`) y se tiñen por zona (`tinted`, tabla `TINT`). Los jefes siguen dibujados por código.
+- Pendiente de modelos (fase 2 de la guía): isla con 3 plataformas (`isla-base.glb`), torretas con nodos Base/Head (`torreta-arponero/lanzarredes/ancla.glb`), `red.glb`, `arpon.glb` y los 5 jefes. Medidas y nombres de nodos están en la guía; las plataformas corresponden a `TURRET_POS` (mundo ÷ 40).
 - Guía para pedir modelos a ChatGPT: https://claude.ai/artifact/AGMa1dhbwEqj1UVswy85cL (prompt maestro + prompt por criatura).
 
 ## Reglas

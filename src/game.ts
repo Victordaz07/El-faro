@@ -28,8 +28,10 @@ export interface Bolt {
 }
 export interface EShot { x: number; y: number; d: number; c: string; gone?: boolean; }
 export interface Fx {
-  kind: 'p' | 'ring' | 'nova' | 'wake' | 'splash' | 'boom' | 'net' | 'slam' | 'warn' | 'strike';
+  kind: 'p' | 'ring' | 'nova' | 'wake' | 'splash' | 'boom' | 'net' | 'slam' | 'warn' | 'strike' | 'sink';
   x: number; y: number; vx: number; vy: number; t: number; max: number; c: string; r?: number;
+  /** Para 'sink': tipo de criatura y rumbo, para dibujarla hundiéndose. */
+  et?: string; h?: number;
 }
 export interface Txt { x: number; y: number; s: string; c: string; t: number; max: number; big: boolean; }
 export interface Hazard { x: number; y: number; t: number; r: number; }
@@ -332,6 +334,7 @@ export class Game {
       slowT: 0, burn: 0, burnT: 0,
     };
     this.enemies.push(e);
+    this.fx.push({ kind: 'splash', x, y, vx: 0, vy: 0, t: 0.45, max: 0.45, c: '#bfe8ff', r: e.r * 0.8 });
     return e;
   }
 
@@ -390,6 +393,7 @@ export class Game {
     this.text(e.x, e.y, '+' + pr, '#8fe9ff');
     this.burst(e.x, e.y, COLORS[e.type], e.type === 'boss' ? 46 : e.elite ? 20 : 9, e.type === 'boss' ? 170 : 90);
     this.fx.push({ kind: 'splash', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.5, max: 0.5, c: '#bfe8ff', r: e.r });
+    if (e.type !== 'boss') this.fx.push({ kind: 'sink', x: e.x, y: e.y, vx: 0, vy: 0, t: 0.55, max: 0.55, c: '', r: e.r, et: e.type, h: Math.atan2(-e.y, -e.x) });
     if (e.type === 'jelly' && this.wave >= 6) {
       for (let i = 0; i < 2; i++) { this.make('mini', e.x + (i ? 8 : -8), e.y); this.waveTotal++; }
     }
