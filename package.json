@@ -1,6 +1,6 @@
 {
   "name": "faro-tormenta",
-  "version": "0.2.0",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,7 @@
     "android:open": "npx cap open android",
     "sim:camp": "esbuild tests/campaign.ts --bundle --platform=node --outfile=tests/.camp.cjs --log-level=warning && node tests/.camp.cjs",
     "sim:modes": "esbuild tests/modes.ts --bundle --platform=node --outfile=tests/.modes.cjs --log-level=warning && node tests/.modes.cjs",
-    "test": "esbuild tests/pearls.ts --bundle --platform=node --outfile=tests/.pearls.cjs --log-level=warning && node tests/.pearls.cjs && esbuild tests/i18n.ts --bundle --platform=node --outfile=tests/.i18n.cjs --log-level=warning && node tests/.i18n.cjs"
+    "test": "esbuild tests/pearls.ts --bundle --platform=node --outfile=tests/.pearls.cjs --log-level=warning && node tests/.pearls.cjs && esbuild tests/i18n.ts --bundle --platform=node --outfile=tests/.i18n.cjs --log-level=warning && node tests/.i18n.cjs && esbuild tests/smoke.ts --bundle --platform=node --outfile=tests/.smoke.cjs --log-level=warning && node tests/.smoke.cjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.6.3",
