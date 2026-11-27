@@ -140,7 +140,7 @@ export const starsFor = (hpRatio: number) => (hpRatio >= 0.7 ? 3 : hpRatio >= 0.
 /** Reglas de cada modo. unlock = nivel de campaña ('mundo-nivel') que hay que superar para abrirlo. */
 export const MODE_RULES = {
   aguante: { unlock: '0-2' },
-  escolta: { unlock: '0-4', total: 6, shipHp: 40, speed: 30, dock: 70, unload: 10, gap: 3, aggro: 0.7 },
+  escolta: { unlock: '0-4', total: 6, shipHp: 34, speed: 30, dock: 70, unload: 10, gap: 3, aggro: 0.7 },
   travesia: { unlock: '0-6', speed: 16, total: 2600 },
   asedio: { unlock: '0-8', waves: 12 },
   costa: { unlock: '0-3', waves: 15 },
@@ -176,6 +176,8 @@ export const COSTA = {
   /** Andanada: recarga (s) y multiplicador del daño de cada arma. */
   volleyCd: 24, volleyDmg: 1.7,
 };
+/** Dificultad global de todo el juego (todos los modos): multiplica la vida y el daño de las criaturas. Probar con los sim:* tras tocarla. */
+export const DIFFICULTY = { hp: +(globalThis.process?.env?.DHP ?? 1.15), dmg: +(globalThis.process?.env?.DDMG ?? 1.1) };
 /** Clase de criatura en la Costa: cada arma es buena contra una. */
 export type CostaKind = 'armor' | 'fast' | 'swarm';
 export function costaKind(type: string): CostaKind {

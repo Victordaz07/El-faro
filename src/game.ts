@@ -1,5 +1,5 @@
 // Lógica pura de una partida (sin DOM): se puede simular en Node.
-import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing, ZONES, CREATURES, LEVEL_WAVES, LEVEL_START, levelPearls, levelOf, MODE_RULES, COSTA, WEAPONS, WeaponId, costaKind, WEAK, KIND_POOL, CostaKind } from './data';
+import { DEFS, MODS, ModDef, Zone, BLESSINGS, Blessing, ZONES, CREATURES, LEVEL_WAVES, LEVEL_START, levelPearls, levelOf, MODE_RULES, COSTA, WEAPONS, WeaponId, costaKind, WEAK, KIND_POOL, CostaKind, DIFFICULTY } from './data';
 import { localize, t, L } from './i18n';
 import type { Save } from './save';
 
@@ -679,9 +679,18 @@ export class Game {
     let hs = Math.pow(1.075, w - 1) * Math.pow(1.065, Math.max(0, w - 10)) * Math.pow(1.03, Math.max(0, w - 20)) * this.zone.hp;
     if (this.mod?.id === 'caparazon') hs *= 1.35;
     // Campaña: tramos cortos sin la pausa de los jefes cada 10 oleadas, un poco más suaves
-    if (this.level) hs *= 0.8;
+    if (this.level) {
+      hs *= 0.8;
+      // Rampa dentro de cada mundo: los niveles intermedios también exigen (el 1 de la Bahía queda igual)
+      const n = this.level.n, R = +(globalThis.process?.env?.RAMP ?? 0.04);
+      hs *= 1 + R * Math.min(7, n - 1);
+      // Los primeros 3 niveles de la Bahía son la entrada al juego: sin la dificultad extra global
+      if (this.level.zi === 0 && n <= 3) hs /= DIFFICULTY.hp;
+    }
+    if (this.mode === 'asedio') hs *= 1.25;
+    if (this.mode === 'travesia') hs *= 1.2;
     if (this.mode === 'costa') hs *= 1 + COSTA.hp * Math.pow(Math.min(1, (w - 1) / 14), 2);
-    return { hs, ds: Math.pow(1.05, w - 1) * this.zone.dmg };
+    return { hs: hs * DIFFICULTY.hp, ds: Math.pow(1.05, w - 1) * this.zone.dmg * DIFFICULTY.dmg };
   }
 
   /** Hacia dónde va una criatura: al faro, o al barco de suministros si lo eligió y sigue cerca. */
@@ -694,7 +703,7 @@ export class Game {
 
   private make(type: EType, x: number, y: number, elite = false): Enemy {
     const p = P[type], { hs, ds } = this.scale(), w = this.wave;
-    const hpMul = type === 'boss' ? Math.pow(1.15, w) * this.zone.hp : hs;
+    const hpMul = type === 'boss' ? Math.pow(1.15, w) * this.zone.hp * DIFFICULTY.hp : hs;
     const em = elite ? 3 : 1;
     const e: Enemy = {
       id: this.nid++, x, y, type, hp: p.hp * hpMul * em, max: p.hp * hpMul * em,
