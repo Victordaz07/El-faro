@@ -145,7 +145,7 @@ const EN: Record<string, string> = {
   'Racimo': 'Cluster', 'La bomba se parte en cuatro explosiones más.': 'The bomb splits into four more blasts.',
   'Cegadora': 'Blinding', 'Cada poco deslumbra y aturde a todo lo que alumbra.': 'Every few seconds it dazzles and stuns everything it lights.',
   'Lupa ardiente': 'Burning lens', 'Haz más estrecho que quema el doble.': 'A narrower beam that burns twice as hard.',
-  '¡Llega el buque de guerra!': 'The warship is here!',
+  '¡Llega el buque de guerra!': 'The warship is here!', 'BUQUE': 'WARSHIP',
   'Asedio pirata': 'Pirate siege', 'Barcos piratas cañonean la bahía y sus botes intentan abordar, junto con monstruos. Resiste 12 oleadas y al capitán.': 'Pirate ships shell the bay and their boats try to board, alongside monsters. Hold 12 waves and the captain.',
   Infinito: 'Endless', 'CAPITÁN PIRATA': 'PIRATE CAPTAIN', 'Terror de la bahía': 'Terror of the bay', '¡BARCO HUNDIDO!': 'SHIP SUNK!',
   '¡DESVIADO!': 'DEFLECTED!', 'Se acerca un barco': 'A ship is coming', 'Protégelo hasta que descargue': 'Protect it until it unloads',

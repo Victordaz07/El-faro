@@ -228,6 +228,15 @@ export class Game {
   /** Buque de guerra aliado: recorrido en U (s = metros recorridos) y cuándo llega el próximo. */
   fleet: { s: number; x: number; y: number; hd: number; cd: number; fire: number; side: number } | null = null;
   fleetAt = -1;
+  /** Recarga del botón del buque (no hay buque en la Costa ni en la Travesía, que no tienen faro en el centro). */
+  fleetCd: number = FLEET.first;
+  get fleetOk() { return this.mode !== 'costa' && this.mode !== 'travesia'; }
+  /** Botón del barquito: llama al buque de guerra. */
+  callFleet() {
+    if (!this.fleetOk || this.over || this.fleet || this.fleetCd > 0) return false;
+    this.fleetAt = this.t; this.fleetCd = FLEET.recharge;
+    return true;
+  }
   shells: Shell[] = [];
   pickT = 3;
   /** Mejoras conseguidas en la Travesía (para la pantalla final). */
@@ -654,8 +663,6 @@ export class Game {
       this.wr = p.rng;
     }
     this.queue = q;
-    // Buque de guerra aliado cada FLEET.every oleadas (no en la Costa ni en la Travesía, que no tienen faro en el centro)
-    if (this.mode !== 'costa' && this.mode !== 'travesia' && this.shownWave >= 2 && this.shownWave % FLEET.every === 0 && !this.fleet) this.fleetAt = this.t + FLEET.delay;
     this.waveTotal = q.reduce((s, t) => s + (t === 'sardine' ? 4 : 1), 0);
     this.waveDone = 0;
     this.spawnT = 0.4;
@@ -1146,6 +1153,7 @@ export class Game {
   }
   get fleetLen() { return FLEET.startY * 2 + Math.PI * FLEET.R; }
   private fleetUpdate(dt: number) {
+    if (!this.fleet) this.fleetCd = Math.max(0, this.fleetCd - dt);
     if (!this.fleet && this.fleetAt >= 0 && this.t >= this.fleetAt) {
       this.fleetAt = -1;
       const p = this.fleetPath(0);

@@ -20,7 +20,7 @@ function play(name: string, make: () => Game, seconds: number) {
       if (g.state === 'cards') g.pickCard(g.cardOpts[0].id);
       if (steps === 30) g.skipPrep();
       if (steps % 30 === 0) {
-        g.useFlash();
+        g.useFlash(); if (g.enemies.length > 4) g.callFleet();
         for (let k = 0; k < 6; k++) {
           const ids = DEFS.map(d => d.id).filter(id => id !== 'tap' && g.isOpen(id) && g.cost(id) <= g.pearls);
           if (!ids.length) break;

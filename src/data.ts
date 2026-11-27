@@ -176,8 +176,9 @@ export const COSTA = {
   /** Andanada: recarga (s) y multiplicador del daño de cada arma. */
   volleyCd: 24, volleyDmg: 1.7,
 };
-/** Buque de guerra aliado: cada `every` oleadas (desde la 2) cruza en U por detrás del faro disparando. */
-export const FLEET = { every: 2, delay: 4, speed: 46, leg: 150, R: 150, startY: 400, range: 200, cd: 1.15, dmg: 1.3, shots: 2 };
+/** Buque de guerra aliado: cruza en U por detrás del faro disparando. */
+/** Se llama con el botón del barquito; `recharge` = segundos de recarga, `first` = recarga al empezar. */
+export const FLEET = { recharge: 45, first: 15, speed: 46, leg: 150, R: 150, startY: 400, range: 200, cd: 1.15, dmg: 1.3, shots: 2 };
 /** Dificultad global de todo el juego (todos los modos): multiplica la vida y el daño de las criaturas. Probar con los sim:* tras tocarla. */
 export const DIFFICULTY = { hp: +(globalThis.process?.env?.DHP ?? 1.25), dmg: +(globalThis.process?.env?.DDMG ?? 1.1) };
 /** Clase de criatura en la Costa: cada arma es buena contra una. */

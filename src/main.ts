@@ -1,5 +1,5 @@
 // Controlador de interfaz: pantallas, panel de mejoras, HUD, tutorial y bucle principal.
-import { MODES, MODE_RULES, LEVELS_PER_WORLD, LEVEL_WAVES, levelClearCoral, starsFor, levelOf, runXp, levelCoral, SKINS, BEAMS, STREAK, CHEST_HOURS, CREATURES, DEFS, tabName, branchName, BLESSINGS, PERM, BRANCHES, TABS, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone, COSTA, WEAPONS, WeaponId, WBRANCHES, KIND_INFO, CostaKind } from './data';
+import { MODES, MODE_RULES, LEVELS_PER_WORLD, LEVEL_WAVES, levelClearCoral, starsFor, levelOf, runXp, levelCoral, SKINS, BEAMS, STREAK, CHEST_HOURS, CREATURES, DEFS, tabName, branchName, BLESSINGS, PERM, BRANCHES, TABS, ZONES, MPOOL, DAILY_BONUS, UNLOCK_WAVE, HINTS, ACHIEVEMENTS, permCost, Zone, FLEET, COSTA, WEAPONS, WeaponId, WBRANCHES, KIND_INFO, CostaKind } from './data';
 import {
   load, persist, ensureDaily, track, zoneUnlocked, readyMissions, checkAchievements,
   researchTotal, zonesOpen, challengeZone, challengeSeed, today, chestState,
@@ -205,7 +205,8 @@ function start(daily = false, level: { zi: number; n: number } | null = null, mo
   // En Aguante y Travesía no hay tienda
   $('bar').style.display = g.mode === 'aguante' || g.mode === 'travesia' ? 'none' : '';
   for (const id of ['flash', 'aim', 'taps']) $(id).style.display = '';
-  $('volley').classList.toggle('on', g.mode === 'costa'); volleyArm = false; $('volley').classList.remove('arm');
+  $('volley').classList.toggle('on', g.mode === 'costa');
+  $('fleetbtn').classList.toggle('on', g.fleetOk); volleyArm = false; $('volley').classList.remove('arm');
   $('frostw').style.display = 'none';
   $('aim').querySelector('span')!.textContent = AIMS[0].name;
   tab = g.mode === 'costa' ? 3 : 0;
@@ -258,7 +259,7 @@ function endRun() {
   $('flash').style.display = 'none';
   $('aim').style.display = 'none';
   $('taps').style.display = 'none';
-  $('volley').classList.remove('on'); $('cnext').classList.remove('on');
+  $('volley').classList.remove('on'); $('fleetbtn').classList.remove('on'); $('cnext').classList.remove('on');
   $('frostw').style.display = 'none';
   let html: string;
   $('next').style.display = 'none';
@@ -887,6 +888,12 @@ function updateHud() {
   $('boss').classList.toggle('on', !!boss);
   if (boss) { $('bossname').textContent = bossName() + (boss.enraged ? L(' · FURIOSO', ' · ENRAGED') : ''); $('bossfill').style.width = Math.max(0, (boss.hp / boss.max) * 100) + '%'; }
   setMusicLevel(boss ? 2 : 1);
+  if (g.fleetOk) {
+    const sb = $('fleetbtn'), busy = !!g.fleet;
+    sb.style.setProperty('--p', busy ? '0' : String(1 - g.fleetCd / FLEET.recharge));
+    sb.classList.toggle('cd', busy || g.fleetCd > 0);
+    sb.querySelector('em')!.textContent = busy ? '⚓' : g.fleetCd > 0 ? String(Math.ceil(g.fleetCd)) : '';
+  }
   const fb = $('flash');
   fb.style.setProperty('--p', String(1 - g.flashCd / g.flashMax));
   fb.classList.toggle('cd', g.flashCd > 0);
@@ -904,6 +911,7 @@ function showMenu() {
   introT = 0; camFocus.x = camFocus.y = 0; camFocus.z = 1; stage.classList.remove('cine');
   setMusicLevel(0);
   for (const id of ['flash', 'aim', 'taps', 'frostw', 'mod', 'boss']) $(id).style.display = 'none';
+  $('fleetbtn').classList.remove('on'); $('volley').classList.remove('on');
   const z = zone();
   void z;
   const nl = nextLevel(save);
@@ -1199,6 +1207,7 @@ $('pause').addEventListener('click', () => setPaused(!paused));
 $('resume').addEventListener('click', () => setPaused(false));
 $('quit').addEventListener('click', () => { if (!g) return; $('pauseov').classList.remove('on'); paused = false; g.abandon(); });
 $('flash').addEventListener('click', () => { audio(); if (g && !paused) g.useFlash(); });
+$('fleetbtn').addEventListener('click', () => { audio(); if (g && !paused && !g.callFleet()) sfx.click(); });
 $('aim').addEventListener('click', () => {
   if (!g) return;
   g.cycleAim(); sfx.click();

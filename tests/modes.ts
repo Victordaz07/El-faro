@@ -18,7 +18,7 @@ function play(mode: Mode, perm: number, xp: number) {
     if (g.state === 'cards') g.pickCard(g.cardOpts[0].id);
     if (steps % 20 === 0) for (const p of g.pickups) if (Math.abs(p.y) < 220) { g.tapAt(p.x, p.y); break; }
     if (steps % 30 === 0) {
-      g.useFlash();
+      g.useFlash(); if (g.enemies.length > 4) g.callFleet();
       for (let k = 0; k < 10; k++) {
         const ids = Object.keys(g.lv).filter(id => id !== 'tap' && g.isOpen(id) && g.cost(id) <= g.pearls);
         if (!ids.length) break;
