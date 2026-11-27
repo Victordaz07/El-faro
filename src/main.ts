@@ -252,39 +252,56 @@ let holdStop: (() => void) | null = null;
 const stopHold = () => holdStop?.();
 
 function holdToBuy(el: HTMLElement, onPress: () => void, buyOnce: () => boolean) {
+  // Toque = una compra · deslizar = mover la fila · dedo quieto 0.38 s = compra repetida
   el.addEventListener('pointerdown', ev => {
-    ev.preventDefault();
     stopHold();
     audio();
-    onPress();
-    if (!buyOnce()) return;
-    try { el.setPointerCapture(ev.pointerId); } catch { /* sin captura */ }
-    let to = 0, iv = 0, n = 0;
+    const x0 = ev.clientX, y0 = ev.clientY;
+    let to = 0, iv = 0, n = 0, repeating = false, moved = false;
     const stop = () => {
       clearTimeout(to);
       clearInterval(iv);
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
       if (holdStop === stop) holdStop = null;
     };
+    const move = (e: PointerEvent) => { if (Math.hypot(e.clientX - x0, e.clientY - y0) > 8) { moved = true; if (!repeating) stop(); } };
+    const up = () => { if (!repeating && !moved) { onPress(); buyOnce(); } stop(); };
     holdStop = stop;
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
     to = window.setTimeout(() => {
+      if (moved) return;
+      repeating = true;
+      onPress();
+      if (!buyOnce()) return stop();
       iv = window.setInterval(() => {
         if (++n > 60 || el.offsetParent === null || !buyOnce()) stop();
       }, 90);
     }, 380);
   });
-  for (const t of ['pointerup', 'pointercancel', 'lostpointercapture', 'pointerleave']) el.addEventListener(t, stopHold);
+  for (const t of ['pointercancel', 'lostpointercapture', 'pointerleave']) el.addEventListener(t, stopHold);
 }
 for (const t of ['pointerup', 'pointercancel', 'blur']) window.addEventListener(t, stopHold);
 document.addEventListener('visibilitychange', stopHold);
+
+let hintTo = 0;
+function showHint(html: string) {
+  const h = $('hint');
+  h.innerHTML = html;
+  h.classList.add('show');
+  clearTimeout(hintTo);
+  hintTo = window.setTimeout(() => h.classList.remove('show'), 2200);
+}
 
 function buildPanel() {
   const grid = $('grid');
   for (const d of DEFS) {
     const el = document.createElement('button');
     el.className = 'up t' + d.tab;
-    el.innerHTML = '<div class="ic">' + (ICONS[d.id] || '') + '<em class="lv"></em></div><div class="tx"><div class="n"></div><div class="v"></div></div><div class="k"></div>';
+    el.innerHTML = '<div class="top"><div class="ic">' + (ICONS[d.id] || '') + '<em class="lv"></em></div><div class="n"></div></div><div class="v"></div><div class="k"></div>';
     holdToBuy(el, () => {
-      $('hint').innerHTML = '<b>' + d.name + ':</b> ' + (HINTS[d.id] || 'mejora de ' + TABS[d.tab].toLowerCase());
+      showHint('<b>' + d.name + ':</b> ' + (HINTS[d.id] || 'mejora de ' + TABS[d.tab].toLowerCase()));
     }, () => {
       if (!g || paused || g.over) return false;
       const ok = g.buy(d.id);
@@ -322,8 +339,8 @@ function updatePanel() {
     const c = g.cost(d.id);
     o.n.textContent = d.name;
     o.lv.textContent = g.lv[d.id] ? String(g.lv[d.id]) : '';
-    o.v.innerHTML = d.fmt(g.st[key]) + '<i>→ ' + d.fmt(g.preview(d.id)[key]) + '</i>';
-    o.k.textContent = '● ' + c;
+    o.v.innerHTML = d.fmt(g.st[key]) + ' <i>→ ' + d.fmt(g.preview(d.id)[key]) + '</i>';
+    o.k.textContent = String(c);
     o.el.classList.toggle('off', g.pearls < c);
     o.el.classList.toggle('ready', g.pearls >= c);
   }
@@ -603,7 +620,7 @@ $('aim').addEventListener('click', () => {
   g.cycleAim(); sfx.click();
   $('aim').querySelector('span')!.textContent = AIMS.find(a => a.id === g!.aim)!.name;
   const tips: Record<string, string> = { cerca: 'dispara a lo más cercano', peligro: 'prioriza peces globo, anguilas, élites y jefes', fuerte: 'prioriza a quien tenga más vida', debil: 'remata a los más débiles' };
-  $('hint').innerHTML = '<b>Objetivo:</b> ' + tips[g.aim];
+  showHint('<b>Objetivo:</b> ' + tips[g.aim]);
 });
 window.addEventListener('resize', resize);
 if ('ResizeObserver' in window) new ResizeObserver(resize).observe(stage);
@@ -644,7 +661,7 @@ function loop(nowMs: number) {
     if (hudT <= 0) { hudT = 0.1; updateHud(); updatePanel(); }
   }
   if (g) {
-    const hudH = $('hud').getBoundingClientRect().height, dockH = $('dock').getBoundingClientRect().height + 70;
+    const hudH = $('hud').getBoundingClientRect().height, dockH = $('dock').getBoundingClientRect().height + 40;
     const target = Math.max(-140, Math.min(60, (hudH - dockH) / 2));
     view.offY += (target - view.offY) * Math.min(1, dt * 8);
   } else view.offY = 0;
