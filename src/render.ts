@@ -3,7 +3,7 @@ import { Game, Enemy, EType, LAMP_Y, TURRET_POS, Ship, Pickup } from './game';
 import type { Zone, SkinDef } from './data';
 import { MODE_RULES } from './data';
 import { Water } from './water';
-import { ready, sheetFor, Sheet, islaArt, faroArt, redArt, arponArt, turretArt, bossSheet, boatSheet, Still } from './art';
+import { ready, sheetFor, Sheet, islaArt, faroArt, redArt, arponArt, turretArt, bossSheet, boatSheet, decoSheet, Still } from './art';
 
 let water: Water | null | undefined;
 
@@ -222,6 +222,9 @@ export function draw(ctx: CanvasRenderingContext2D, g: Game | null, zone: Zone, 
 
   // Profundidad: lo que está "detrás" del faro se dibuja antes
   const layers: { y: number; draw: () => void }[] = [{ y: 2, draw: () => drawTower(ctx, t, g) }];
+  // Adornos de la Bahía: fijos, sin colisión; se ordenan por profundidad con las criaturas
+  if (zone.id === 'bahia' && !(g && (g.mode === 'travesia' || g.mode === 'escolta' || g.mode === 'asedio')))
+    for (const d of BAHIA_DECO) layers.push({ y: d.y, draw: () => drawDeco(ctx, d, t) });
   if (g?.ship && g.ship.phase !== 'gap') { const sh = g.ship; layers.push({ y: sh.y, draw: () => drawSupplyShip(ctx, sh, t) }); }
   if (g) {
     for (const e of g.enemies) layers.push({ y: e.y, draw: () => drawEnemy(ctx, e, t, zone, g) });
@@ -1181,6 +1184,31 @@ function drawSupplyShip(ctx: CanvasRenderingContext2D, s: Ship, t: number) {
 }
 
 /** Travesía: barriles, restos de naufragios y cofres a la deriva (se recogen tocándolos). */
+/** Adornos de la Bahía: tipo, posición y rumbo (0-7) fijos para que todos vean lo mismo.
+ *  Las rocas con algas (deco-rocas) están horneadas pero fuera: de lejos parecen una criatura. */
+const BAHIA_DECO = [
+  { k: 'muelle', x: -66, y: 30, d: 1 }, { k: 'nasa', x: -34, y: 62, d: 6 }, { k: 'bote', x: 128, y: 22, d: 5 },
+  { k: 'boya', x: -152, y: 64, d: 0 },
+  { k: 'boya', x: 146, y: -92, d: 3 }, { k: 'red', x: -96, y: 112, d: 4 },
+];
+function drawDeco(ctx: CanvasRenderingContext2D, d: { k: string; x: number; y: number; d: number }, t: number) {
+  const sp = decoSheet(d.k);
+  if (!sp) return;
+  const bob = Math.sin(t * 1.3 + d.x) * (d.k === 'muelle' || d.k === 'rocas' ? 0 : 0.8);
+  ctx.save(); ctx.translate(d.x, d.y + bob);
+  ctx.fillStyle = 'rgba(0,10,25,.28)'; ctx.beginPath(); ctx.ellipse(1, 3, sp.len * 0.42, sp.len * 0.22, 0, 0, TAU); ctx.fill();
+  if (d.k === 'rocas') {
+    // Espuma que rompe en la base: así se lee como arrecife y no como una criatura
+    for (let i = 0; i < 2; i++) {
+      const ph = (t * 0.45 + i * 0.5 + d.x * 0.01) % 1;
+      ctx.strokeStyle = `rgba(230,245,255,${(1 - ph) * 0.45})`; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.ellipse(0, 5, sp.len * (0.4 + ph * 0.18), sp.len * (0.2 + ph * 0.09), 0, 0, TAU); ctx.stroke();
+    }
+  }
+  blitSheet(ctx, sp, (d.d / sp.dirs) * TAU, Math.floor(t * sp.fps + d.x * 0.05), sp.len / sp.ppu);
+  ctx.restore();
+}
+
 function drawPickup(ctx: CanvasRenderingContext2D, p: Pickup, t: number) {
   const bob = Math.sin(t * 2.4 + p.id) * 1.5;
   ctx.save(); ctx.translate(p.x, p.y + bob);

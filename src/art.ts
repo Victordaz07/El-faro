@@ -138,3 +138,28 @@ export function boatSheet(k: string): Sheet | null {
   const s = BARCOS[k];
   return s && ready(s.img) ? s : null;
 }
+
+/* ---------- Decoración de la Bahía (modelos deco-*.glb, ver tools/glb-sprite/bake-deco.py) ---------- */
+import decoMeta from '../assets/art/deco/meta.json';
+import dBoyaUrl from '../assets/art/deco/deco-boya.webp';
+import dRocasUrl from '../assets/art/deco/deco-rocas.webp';
+import dRedUrl from '../assets/art/deco/deco-red.webp';
+import dMuelleUrl from '../assets/art/deco/deco-muelle.webp';
+import dNasaUrl from '../assets/art/deco/deco-nasa.webp';
+import dBoteUrl from '../assets/art/deco/deco-bote-hundido.webp';
+
+const mkD = (url: string, key: keyof typeof decoMeta, len: number, fps: number): Sheet => ({ img: img(url), ...decoMeta[key], len, fps });
+/** len = tamaño del modelo en píxeles del juego. */
+const DECO: Record<string, Sheet> = {
+  boya: mkD(dBoyaUrl, 'deco-boya', 22, 3),
+  rocas: mkD(dRocasUrl, 'deco-rocas', 40, 1),
+  red: mkD(dRedUrl, 'deco-red', 36, 2),
+  muelle: mkD(dMuelleUrl, 'deco-muelle', 46, 1),
+  nasa: mkD(dNasaUrl, 'deco-nasa', 20, 1),
+  bote: mkD(dBoteUrl, 'deco-bote-hundido', 38, 1.5),
+};
+/** Hoja de un adorno de la Bahía, o null (no se dibuja) mientras la imagen no cargue. */
+export function decoSheet(k: string): Sheet | null {
+  const s = DECO[k];
+  return s && ready(s.img) ? s : null;
+}

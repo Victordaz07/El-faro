@@ -46,6 +46,15 @@ const ANIM = {
   'barco-abordador'(o, p) { const s = Math.sin(p * TAU); rot(o, 'Oar_L1', 'y', 0.35 * s); rot(o, 'Oar_L2', 'y', 0.35 * s); rot(o, 'Oar_R1', 'y', -0.35 * s); rot(o, 'Oar_R2', 'y', -0.35 * s); bob(o, 'Crew', 0.008 * Math.abs(s)); },
   'objeto-cofre'(o, p) { const s = Math.sin(p * TAU); scl(o, 'Glow', 1, 1 + 0.25 * s, 1); bob(o, 'Coins', 0.01 * s); rot(o, 'Lid', 'x', -0.04 * s); },
   'objeto-restos'(o, p) { bob(o, 'Cloth', 0.006 * Math.sin(p * TAU)); },
+  // ---- Decoración de la Bahía (fija; se mece o parpadea suavemente) ----
+  'deco-boya'(o, p) {
+    const s = Math.sin(p * TAU);
+    for (const n of ['Buoy', 'Lamp', 'Chain']) bob(o, n, 0.008 * s);
+    const lamp = o.getObjectByName('Lamp');
+    if (lamp) lamp.traverse(m => { if (m.material) m.material.emissiveIntensity = 1.1 + 0.5 * s; });
+  },
+  'deco-red'(o, p) { o.rotation.x = 0.025 * Math.sin(p * TAU); o.rotation.z = 0.02 * Math.cos(p * TAU); },
+  'deco-bote-hundido'(o, p) { o.rotation.z = 0.03 * Math.sin(p * TAU); bob(o, 'Rope', 0.006 * Math.sin(p * TAU)); },
 };
 const base = new Map();
 function rest(n) { if (!base.has(n)) base.set(n, { r: n.rotation.clone(), p: n.position.clone(), s: n.scale.clone() }); return base.get(n); }

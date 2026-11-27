@@ -103,3 +103,7 @@ Asset: "Bote hundido" (capsized small rowboat, half out of the water). File name
 - **La red se ve como un bloque sólido**: `The net must have clearly open square holes, about 6 by 6 cells, with thick rope bars. Rebuild the grid so you can see through it from above.`
 - **Algas demasiado finas**: `Make the seaweed ribbons thicker, at least 3% of the model size, with fewer but bigger strips.`
 - **Orientación equivocada**: `Rotate the whole model so the front points toward +Z with +Y up, then re-place the origin at the bottom center and re-run the verification.`
+
+
+## Nota de integración (v0.10.1)
+`deco-rocas` está horneada (`assets/art/deco/`) pero **no se dibuja en la partida**: con las algas largas la silueta parece una criatura (pulpo/araña) y confunde. Para usarla, pedir una versión **sin algas largas** (solo roca gris con musgo bajo y algún percebe), silueta compacta y redondeada, que no tenga nada que parezca patas.
